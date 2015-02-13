@@ -74,7 +74,7 @@ class GalaxyConfig(BaseGalaxyCLI):
         self.arg_parser.add_argument("-p", "--python-exe", default=None, help="The Python interpreter to use to create the virtualenv (default: %s)" % python.strip())
         sub_arg_parsers = self.arg_parser.add_subparsers(dest='subcommand', help='SUBCOMMANDS')
         arg_parser_add = sub_arg_parsers.add_parser('add', help='Register config file(s)')
-        arg_parser_add.add_argument("config", nargs='+', help='Config file to register')
+        arg_parser_add.add_argument("config", nargs='+', help='Config files to register')
         arg_parser_list = sub_arg_parsers.add_parser('list', help='List registered config files')
         arg_parser_get = sub_arg_parsers.add_parser('get', help='Get registered config file details')
         arg_parser_get.add_argument("config", help='Config file')
@@ -83,7 +83,7 @@ class GalaxyConfig(BaseGalaxyCLI):
         arg_parser_rename.add_argument("rename_config_old", help='Old config file path')
         arg_parser_rename.add_argument("rename_config_new", help='New config file path')
         arg_parser_remove = sub_arg_parsers.add_parser('remove', help='Deregister config file(s)')
-        arg_parser_remove.add_argument("config", nargs='+', help='Config file to deregister')
+        arg_parser_remove.add_argument("config", nargs='+', help='Config files or instance names to deregister')
         self.args = self.arg_parser.parse_args()
 
     @property
@@ -123,6 +123,8 @@ class GalaxyConfig(BaseGalaxyCLI):
                             for service in config['services']:
                                 print('%-24s  %-10s  %-10s  %s' % (instance_str, service.config_type, service.service_type, service.service_name))
                                 instance_str = ''
+                    if instance_str == instance:
+                        print('%-24s  no services configured' % instance)
             else:
                 print('No known instances')
         elif self.args.subcommand == 'get':
@@ -161,7 +163,6 @@ class GalaxyAdmin(BaseGalaxyCLI):
         sub_arg_parsers = self.arg_parser.add_subparsers(dest='subcommand', help='SUBCOMMANDS')
         arg_parser_status = sub_arg_parsers.add_parser('status', help='Display server status')
         arg_parser_start = sub_arg_parsers.add_parser('start', help='Start configured services')
-        # TODO: implement nargs='?' on 2.6
         arg_parser_start.add_argument("instance", nargs='*', help='Instance(s) to start')
         arg_parser_stop = sub_arg_parsers.add_parser('stop', help='Stop configured services')
         arg_parser_stop.add_argument("instance", nargs='*', help='Instance(s) to stop')

@@ -275,7 +275,7 @@ class ConfigManager(object):
                     meta_changes['changed_instances'].add(instance_name)
             new_configs[config_file] = new_config
         # once finished processing all configs, find any instances which have been deleted
-        for instance_name in self.get_registered_instances():
+        for instance_name in self.get_registered_instances(include_removed=True):
             if instance_name not in instances:
                 meta_changes['remove_instances'].append(instance_name)
         return new_configs, meta_changes
@@ -308,10 +308,15 @@ class ConfigManager(object):
         """
         return self.__load_state()
 
-    def get_registered_configs(self):
+    def get_registered_configs(self, instances=None):
         """ Return the persisted values of all config files registered with the config manager.
         """
-        return self.state.get('config_files', {})
+        configs = self.state.get('config_files', {})
+        if instances is not None:
+            for config_file, config in configs.items():
+                if config['instance_name'] not in instances:
+                    configs.pop(config_file)
+        return configs
 
     def get_remove_configs(self):
         """ Return the persisted values of all config files pending removal by the process manager.
@@ -323,11 +328,14 @@ class ConfigManager(object):
         """
         return self.state.get('config_files', {}).get(config_file, None)
 
-    def get_registered_instances(self):
+    def get_registered_instances(self, include_removed=False):
         """ Return the persisted names of all instances across all registered configs.
         """
         rval = []
-        for config in self.state.get('config_files', {}).values() + self.state.get('remove_configs', {}).values():
+        configs = self.state.get('config_files', {}).values()
+        if include_removed:
+            configs.extend(self.state.get('remove_configs', {}).values())
+        for config in configs:
             if config['instance_name'] not in rval:
                 rval.append(config['instance_name'])
         return rval
@@ -368,7 +376,7 @@ class ConfigManager(object):
             if conf['instance_name'] is None:
                 conf['instance_name'] = conf['config_type'] + '-' + hashlib.md5(os.urandom(32)).hexdigest()[:12]
             if conf['attribs']['virtualenv'] is None:
-                conf['attribs']['virtualenv'] = abspath(join(expanduser(self.state_dir), 'virtualenv-' + hashlib.md5(os.urandom(32)).hexdigest()[:12]))
+                conf['attribs']['virtualenv'] = abspath(join(expanduser(self.state_dir), 'virtualenv-' + conf['instance_name']))
             # create the virtualenv if necessary
             self.create_virtualenv(conf['attribs']['virtualenv'])
             conf_data = { 'config_type' : conf['config_type'],
@@ -393,8 +401,14 @@ class ConfigManager(object):
         log.info('Renamed config %s as %s', old, new)
 
     def remove(self, config_files):
-        supplied_config_files = [ abspath(cf) for cf in config_files ]
-        config_files = []
+        # allow the arg to be instance names
+        configs_by_instance = self.get_registered_configs(instances=config_files)
+        if configs_by_instance:
+            supplied_config_files = []
+            config_files = configs_by_instance.keys()
+        else:
+            supplied_config_files = [ abspath(cf) for cf in config_files ]
+            config_files = []
         for config_file in supplied_config_files:
             if not self.is_registered(config_file):
                 log.warning('%s is not registered', config_file)
