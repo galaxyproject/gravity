@@ -72,7 +72,7 @@ Potentially useful information, tricks, etc.:
   will be picked up by supervisord on a `galaxyadm supervisorctl update` or
   just `galaxyadm update`
 
-- The `job_conf.xml` parsed corresponds to the galaxy config (it'll check the
+- The `job_conf.xml` parsed corresponds to the galaxy config, it'll check the
   path in `job_config_file` in `[app:main]` or default to
   `galaxy_root/config/job_conf.xml` if that file exists.  If handlers in
   `job_conf.xml` have a corresponding `[server:]` in `galaxy.ini`, they will be
@@ -101,7 +101,7 @@ start.
 
 List config files registered with the process manager.
 
-`list`
+`instances`
 
 List known instances and services.
 
@@ -109,11 +109,11 @@ List known instances and services.
 
 Show stored configuration details for the named config file.
 
-`galaxycfg rename /path/to/old.ini /path/to/new.ini`
+`rename /path/to/old.ini /path/to/new.ini`
 
 Use this if you move your config.
 
-`galaxycfg remove /path/to/galaxy.ini`
+`remove /path/to/galaxy.ini`
 
 Deregister a Galaxy et. al. server config.
 
@@ -126,8 +126,8 @@ Use `galaxyadm -h` for details.
 
 ### subcommands
 
-`start [instance_name]`
-`stop [instance_name]`
+`start [instance_name]`  
+`stop [instance_name]`  
 `restart [instance_name]`
 
 Roughly what you'd expect. If `instance_name` isn't provided, perform the
