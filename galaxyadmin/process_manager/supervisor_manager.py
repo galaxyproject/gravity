@@ -294,6 +294,7 @@ class SupervisorProcessManager(BaseProcessManager):
                     self.supervisorctl(op, '%s_%s_%s' % (instance_name, service['config_type'], service['service_name']))
 
     def start(self, instance_names):
+        super(SupervisorProcessManager, self).start(instance_names)
         self._start_stop('start', instance_names)
 
     def stop(self, instance_names):
