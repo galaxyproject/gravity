@@ -1,4 +1,4 @@
-# Galaxy Server Administration
+# gravity - Galaxy Server Administration
 
 A process manager ([supervisor][supervisor]) and management tools for
 [Galaxy][galaxy] servers.
@@ -10,8 +10,6 @@ their names imply, `galaxycfg` does things related to configuration and
 A virtualenv will automatically be created for your Galaxy server. It's a good
 thing.
 
-Once we figure out a name I'll upload it to PyPI so you can `pip install`.
-
 Python 2.7 is required. Sadly, Python 3 won't work, because supervisor doesn't
 support it, [although work is in progress][supervisor_py3k].
 
@@ -19,9 +17,19 @@ support it, [although work is in progress][supervisor_py3k].
 [galaxy]: http://galaxyproject.org/
 [supervisor_py3k]: https://github.com/Supervisor/supervisor/issues/110
 
+# Installation
+
+`pip install gravity`
+
+Although I would start with a [virtualenv][virtualenv], and to make a
+virtualenv, I would suggest using [virtualenv-burrito][virtualenv-burrito],
+which makes the whole thing trivial.
+
+[virtualenv]: https://virtualenv.pypa.io/
+[virtualenv-burrito]: https://github.com/brainsik/virtualenv-burrito
+
 # TODO
 
-- Come up with a clever name and move to galaxyproject github
 - Write tests
 - Write documentation
 - Sort out whether the AttributeDict stuff is really a good idea or not, and
@@ -33,7 +41,7 @@ support it, [although work is in progress][supervisor_py3k].
 - Enable arbitrary environment configuration for supervisor processes
 - `galaxycfg set`? e.g. `galaxycfg set instance_name autostart=true`. But then
   should all of `[galaxy:server]` become options directly controlled by
-  `galaxycfg`? The nice thing about `[galaxy:server]` is that galaxyadmin is
+  `galaxycfg`? The nice thing about `[galaxy:server]` is that gravity is
   updated from it, which may be more convenient than command-line driven
   configuration.
 
@@ -92,8 +100,8 @@ Potentially useful information, tricks, etc.:
 
 ## galaxycfg ##
 
-galaxyadmin needs to know where your Galaxy config file(s) are. `galaxcfg` is
-how you manage them.
+gravity needs to know where your Galaxy config file(s) are. `galaxcfg` is how
+you manage them.
 
 Use `galaxycfg -h` for details. Subcommands also support `-h`, e.g. `galaxycfg
 add -h`.
@@ -123,8 +131,10 @@ Show stored configuration details for the named config file.
 Use this if you move your config.
 
 `remove /path/to/galaxy.ini`
+`remove instance_name`
 
-Deregister a Galaxy et. al. server config.
+Deregister a Galaxy et. al. server config., or all configs referencing the
+supplied `instance_name`.
 
 ## galaxyadm
 
@@ -141,6 +151,11 @@ Use `galaxyadm -h` for details.
 
 Roughly what you'd expect. If `instance_name` isn't provided, perform the
 operation on all known instances.
+
+If you call `start` from the root (or from 1 subdirectory deep) of a Galaxy
+source tree, `config/galaxy.ini` if it exists, or else
+`config/galaxy.ini.sample` will automatically be registered with `galaxycfg`
+add and then `galaxyadm start` will start the newly added server.
 
 `reload [instance_name]`
 

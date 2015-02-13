@@ -1,11 +1,11 @@
 from setuptools import setup, find_packages
 
 setup(
-    name = 'galaxyadmin',
-    version = '0.7',
+    name = 'gravity',
+    version = '0.8',
     packages = find_packages(),
     description = 'Manage Galaxy servers',
-    url = 'https://github.com/galaxyproject/galaxyadmin',
+    url = 'https://github.com/galaxyproject/gravity',
     author = 'The Galaxy Team',
     author_email = 'team@galaxyproject.org',
     license='MIT',
@@ -18,8 +18,8 @@ setup(
 
     entry_points = {
         'console_scripts': [
-            'galaxyadm = galaxyadmin.cli:galaxyadm',
-            'galaxycfg = galaxyadmin.cli:galaxycfg'
+            'galaxyadm = gravity.cli:galaxyadm',
+            'galaxycfg = gravity.cli:galaxycfg'
         ]
     }
 )
