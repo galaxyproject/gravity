@@ -26,8 +26,17 @@ support it, [although work is in progress][supervisor_py3k].
 - Write documentation
 - Sort out whether the AttributeDict stuff is really a good idea or not, and
   either access things as items or attributes but not both.
-- Check for hash collisions when generating virtualenv and instance names
+- Check for hash collisions when generating instance names
+
+# Ideas
+
 - Enable arbitrary environment configuration for supervisor processes
+- `galaxycfg set`? e.g. `galaxycfg set instance_name autostart=true`. But then
+  should all of `[galaxy:server]` become options directly controlled by
+  `galaxycfg`? The nice thing about `[galaxy:server]` is that galaxyadmin is
+  updated from it, which may be more convenient than command-line driven
+  configuration.
+
 
 # Notes
 
