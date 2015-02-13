@@ -1,0 +1,10 @@
+*~
+*.*.swp
+*.pyc
+/build/
+/dist/
+/*.egg-info/
+
+# dev scripts
+/galaxycfg
+/galaxyadm
