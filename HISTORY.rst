@@ -2,6 +2,13 @@
  History
 =========
 
+0.8.1
+=====
+
+- Version bump because I deleted the 0.8 files from PyPI, and despite the fact
+  that it lets you delete them, it doesn't let you upload once they have been
+  uploaded once...
+
 0.8
 ===
 

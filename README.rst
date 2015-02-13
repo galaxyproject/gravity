@@ -24,27 +24,6 @@ To install:
 To make your life easier, you are encourged to install into a `virtualenv`_,
 and to make that trivial, you are encouraged to use `virtualenv-burrito`_.
 
-TODO
-====
-
--  Write tests
--  Write documentation
--  Sort out whether the AttributeDict stuff is really a good idea or
-   not, and either access things as items or attributes but not both.
--  Check for hash collisions when generating instance names
--  Move the TODO and ideas to issues in Github.
-
-Ideas
-=====
-
--  Enable arbitrary environment configuration for supervisor processes
--  ``galaxycfg set``? e.g.
-   ``galaxycfg set instance_name autostart=true``. But then should all
-   of ``[galaxy:server]`` become options directly controlled by
-   ``galaxycfg``? The nice thing about ``[galaxy:server]`` is that
-   gravity is updated from it, which may be more convenient than
-   command-line driven configuration.
-
 Notes
 =====
 

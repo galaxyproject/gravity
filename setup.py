@@ -13,7 +13,7 @@ with open('HISTORY.rst') as file:
 
 setup(
     name = 'gravity',
-    version = '0.8',
+    version = '0.8.1',
     packages = find_packages(),
     description = 'Manage Galaxy servers',
     long_description = long_description,
