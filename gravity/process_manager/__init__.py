@@ -28,7 +28,7 @@ class BaseProcessManager(object):
                 raise
         self.config_manager = ConfigManager(state_dir=state_dir, galaxy_root=galaxy_root)
 
-    @abstractclass
+    @abstractmethod
     def start(self, instance_names):
         """ If start is called from the root of a Galaxy source directory with
         no args, automatically add this instance.
@@ -42,42 +42,42 @@ class BaseProcessManager(object):
                         self.config_manager.add([config])
                     break
 
-    @abstractclass
+    @abstractmethod
     def _process_config_changes(self, configs, meta_changes):
         """
         """
 
-    @abstractclass
+    @abstractmethod
     def start(self, instance_names):
         """
         """
 
-    @abstractclass
+    @abstractmethod
     def stop(self, instance_names):
         """
         """
 
-    @abstractclass
+    @abstractmethod
     def restart(self, instance_names):
         """
         """
 
-    @abstractclass
+    @abstractmethod
     def reload(self, instance_names):
         """
         """
 
-    @abstractclass
+    @abstractmethod
     def graceful(self, instance_names):
         """
         """
 
-    @abstractclass
+    @abstractmethod
     def update(self, instance_names):
         """
         """
 
-    @abstractclass
+    @abstractmethod
     def shutdown(self, instance_names):
         """
         """
