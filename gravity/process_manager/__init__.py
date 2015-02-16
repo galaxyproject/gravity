@@ -5,12 +5,16 @@ import os
 import errno
 import logging
 
+from abc import ABCMeta, abstractmethod
+
 from ..config_manager import ConfigManager
 
 log = logging.getLogger(__name__)
 
 
 class BaseProcessManager(object):
+    __metaclass__ = ABCMeta
+
     state_dir = '~/.galaxy'
 
     def __init__(self, state_dir=None, galaxy_root=None):
@@ -24,6 +28,7 @@ class BaseProcessManager(object):
                 raise
         self.config_manager = ConfigManager(state_dir=state_dir, galaxy_root=galaxy_root)
 
+    @abstractclass
     def start(self, instance_names):
         """ If start is called from the root of a Galaxy source directory with
         no args, automatically add this instance.
@@ -37,4 +42,52 @@ class BaseProcessManager(object):
                         self.config_manager.add([config])
                     break
 
-    # FIXME: define some base class methods here
+    @abstractclass
+    def _process_config_changes(self, configs, meta_changes):
+        """
+        """
+
+    @abstractclass
+    def start(self, instance_names):
+        """
+        """
+
+    @abstractclass
+    def stop(self, instance_names):
+        """
+        """
+
+    @abstractclass
+    def restart(self, instance_names):
+        """
+        """
+
+    @abstractclass
+    def reload(self, instance_names):
+        """
+        """
+
+    @abstractclass
+    def graceful(self, instance_names):
+        """
+        """
+
+    @abstractclass
+    def update(self, instance_names):
+        """
+        """
+
+    @abstractclass
+    def shutdown(self, instance_names):
+        """
+        """
+
+    def get_instance_names(self, instance_names):
+        registered_instance_names = self.config_manager.get_registered_instances()
+        if instance_names:
+            pass
+        elif registered_instance_names:
+            instance_names = registered_instance_names
+        else:
+            raise Exception('No instances registered (hint: `galaxycfg add /path/to/galaxy.ini`)')
+        return instance_names

@@ -145,7 +145,16 @@ class SupervisorProcessManager(BaseProcessManager):
                 assert rc == 0, 'supervisord exited with code %d' % rc
                 log.info('supervisord started as pid %d', pid)
 
-    def _update_service(self, config_file, config, attribs, service, instance_conf_dir, instance_name):
+    def __get_supervisor(self):
+        """ Return the supervisor proxy object
+
+        Should probably use this more rather than supervisorctl directly
+        """
+        options = supervisorctl.ClientOptions()
+        options.realize(args=['-c', self.supervisord_conf_path])
+        return supervisorctl.Controller(options).get_supervisor()
+
+    def __update_service(self, config_file, config, attribs, service, instance_conf_dir, instance_name):
         format_vars = {
             'log_dir' : attribs['log_dir'],
             'config_type' : service['config_type'],
@@ -221,13 +230,13 @@ class SupervisorProcessManager(BaseProcessManager):
             if update_all_configs:
                 for service in config['services']:
                     log.info('Updating service %s:%s_%s_%s', instance_name, service['config_type'], service['service_type'], service['service_name'])
-                    self._update_service(config_file, config, attribs, service, instance_conf_dir, instance_name)
+                    self.__update_service(config_file, config, attribs, service, instance_conf_dir, instance_name)
 
             # new services
             if 'update_services' in config:
                 for service in config['update_services']:
                     log.info('Creating service %s:%s_%s_%s', instance_name, service['config_type'], service['service_type'], service['service_name'])
-                    self._update_service(config_file, config, attribs, service, instance_conf_dir, instance_name)
+                    self.__update_service(config_file, config, attribs, service, instance_conf_dir, instance_name)
 
             # deleted services
             if 'remove_services' in config:
@@ -241,7 +250,7 @@ class SupervisorProcessManager(BaseProcessManager):
             for service in config['services']:
                 conf = join(instance_conf_dir, '%s_%s_%s.conf' % (service['config_type'], service['service_type'], service['service_name']))
                 if service not in config.get('remove_services', []) and not exists(conf):
-                    self._update_service(config_file, config, attribs, service, instance_conf_dir, instance_name)
+                    self.__update_service(config_file, config, attribs, service, instance_conf_dir, instance_name)
                     log.warning('Missing service config recreated: %s' % conf)
 
         # all configs referencing an instance name have been removed (or their
@@ -275,17 +284,7 @@ class SupervisorProcessManager(BaseProcessManager):
                 if exists(conf):
                     os.unlink(conf)
 
-    def get_instance_names(self, instance_names):
-        registered_instance_names = self.config_manager.get_registered_instances()
-        if instance_names:
-            pass
-        elif registered_instance_names:
-            instance_names = registered_instance_names
-        else:
-            raise Exception('No instances registered (hint: `galaxycfg add /path/to/galaxy.ini`)')
-        return instance_names
-
-    def _start_stop(self, op, instance_names):
+    def __start_stop(self, op, instance_names):
         self.update()
         for instance_name in self.get_instance_names(instance_names):
             self.supervisorctl(op, '%s:*' % instance_name)
@@ -293,17 +292,7 @@ class SupervisorProcessManager(BaseProcessManager):
                 if service['service_type'] == 'uwsgi':
                     self.supervisorctl(op, '%s_%s_%s' % (instance_name, service['config_type'], service['service_name']))
 
-    def start(self, instance_names):
-        super(SupervisorProcessManager, self).start(instance_names)
-        self._start_stop('start', instance_names)
-
-    def stop(self, instance_names):
-        self._start_stop('stop', instance_names)
-
-    def restart(self, instance_names):
-        self._start_stop('restart', instance_names)
-
-    def _reload_graceful(self, op, instance_names):
+    def __reload_graceful(self, op, instance_names):
         self.update()
         for instance_name in self.get_instance_names(instance_names):
             if op == 'restart':
@@ -312,7 +301,7 @@ class SupervisorProcessManager(BaseProcessManager):
             for service in self.config_manager.get_instance_services(instance_name):
                 service_name = '%s_%s_%s' % (instance_name, service.config_type, service.service_name)
                 group_service_name = '%s:%s_%s' % (instance_name, service.config_type, service.service_name)
-                procinfo = self.get_supervisor().getProcessInfo(group_service_name)
+                procinfo = self.__get_supervisor().getProcessInfo(group_service_name)
                 if service['service_type'] == 'uwsgi':
                     # restart uwsgi
                     try:
@@ -342,11 +331,22 @@ class SupervisorProcessManager(BaseProcessManager):
                             sys.stdout.flush()
                             time.sleep(1)
 
+    def start(self, instance_names):
+        super(SupervisorProcessManager, self).start(instance_names)
+        self.__start_stop('start', instance_names)
+
+    def stop(self, instance_names):
+        self.__start_stop('stop', instance_names)
+
+    def restart(self, instance_names):
+        self.__start_stop('restart', instance_names)
+
+
     def reload(self, instance_names):
-        self._reload_graceful('reload', instance_names)
+        self.__reload_graceful('reload', instance_names)
 
     def graceful(self, instance_names):
-        self._reload_graceful('graceful', instance_names)
+        self.__reload_graceful('graceful', instance_names)
 
     def status(self):
         # TODO: create our own formatted output
@@ -363,15 +363,6 @@ class SupervisorProcessManager(BaseProcessManager):
         configs, meta_changes = self.config_manager.determine_config_changes()
         self._process_config_changes(configs, meta_changes)
         self.supervisorctl('update')
-
-    def get_supervisor(self):
-        """ Return the supervisor proxy object
-
-        Should probably use this more rather than supervisorctl directly
-        """
-        options = supervisorctl.ClientOptions()
-        options.realize(args=['-c', self.supervisord_conf_path])
-        return supervisorctl.Controller(options).get_supervisor()
 
     def supervisorctl(self, *args, **kwargs):
         supervisorctl.main(args=['-c', self.supervisord_conf_path] + list(args))
