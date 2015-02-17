@@ -1,25 +1,24 @@
 """
 """
-from __future__ import print_function
-
 import os
 import sys
 import time
 import errno
 import shutil
 import signal
-import logging
 import urllib2
 
 from os.path import join, abspath, exists
 
+import click
+
 from supervisor import supervisorctl, supervisord
 from setproctitle import setproctitle
 
-from . import BaseProcessManager
-from ..config_manager import ConfigManager
+from gravity.io import info, warn, error
 
-log = logging.getLogger(__name__)
+from gravity.process_manager import BaseProcessManager
+from gravity.config_manager import ConfigManager
 
 
 supervisord_conf_template = """;
@@ -107,9 +106,8 @@ programs = {programs}
 
 class SupervisorProcessManager(BaseProcessManager):
 
-    def __init__(self, state_dir=None, galaxy_root=None, start_supervisord=True, default_config_file=None):
+    def __init__(self, state_dir=None, start_daemon=True):
         super(SupervisorProcessManager, self).__init__(state_dir=state_dir)
-        self.default_config_file = default_config_file
         self.supervisor_state_dir = join(self.state_dir, 'supervisor')
         self.supervisord_conf_path = join(self.supervisor_state_dir, 'supervisord.conf')
         self.supervisord_conf_dir = join(self.supervisor_state_dir, 'supervisord.conf.d')
@@ -117,7 +115,7 @@ class SupervisorProcessManager(BaseProcessManager):
         if not exists(self.supervisord_conf_dir):
             os.makedirs(self.supervisord_conf_dir)
 
-        if start_supervisord:
+        if start_daemon:
             self.__supervisord()
 
     def __supervisord(self):
@@ -143,7 +141,7 @@ class SupervisorProcessManager(BaseProcessManager):
             else:
                 pid, rc = os.waitpid(pid, 0)
                 assert rc == 0, 'supervisord exited with code %d' % rc
-                log.info('supervisord started as pid %d', pid)
+                info('supervisord started as pid %d', pid)
 
     def __get_supervisor(self):
         """ Return the supervisor proxy object
@@ -196,7 +194,7 @@ class SupervisorProcessManager(BaseProcessManager):
             instance_name = config.instance_name
             instance_conf_dir = join(self.supervisord_conf_dir, '%s.d' % instance_name)
             for service in config['services']:
-                log.info('Removing service %s:%s_%s_%s', instance_name, service.config_type, service.service_type, service.service_name)
+                info('Removing service %s:%s_%s_%s', instance_name, service.config_type, service.service_type, service.service_name)
                 conf = join(instance_conf_dir, '%s_%s_%s.conf' % (service.config_type, service.service_type, service.service_name))
                 if exists(conf):
                     os.unlink(conf)
@@ -209,14 +207,14 @@ class SupervisorProcessManager(BaseProcessManager):
 
             # config attribs have changed (galaxy_root, virtualenv, etc.)
             if 'update_attribs' in config:
-                log.info('Updating all dependent services of config %s due to changes' % config_file)
+                info('Updating all dependent services of config %s due to changes' % config_file)
                 attribs = config['update_attribs']
                 update_all_configs = True
 
             # instance name has changed, so supervisor group config must change
             if 'update_instance_name' in config:
                 instance_name = config['update_instance_name']
-                log.info('Creating new instance for name change: %s -> %s', config['instance_name'], instance_name)
+                info('Creating new instance for name change: %s -> %s', config['instance_name'], instance_name)
                 update_all_configs = True
 
             # always attempt to make the config dir
@@ -229,19 +227,19 @@ class SupervisorProcessManager(BaseProcessManager):
 
             if update_all_configs:
                 for service in config['services']:
-                    log.info('Updating service %s:%s_%s_%s', instance_name, service['config_type'], service['service_type'], service['service_name'])
+                    info('Updating service %s:%s_%s_%s', instance_name, service['config_type'], service['service_type'], service['service_name'])
                     self.__update_service(config_file, config, attribs, service, instance_conf_dir, instance_name)
 
             # new services
             if 'update_services' in config:
                 for service in config['update_services']:
-                    log.info('Creating service %s:%s_%s_%s', instance_name, service['config_type'], service['service_type'], service['service_name'])
+                    info('Creating service %s:%s_%s_%s', instance_name, service['config_type'], service['service_type'], service['service_name'])
                     self.__update_service(config_file, config, attribs, service, instance_conf_dir, instance_name)
 
             # deleted services
             if 'remove_services' in config:
                 for service in config['remove_services']:
-                    log.info('Removing service %s:%s_%s_%s', instance_name, service['config_type'], service['service_type'], service['service_name'])
+                    info('Removing service %s:%s_%s_%s', instance_name, service['config_type'], service['service_type'], service['service_name'])
                     conf = join(instance_conf_dir, '%s_%s_%s.conf' % (service['config_type'], service['service_type'], service['service_name']))
                     if exists(conf):
                         os.unlink(conf)
@@ -251,12 +249,12 @@ class SupervisorProcessManager(BaseProcessManager):
                 conf = join(instance_conf_dir, '%s_%s_%s.conf' % (service['config_type'], service['service_type'], service['service_name']))
                 if service not in config.get('remove_services', []) and not exists(conf):
                     self.__update_service(config_file, config, attribs, service, instance_conf_dir, instance_name)
-                    log.warning('Missing service config recreated: %s' % conf)
+                    warn('Missing service config recreated: %s' % conf)
 
         # all configs referencing an instance name have been removed (or their
         # instance names have changed), nuke the group
         for instance_name in meta_changes['remove_instances']:
-            log.info('Removing instance %s', instance_name)
+            info('Removing instance %s', instance_name)
             instance_conf_dir = join(self.supervisord_conf_dir, '%s.d' % instance_name)
             if exists(instance_conf_dir):
                 shutil.rmtree(instance_conf_dir)
@@ -310,28 +308,28 @@ class SupervisorProcessManager(BaseProcessManager):
                     # restart uwsgi
                     try:
                         os.kill(procinfo['pid'], signal.SIGHUP)
-                        print('%s: sent HUP signal' % group_service_name)
+                        click.echo('%s: sent HUP signal' % group_service_name)
                     except Exception as exc:
-                        log.warning('Attempt to reload %s failed: %s', service_name, exc)
+                        warn('Attempt to reload %s failed: %s', service_name, exc)
                 # graceful restarts
                 elif op == 'graceful' and service['service_type'] == 'standalone':
                     self.supervisorctl('restart', group_service_name)
                 elif op == 'graceful' and service['service_type'] == 'paste':
                     self.supervisorctl('restart', group_service_name)
                     url = 'http://localhost:%d/' % service.paste_port
-                    print('%s: waiting until %s is accepting requests' % (service_name, url), end='')
+                    click.echo('%s: waiting until %s is accepting requests' % (service_name, url), end='')
                     while True:
                         try:
                             r = urllib2.urlopen(url, None, 5)
                             assert r.getcode() == 200, '%s returned HTTP code: %s' % (url, r.getcode())
-                            print(' OK')
+                            click.echo(' OK')
                             break
                         except AssertionError as exc:
-                            print()
-                            log.error(exc)
+                            click.echo()
+                            error(exc)
                             return
                         except Exception as exc:
-                            print('.', end='')
+                            click.echo('.', nl=False)
                             sys.stdout.flush()
                             time.sleep(1)
 
