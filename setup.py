@@ -1,7 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+
+from os.path import join
 from setuptools import setup, find_packages
+
 
 with open('README.rst') as file:
     long_description = file.read()
@@ -10,12 +13,13 @@ long_description += '\n\n'
 with open('HISTORY.rst') as file:
     long_description += file.read()
 
+execfile(join('gravity', '__init__.py'))
 
 setup(
     name = 'gravity',
-    version = '0.8.1',
+    version = __version__,
     packages = find_packages(),
-    description = 'Manage Galaxy servers',
+    description = 'Command-line utilities to assist in managing Galaxy servers',
     long_description = long_description,
     url = 'https://github.com/galaxyproject/gravity',
     author = 'The Galaxy Team',
@@ -23,6 +27,7 @@ setup(
     license = 'MIT',
     keywords = 'gravity galaxy',
     install_requires = [
+        'Click',
         'supervisor',
         'setproctitle',
         'virtualenv'
@@ -41,5 +46,6 @@ setup(
         'Programming Language :: Python',
         'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 2.7'
-    ]
+    ],
+    zip_safe = False
 )

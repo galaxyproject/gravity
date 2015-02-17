@@ -3,13 +3,33 @@
 
 import os
 import errno
-import logging
+import importlib
 
 from abc import ABCMeta, abstractmethod
 
-from ..config_manager import ConfigManager
+from gravity.config_manager import ConfigManager
 
-log = logging.getLogger(__name__)
+
+# If at some point we have additional process managers we can make a factory,
+# but for the moment there's only supervisor.
+
+import contextlib
+@contextlib.contextmanager
+def process_manager(state_dir=None, start_daemon=True):
+    modlist = []
+    # roulette!
+    for filename in os.listdir(os.path.dirname(__file__)):
+        if filename.endswith('.py') and \
+           not filename.startswith('_'):
+            mod = importlib.import_module('gravity.process_manager.' + filename[:-len(".py")])
+            for name in dir(mod):
+                obj = getattr(mod, name)
+                if not name.startswith('_') and \
+                   isinstance(obj, object) and \
+                   issubclass(obj, BaseProcessManager) and \
+                   obj != BaseProcessManager:
+                    yield obj(state_dir=state_dir, start_daemon=start_daemon)
+                    return
 
 
 class BaseProcessManager(object):
@@ -17,7 +37,7 @@ class BaseProcessManager(object):
 
     state_dir = '~/.galaxy'
 
-    def __init__(self, state_dir=None, galaxy_root=None):
+    def __init__(self, state_dir=None, start_daemon=True):
         if state_dir is None:
             state_dir = BaseProcessManager.state_dir
         self.state_dir = os.path.abspath(os.path.expanduser(state_dir))
@@ -26,7 +46,7 @@ class BaseProcessManager(object):
         except (IOError, OSError) as exc:
             if exc.errno != errno.EEXIST:
                 raise
-        self.config_manager = ConfigManager(state_dir=state_dir, galaxy_root=galaxy_root)
+        self.config_manager = ConfigManager(state_dir=state_dir)
 
     @abstractmethod
     def start(self, instance_names):

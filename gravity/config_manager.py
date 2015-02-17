@@ -20,7 +20,15 @@ try:
 except:
     import configparser
 
-log = logging.getLogger(__name__)
+
+from gravity.io import info, warn, error
+
+
+import contextlib
+@contextlib.contextmanager
+def config_manager(state_dir=None, python_exe=None):
+    yield ConfigManager(state_dir=state_dir, python_exe=python_exe)
+
 
 
 class AttributeDict(dict):
@@ -93,7 +101,7 @@ class ConfigManager(object):
             app_factory = parser.get('app:main', 'paste.app_factory')
             assert app_factory in factory_to_type
         except Exception as exc:
-            log.error("Config file does not contain 'paste.app_factory' option in '[app:main]' section. Is this a Galaxy config?: %s", exc)
+            error("Config file does not contain 'paste.app_factory' option in '[app:main]' section. Is this a Galaxy config?: %s", exc)
             return None
 
         if server_section not in parser.sections():
@@ -159,7 +167,7 @@ class ConfigManager(object):
             rval.append({'service_name' : handler.attrib['id']})
         return rval
 
-    def __init__(self, state_dir=None, galaxy_root=None, python_exe=None):
+    def __init__(self, state_dir=None, python_exe=None):
         if state_dir is None:
             state_dir = ConfigManager.state_dir
         self.state_dir = abspath(expanduser(state_dir))
@@ -231,7 +239,7 @@ class ConfigManager(object):
             try:
                 ini_config = ConfigManager.get_ini_config(config_file, defaults=stored_config.defaults)
             except (OSError, IOError) as exc:
-                log.warning('Unable to read %s (hint: use `rename` or `remove` to fix): %s', config_file, exc)
+                warn('Unable to read %s (hint: use `rename` or `remove` to fix): %s', config_file, exc)
                 new_configs[config_file] = stored_config
                 instances.add(stored_config['instance_name'])
                 continue
@@ -365,7 +373,7 @@ class ConfigManager(object):
         for config_file in config_files:
             config_file = abspath(expanduser(config_file))
             if self.is_registered(config_file):
-                log.warning('%s is already registered', config_file)
+                warn('%s is already registered', config_file)
                 continue
             defaults = None
             if galaxy_root is not None:
@@ -378,29 +386,29 @@ class ConfigManager(object):
             if conf['attribs']['virtualenv'] is None:
                 conf['attribs']['virtualenv'] = abspath(join(expanduser(self.state_dir), 'virtualenv-' + conf['instance_name']))
             # create the virtualenv if necessary
+            # FIXME: delay this so that venv name can be set with `galaxycfg set`?
             self.create_virtualenv(conf['attribs']['virtualenv'])
             conf_data = { 'config_type' : conf['config_type'],
                           'instance_name' : conf['instance_name'],
                           'attribs' : conf['attribs'],
                           'services' : [] } # services will be populated by the update method
             self._register_config_file(config_file, conf_data)
-            log.info('Added %s config: %s', conf['config_type'], config_file)
+            info('Registered %s config: %s', conf['config_type'], config_file)
 
     def rename(self, old, new):
-        old = abspath(old)
-        new = abspath(new)
         if not self.is_registered(old):
-            log.error('%s is not registered', old)
+            error('%s is not registered', old)
             return
         conf = ConfigManager.get_ini_config(new)
         if conf is None:
             raise Exception('Cannot add %s: File is unknown type' % new)
         newstate = self.state
-        state['config_files'][new] = state['config_files'].pop(old)
+        newstate['config_files'][new] = newstate['config_files'].pop(old)
         self.__dump_state(newstate)
-        log.info('Renamed config %s as %s', old, new)
+        info('Reregistered config %s as %s', old, new)
 
     def remove(self, config_files):
+        # FIXME: paths are checked by click now
         # allow the arg to be instance names
         configs_by_instance = self.get_registered_configs(instances=config_files)
         if configs_by_instance:
@@ -411,16 +419,16 @@ class ConfigManager(object):
             config_files = []
         for config_file in supplied_config_files:
             if not self.is_registered(config_file):
-                log.warning('%s is not registered', config_file)
+                warn('%s is not registered', config_file)
             else:
                 config_files.append(config_file)
         for config_file in config_files:
             self._deregister_config_file(config_file)
-            log.info('Removed config: %s', config_file)
+            info('Deregistered config: %s', config_file)
 
     def create_virtualenv(self, venv_path):
         if not exists(venv_path):
-            log.info("Creating virtualenv in: %s", venv_path)
+            info("Creating virtualenv in: %s", venv_path)
             args = ['virtualenv']
             if self.python_exe is not None:
                 args.extend(['-p', self.python_exe])
@@ -429,7 +437,7 @@ class ConfigManager(object):
 
     def install_uwsgi(self, venv_path):
         if not exists(join(venv_path, 'bin', 'uwsgi')):
-            log.info("Installing uWSGI in: %s", venv_path)
+            info("Installing uWSGI in: %s", venv_path)
             pip = join(venv_path, 'bin', 'pip')
             args = [pip, 'install', 'PasteDeploy', 'uwsgi']
             subprocess.check_call(args)
