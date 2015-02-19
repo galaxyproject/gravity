@@ -48,11 +48,6 @@ class BaseProcessManager(object):
         """
 
     @abstractmethod
-    def start(self, instance_names):
-        """
-        """
-
-    @abstractmethod
     def stop(self, instance_names):
         """
         """
