@@ -136,7 +136,7 @@ class SupervisorProcessManager(BaseProcessManager):
             if pid == 0:
                 args = ['-c', self.supervisord_conf_path]
                 # set sys.argv so if there's an error it doesn't output a
-                # misleading message that appears to be coming from galaxyadm
+                # misleading message that appears to be coming from galaxy
                 sys.argv = ['supervisord'] + args
                 setproctitle('supervisord -c %s' % self.supervisord_conf_path)
                 supervisord.main(args=args)

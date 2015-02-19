@@ -87,5 +87,5 @@ class BaseProcessManager(object):
         elif registered_instance_names:
             instance_names = registered_instance_names
         else:
-            raise Exception('No instances registered (hint: `galaxycfg add /path/to/galaxy.ini`)')
+            raise Exception('No instances registered (hint: `galaxy add /path/to/galaxy.ini`)')
         return instance_names, unknown_instance_names

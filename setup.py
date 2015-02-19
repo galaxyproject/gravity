@@ -13,7 +13,7 @@ with open('HISTORY.rst') as file:
 
 setup(
     name = 'gravity',
-    version = '0.8.2',
+    version = '0.8.3',
     packages = find_packages(),
     description = 'Manage Galaxy servers',
     long_description = long_description,
@@ -29,8 +29,7 @@ setup(
     ],
     entry_points = {
         'console_scripts': [
-            'galaxyadm = gravity.cli:galaxyadm',
-            'galaxycfg = gravity.cli:galaxycfg'
+            'galaxy = gravity.cli:galaxy'
         ]
     },
     classifiers = [

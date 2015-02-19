@@ -2,6 +2,20 @@
  History
 =========
 
+0.8.3
+=====
+
+- Merge ``galaxycfg`` and ``galaxyadm`` commands to ``galaxy``.
+
+0.8.2
+=====
+
+- Allow for passing names of individual services directly to ``supervisorctl``
+  via the ``start``, ``stop``, and ``restart`` methods.
+- Fix a bug where uWSGI would not start when using the automatic virtualenv
+  install method.
+- Fix a bug where the reload method was not reloading everything.
+
 0.8.1
 =====
 

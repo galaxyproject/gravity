@@ -4,12 +4,9 @@
 
 A process manager (`supervisor`_) and management tools for `Galaxy`_ servers.
 
-Installing this will give you two executables, ``galaxycfg`` and ``galaxyadm``.
-As their names imply, ``galaxycfg`` does things related to configuration and
-``galaxyadm`` does things related to administration.
-
-A virtualenv will automatically be created for your Galaxy server. It's a good
-thing.
+Installing this will give you an executables, ``galaxy`` which is used to
+manage Galaxy.  A virtualenv will automatically be created for your Galaxy
+server. It's a good thing.
 
 Installation
 ============
@@ -47,7 +44,7 @@ Add this section to your ``galaxy.ini``, ``reports_wsgi.ini``,
 Potentially useful information, tricks, etc.:
 
 -  Unless you set different state dirs with ``--state-dir`` or
-   ``$GALAXYADM_STATE_DIR``, there will only be one supervisord for all
+   ``$GRAVITY_STATE_DIR``, there will only be one supervisord for all
    of your galaxy instances. But they will be separated out by a
    generated ``instance_name``. You can override this with
    ``instance_name`` in ``[galaxy:server]``.
@@ -65,10 +62,9 @@ Potentially useful information, tricks, etc.:
    (supervisor group), it will only change it for the services started
    from that config.
 
--  Anything you drop in to
-   ``$GALAXYADM_STATE_DIR/supervisor/supervisord.conf.d`` will be picked
-   up by supervisord on a ``galaxyadm supervisorctl update`` or just
-   ``galaxyadm update``
+-  Anything you drop in to ``$GRAVITY_STATE_DIR/supervisor/supervisord.conf.d``
+   will be picked up by supervisord on a ``galaxy supervisorctl update`` or just
+   ``galaxy update``
 
 -  The ``job_conf.xml`` parsed corresponds to the galaxy config, it'll
    check the path in ``job_config_file`` in ``[app:main]`` or default to
@@ -78,20 +74,11 @@ Potentially useful information, tricks, etc.:
    corresponding ``[server:]`` they will be started as a "standalone"
    server with ``galaxy_root/lib/galaxy/main.py``
 
-Commands
-========
+Subcommands
+===========
 
-galaxycfg
----------
-
-gravity needs to know where your Galaxy config file(s) are. ``galaxcfg``
-is how you manage them.
-
-Use ``galaxycfg -h`` for details. Subcommands also support ``-h``, e.g.
-``galaxycfg add -h``.
-
-galaxycfg subcommands
-~~~~~~~~~~~~~~~~~~~~~
+Use ``galaxy -h`` for help. Subcommands also support ``-h``, e.g.  ``galaxy add
+-h``.
 
 ``add``
 
@@ -120,17 +107,6 @@ Use this if you move your config.
 Deregister a Galaxy et. al. server config., or all configs referencing
 the supplied ``instance_name``.
 
-galaxyadm
----------
-
-``galaxyadm`` controls your Galaxy server processes. Use this after
-you've registered a config file with ``galaxycfg add``.
-
-Use ``galaxyadm -h`` for details.
-
-galaxyadm subcommands
-~~~~~~~~~~~~~~~~~~~~~
-
 | ``start [instance_name]``
 | ``stop [instance_name]``
 | ``restart [instance_name]``
@@ -138,11 +114,10 @@ galaxyadm subcommands
 Roughly what you'd expect. If ``instance_name`` isn't provided, perform
 the operation on all known instances.
 
-If you call ``start`` from the root (or from 1 subdirectory deep) of a
-Galaxy source tree, ``config/galaxy.ini`` if it exists, or else
-``config/galaxy.ini.sample`` will automatically be registered with
-``galaxycfg`` add and then ``galaxyadm start`` will start the newly
-added server.
+If you call ``start`` from the root (or from 1 subdirectory deep) of a Galaxy
+source tree, ``config/galaxy.ini`` if it exists, or else
+``config/galaxy.ini.sample`` will automatically be registered with ``galaxy
+add`` and then ``galaxy start`` will start the newly added server.
 
 ``reload [instance_name]``
 
