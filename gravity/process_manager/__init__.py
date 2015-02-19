@@ -84,10 +84,13 @@ class BaseProcessManager(object):
 
     def get_instance_names(self, instance_names):
         registered_instance_names = self.config_manager.get_registered_instances()
+        unknown_instance_names = []
         if instance_names:
-            pass
+            for i, n in enumerate(instance_names):
+                if n not in registered_instance_names:
+                    unknown_instance_names.append(instance_names.pop(i))
         elif registered_instance_names:
             instance_names = registered_instance_names
         else:
             raise Exception('No instances registered (hint: `galaxycfg add /path/to/galaxy.ini`)')
-        return instance_names
+        return instance_names, unknown_instance_names

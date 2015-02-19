@@ -176,7 +176,7 @@ class SupervisorProcessManager(BaseProcessManager):
             uwsgi_path = attribs['uwsgi_path']
             if uwsgi_path == 'install':
                 self.config_manager.install_uwsgi(attribs['virtualenv'])
-                uwsgi_path = 'uwsgi'
+                uwsgi_path = join(attribs['virtualenv'], 'bin', 'uwsgi')
             elif uwsgi_path is None:
                 uwsgi_path = 'uwsgi'
             format_vars['uwsgi_path'] = uwsgi_path
@@ -286,23 +286,27 @@ class SupervisorProcessManager(BaseProcessManager):
 
     def __start_stop(self, op, instance_names):
         self.update()
-        for instance_name in self.get_instance_names(instance_names):
+        instance_names, unknown_instance_names = self.get_instance_names(instance_names)
+        for instance_name in instance_names:
             self.supervisorctl(op, '%s:*' % instance_name)
             for service in self.config_manager.get_instance_services(instance_name):
                 if service['service_type'] == 'uwsgi':
                     self.supervisorctl(op, '%s_%s_%s' % (instance_name, service['config_type'], service['service_name']))
+        # shortcut for just passing service names directly
+        for name in unknown_instance_names:
+            self.supervisorctl(op, name)
 
     def __reload_graceful(self, op, instance_names):
         self.update()
-        for instance_name in self.get_instance_names(instance_names):
-            if op == 'restart':
+        for instance_name in self.get_instance_names(instance_names)[0]:
+            if op == 'reload':
                 # restart everything but uwsgi
                 self.supervisorctl('restart', '%s:*' % instance_name)
             for service in self.config_manager.get_instance_services(instance_name):
                 service_name = '%s_%s_%s' % (instance_name, service.config_type, service.service_name)
                 group_service_name = '%s:%s_%s' % (instance_name, service.config_type, service.service_name)
-                procinfo = self.__get_supervisor().getProcessInfo(group_service_name)
                 if service['service_type'] == 'uwsgi':
+                    procinfo = self.__get_supervisor().getProcessInfo(service_name)
                     # restart uwsgi
                     try:
                         os.kill(procinfo['pid'], signal.SIGHUP)
