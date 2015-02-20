@@ -34,8 +34,7 @@ setup(
     ],
     entry_points = {
         'console_scripts': [
-            'galaxyadm = gravity.cli:galaxyadm',
-            'galaxycfg = gravity.cli:galaxycfg'
+            'galaxy = gravity.cli:galaxy'
         ]
     },
     classifiers = [

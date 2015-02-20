@@ -2,6 +2,16 @@
  History
 =========
 
+0.9
+===
+
+- Converted CLI from `argparse`_ to `click`_.
+- Stole ideas and code from `planemo`_ in general.
+
+.. _argparse: https://docs.python.org/3/library/argparse.html
+.. _click: http://click.pocoo.org/
+.. _planemo: https://github.com/galaxyproject/planemo
+
 0.8.1
 =====
 
