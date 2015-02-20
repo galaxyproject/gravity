@@ -1,7 +1,5 @@
 """ Galaxy Process Management superclass and utilities
 """
-from __future__ import print_function
-
 import os
 import sys
 import json
@@ -22,56 +20,14 @@ except:
 
 
 from gravity.io import info, warn, error
+from gravity.state import GravityState, ConfigFile, Service
 
 
+# FIXME
 import contextlib
 @contextlib.contextmanager
 def config_manager(state_dir=None, python_exe=None):
     yield ConfigManager(state_dir=state_dir, python_exe=python_exe)
-
-
-
-class AttributeDict(dict):
-    def __setattr__(self, name, value):
-        self[name] = value
-
-    def __getattr__(self, name):
-        try:
-            return self[name]
-        except KeyError:
-            raise AttributeError("'%s' object has no attribute '%s'" % (self.__class__.__name__, name))
-
-
-class Service(AttributeDict):
-    def __cmp__(self, other):
-        return self['config_type'] == other['config_type'] \
-                and self['service_type'] == other['service_type'] \
-                and self['service_name'] == other['service_name']
-
-
-class ConfigFile(AttributeDict):
-    def __init__(self, *args, **kwargs):
-        super(ConfigFile, self).__init__(*args, **kwargs)
-        if args and 'services' in args[0]:
-            self['services'] = []
-            for service in args[0]['services']:
-                self['services'].append(Service(service))
-
-    @property
-    def defaults(self):
-        return { 'instance_name' : self['instance_name'],
-                 'galaxy_root' : self['attribs']['galaxy_root'],
-                 'log_dir' : self['attribs']['log_dir'],
-                 'virtualenv' : self['attribs']['virtualenv'] }
-
-class ConfigState(AttributeDict):
-    def __init__(self, *args, **kwargs):
-        super(ConfigState, self).__init__(*args, **kwargs)
-        for key in ('config_files', 'remove_configs'):
-            if args and key in args[0]:
-                for config_file, config_dict in args[0].get(key).items():
-                    self[key][config_file] = ConfigFile(config_dict)
-
 
 class ConfigManager(object):
     state_dir = '~/.galaxy'
@@ -179,49 +135,26 @@ class ConfigManager(object):
             if exc.errno != errno.EEXIST:
                 raise
 
-    def __load_state(self):
-        """ Read persisted state from the JSON statefile
-        """
-        try:
-            return ConfigState(json.load(open(self.config_state_path)))
-        except (OSError, IOError) as exc:
-            if exc.errno == errno.ENOENT:
-                self.__dump_state({})
-                return json.load(open(self.config_state_path))
-            raise
-
-    def __dump_state(self, newstate):
-        """ Save state to the JSON statefile
-        """
-        json.dump(newstate, open(self.config_state_path, 'w'))
-
     def _register_config_file(self, key, val):
         """ Persist a newly added config file, or update (overwrite) the value
         of a previously persisted config.
         """
-        state = self.__load_state()
-        if 'config_files' not in state:
-            state['config_files'] = {}
-        state['config_files'][key] = val
-        self.__dump_state(state)
+        with self.state as state:
+            state.config_files[key] = val
 
     def _deregister_config_file(self, key):
         """ Deregister a previously registered config file.  The caller should
         ensure that it was previously registered.
         """
-        state = self.__load_state()
-        if 'remove_configs' not in state:
-            state['remove_configs'] = {}
-        state['remove_configs'][key] = (state['config_files'].pop(key))
-        self.__dump_state(state)
+        with self.state as state:
+            state.remove_configs[key] = state.config_files.pop(key)
 
     def _purge_config_file(self, key):
         """ Forget a previously deregister config file.  The caller should
         ensure that it was previously deregistered.
         """
-        state = self.__load_state()
-        del state['remove_configs'][key]
-        self.__dump_state(state)
+        with self.state as state:
+            del state['remove_configs'][key]
 
     def determine_config_changes(self):
         """ The magic: Determine what has changed since the last time.
@@ -314,12 +247,12 @@ class ConfigManager(object):
     def state(self):
         """ Public property to access persisted config state
         """
-        return self.__load_state()
+        return GravityState.open(self.config_state_path)
 
     def get_registered_configs(self, instances=None):
         """ Return the persisted values of all config files registered with the config manager.
         """
-        configs = self.state.get('config_files', {})
+        configs = self.state.config_files
         if instances is not None:
             for config_file, config in configs.items():
                 if config['instance_name'] not in instances:
@@ -329,20 +262,20 @@ class ConfigManager(object):
     def get_remove_configs(self):
         """ Return the persisted values of all config files pending removal by the process manager.
         """
-        return self.state.get('remove_configs', {})
+        return self.state.remove_configs
 
     def get_registered_config(self, config_file):
         """ Return the persisted value of the named config file.
         """
-        return self.state.get('config_files', {}).get(config_file, None)
+        return self.state.config_files.get(config_file, None)
 
     def get_registered_instances(self, include_removed=False):
         """ Return the persisted names of all instances across all registered configs.
         """
         rval = []
-        configs = self.state.get('config_files', {}).values()
+        configs = self.state.config_files.values()
         if include_removed:
-            configs.extend(self.state.get('remove_configs', {}).values())
+            configs.extend(self.state.remove_configs.values())
         for config in configs:
             if config['instance_name'] not in rval:
                 rval.append(config['instance_name'])
@@ -350,14 +283,14 @@ class ConfigManager(object):
 
     def get_instance_services(self, instance_name):
         rval = []
-        for config_file, config in self.state.get('config_files', {}).items():
+        for config_file, config in self.state.config_files.items():
             if config['instance_name'] == instance_name:
                 rval.extend(config['services'])
         return rval
 
     def get_registered_services(self):
         rval = []
-        for config_file, config in self.state.get('config_files', {}).items():
+        for config_file, config in self.state.items():
             for service in config['services']:
                 service['config_file'] = config_file
                 service['instance_name'] = config['instance_name']
@@ -402,9 +335,8 @@ class ConfigManager(object):
         conf = ConfigManager.get_ini_config(new)
         if conf is None:
             raise Exception('Cannot add %s: File is unknown type' % new)
-        newstate = self.state
-        newstate['config_files'][new] = newstate['config_files'].pop(old)
-        self.__dump_state(newstate)
+        with self.state as state:
+            state.config_files[new] = state.config_files.pop(old)
         info('Reregistered config %s as %s', old, new)
 
     def remove(self, config_files):

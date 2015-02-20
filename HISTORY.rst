@@ -7,6 +7,10 @@
 
 - Converted CLI from `argparse`_ to `click`_.
 - Stole ideas and code from `planemo`_ in general.
+- Improve the AttributeDict so that it can have "hidden" items (anything that
+  starts with a ``_``) that won't be serialized. Also, it serializes itself and
+  can be created via deserialization from a classmethod. This simplifies using
+  it to persist state data in the new GravityState subclass.
 
 .. _argparse: https://docs.python.org/3/library/argparse.html
 .. _click: http://click.pocoo.org/
