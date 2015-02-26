@@ -13,8 +13,24 @@ class AttributeDictEncoder(json.JSONEncoder):
 
 class AttributeDict(dict):
 
+    @staticmethod
+    def clean(o):
+        if isinstance(o, dict):
+            r = {}
+            for k, v in o.items():
+                if not k.startswith('_'):
+                    r[k] = AttributeDict.clean(v)
+        elif isinstance(o, list):
+            r = []
+            for i in o:
+                r.append(AttributeDict.clean(i))
+        else:
+            r = o
+        return r
+
     @classmethod
     def loads(cls, s, *args, **kwargs):
+        kwargs['object_hook'] = AttributeDict
         return cls(json.loads(s, *args, **kwargs))
 
     def __setattr__(self, name, value):
@@ -27,11 +43,7 @@ class AttributeDict(dict):
             raise AttributeError("'%s' object has no attribute '%s'" % (self.__class__.__name__, name))
 
     def serialize(self, encoder):
-        d = {}
-        for k in self.keys():
-            if not k.startswith('_'):
-                d[k] = self[k]
-        return json.JSONEncoder.encode(encoder, d)
+        return json.JSONEncoder.encode(encoder, AttributeDict.clean(self))
 
     def dumps(self, *args, **kwargs):
         kwargs['cls'] = AttributeDictEncoder

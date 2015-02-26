@@ -7,16 +7,15 @@ from gravity import config_manager
 from gravity.io import error
 
 
-@click.command('register')
-@options.required_config_arg(exists=True, nargs=-1)
+@click.command('create')
+@options.required_instance_arg()
 @click.pass_context
-def cli(ctx, config):
-    """ Register config file(s).
-
-    aliases: add
+def cli(ctx, instance):
+    """ Create an instance.
     """
     with config_manager.config_manager() as cm:
         try:
-            cm.add(config)
+            cm.create(instance)
         except Exception as exc:
             error('Caught exception: %s', exc)
+            ctx.exit(1)

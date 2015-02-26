@@ -17,7 +17,6 @@ CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 # FIXME: incomplete aliases
 COMMAND_ALIASES = {
     "list": "configs",
-    "add": "register",
     "remove": "deregister",
     "forget": "deregister",
 }

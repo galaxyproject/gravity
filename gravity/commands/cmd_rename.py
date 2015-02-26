@@ -21,3 +21,4 @@ def cli(ctx, old_config, new_config):
             cm.rename(old_config, new_config)
         except Exception as exc:
             error('Caught exception: %s', exc)
+            ctx.exit(1)

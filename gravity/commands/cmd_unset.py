@@ -7,18 +7,17 @@ from gravity import config_manager
 from gravity.io import error
 
 
-@click.command('deregister')
-@click.argument('instance')
-@options.required_config_arg(nargs=-1)
+@click.command('set')
+@options.instance_config_service_arg('on')
+@click.argument('option')
 @click.pass_context
-def cli(ctx, instance, config):
-    """ Deregister config file(s).
-
-    aliases: remove, forget
+def cli(ctx, on, option):
+    """ Unset config options.
     """
     with config_manager.config_manager() as cm:
         try:
-            cm.remove(instance, config)
+            instance, config, service = options.instance_config_service_arg_parse(ctx, on)
+            cm.unset(instance, config, service, option)
         except Exception as exc:
             error('Caught exception: %s', exc)
             ctx.exit(1)

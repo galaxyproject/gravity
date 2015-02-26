@@ -2,7 +2,6 @@
 """
 import os
 import sys
-import json
 import errno
 import logging
 import hashlib
@@ -31,23 +30,19 @@ def config_manager(state_dir=None, python_exe=None):
 
 class ConfigManager(object):
     state_dir = '~/.galaxy'
-    galaxy_server_config_section = 'galaxy:server'
+    config_attributes = (
+        'virtualenv',
+        'galaxy_root',
+        'uwsgi',
+    )
 
     @staticmethod
     def get_ini_config(conf, defaults=None):
-        server_section = ConfigManager.galaxy_server_config_section
         factory_to_type = { 'galaxy.web.buildapp:app_factory' : 'galaxy',
                             'galaxy.webapps.reports.buildapp:app_factory' : 'reports',
                             'galaxy.webapps.tool_shed.buildapp:app_factory' : 'tool_shed' }
 
-        defs = { 'galaxy_root' : None,
-                 'log_dir' : join(expanduser(ConfigManager.state_dir), 'log'),
-                 'instance_name' : None,
-                 'job_config_file' : 'config/job_conf.xml',
-                 'virtualenv' : None,
-                 'uwsgi_path' : None }
-        if defaults is not None:
-            defs.update(defaults)
+        defs = { 'job_config_file' : 'config/job_conf.xml' }
         parser = configparser.ConfigParser(defs)
 
         # will raise IOError if the path is wrong
@@ -60,17 +55,12 @@ class ConfigManager(object):
             error("Config file does not contain 'paste.app_factory' option in '[app:main]' section. Is this a Galaxy config?: %s", exc)
             return None
 
-        if server_section not in parser.sections():
-            parser.add_section(server_section)
-
         config = ConfigFile()
-        config.attribs = {}
-        config.services = []
-        config.instance_name = parser.get(server_section, 'instance_name') or None
+        config.services = {}
         config.config_type = factory_to_type[app_factory]
 
         # shortcut for galaxy configs in the standard locations
-        config.attribs['galaxy_root'] =  parser.get(server_section, 'galaxy_root')
+        '''
         if config.attribs['galaxy_root'] is None:
             if exists(join(dirname(conf), pardir, 'lib', 'galaxy')):
                 config.attribs['galaxy_root'] = abspath(join(dirname(conf), pardir))
@@ -78,15 +68,7 @@ class ConfigManager(object):
                 config.attribs['galaxy_root'] = abspath(join(dirname(conf)))
             else:
                 raise Exception("Cannot locate Galaxy root directory: set `galaxy_root' in the [%s] section of %s" % (section_name, conf))
-
-        config.attribs['uwsgi_path'] = parser.get(server_section, 'uwsgi_path')
-
-        # path attributes used for service definitions or other things that should cause updating
-        for name in ('virtualenv', 'log_dir'):
-            val = parser.get(server_section, name)
-            if val is not None:
-                val = abspath(expanduser(val))
-            config.attribs[name] = val
+        '''
 
         # Paste servers and uWSGI
         paste_service_names = []
@@ -97,19 +79,19 @@ class ConfigManager(object):
                     port = int(parser.get(section, 'port'))
                 except configparser.Error:
                     port = 8080
-                config.services.append(Service( config_type=config.config_type, service_type='paste', service_name=service_name, paste_port=port ))
+                config.services['paste_' + service_name] = Service( config_type=config.config_type, service_type='paste', service_name=service_name, paste_port=port )
                 paste_service_names.append(service_name)
             elif section == 'uwsgi':
                 # this makes it impossible to have >1 uwsgi of the config_type per instance. which is probably fine for now.
-                config.services.append(Service( config_type=config.config_type, service_type='uwsgi', service_name='uwsgi' ))
+                config.services['uwsgi'] = Service( config_type=config.config_type, service_type='uwsgi', service_name='uwsgi' )
 
         # If this is a Galaxy config, parse job_conf.xml for any standalone handlers
         job_conf_xml = parser.get('app:main', 'job_config_file')
         if not isabs(job_conf_xml):
-            job_conf_xml = abspath(join(config.attribs['galaxy_root'], job_conf_xml))
+            job_conf_xml = abspath(join(dirname(conf), job_conf_xml))
         if config.config_type == 'galaxy' and exists(job_conf_xml):
             for service_name in [ x['service_name'] for x in ConfigManager.get_job_config(job_conf_xml) if x['service_name'] not in paste_service_names ]:
-                config.services.append(Service( config_type=config.config_type, service_type='standalone', service_name=service_name ))
+                config.services['standalone_' + service_name] = Service( config_type=config.config_type, service_type='standalone', service_name=service_name )
 
         return config
 
@@ -249,6 +231,12 @@ class ConfigManager(object):
         """
         return GravityState.open(self.config_state_path)
 
+    def get_instances(self):
+        return self.state.instances
+
+    def get_instance(self, name):
+        return self.state.instances[name]
+
     def get_registered_configs(self, instances=None):
         """ Return the persisted values of all config files registered with the config manager.
         """
@@ -300,33 +288,85 @@ class ConfigManager(object):
     def is_registered(self, config_file):
         return config_file in self.get_registered_configs()
 
-    def add(self, config_files, galaxy_root=None):
-        """ Public method to add (register) config file(s).
-        """
-        for config_file in config_files:
-            config_file = abspath(expanduser(config_file))
-            if self.is_registered(config_file):
-                warn('%s is already registered', config_file)
-                continue
-            defaults = None
-            if galaxy_root is not None:
-                defaults={ 'galaxy_root' : galaxy_root }
-            conf = ConfigManager.get_ini_config(config_file, defaults=defaults)
-            if conf is None:
-                raise Exception('Cannot add %s: File is unknown type' % config_file)
-            if conf['instance_name'] is None:
-                conf['instance_name'] = conf['config_type'] + '-' + hashlib.md5(os.urandom(32)).hexdigest()[:12]
-            if conf['attribs']['virtualenv'] is None:
-                conf['attribs']['virtualenv'] = abspath(join(expanduser(self.state_dir), 'virtualenv-' + conf['instance_name']))
-            # create the virtualenv if necessary
-            # FIXME: delay this so that venv name can be set with `galaxycfg set`?
-            self.create_virtualenv(conf['attribs']['virtualenv'])
-            conf_data = { 'config_type' : conf['config_type'],
-                          'instance_name' : conf['instance_name'],
-                          'attribs' : conf['attribs'],
-                          'services' : [] } # services will be populated by the update method
-            self._register_config_file(config_file, conf_data)
-            info('Registered %s config: %s', conf['config_type'], config_file)
+    # cli subcommands
+    def create(self, name):
+        with self.state as state:
+            if name not in state.instances:
+                state.instances[name] = {}
+                info('Created instance: %s', name)
+            else:
+                warn('%s already exists', name)
+
+    def add(self, instance, config_files):
+        if instance not in self.state.instances:
+            self.create(instance)
+        with self.state as state:
+            for config_file in config_files:
+                if config_file in state.instances[instance].config_files:
+                    warn('%s is already registered', config_file)
+                    continue
+                #defaults = None
+                #if galaxy_root is not None:
+                #    defaults={ 'galaxy_root' : galaxy_root }
+                conf = ConfigManager.get_ini_config(config_file)
+                if conf is None:
+                    raise Exception('Cannot add %s: File is unknown type' % config_file)
+                #if conf['instance_name'] is None:
+                #    conf['instance_name'] = conf['config_type'] + '-' + hashlib.md5(os.urandom(32)).hexdigest()[:12]
+                #if conf['attribs']['virtualenv'] is None:
+                #    conf['attribs']['virtualenv'] = abspath(join(expanduser(self.state_dir), 'virtualenv-' + conf['instance_name']))
+                ## create the virtualenv if necessary
+                ## FIXME: delay this so that venv name can be set with `galaxycfg set`?
+                #self.create_virtualenv(conf['attribs']['virtualenv'])
+                #conf_data = { 'config_type' : conf['config_type'],
+                #              'instance_name' : conf['instance_name'],
+                #              'attribs' : conf['attribs'],
+                #              'services' : [] } # services will be populated by the update method
+                #self._register_config_file(config_file, conf_data)
+                info('Registered %s config: %s', conf.config_type, config_file)
+                state.instances[instance].config_files[config_file] = conf
+
+    def set(self, instance, config, service, option, value):
+        with self.state as state:
+            if config is None and service is None:
+                # setting an instance option
+                state.instances[instance].config[option] = value
+            elif service is None:
+                # setting a config option
+                state.instances[instance][config].config[option] = value
+            else:
+                # setting a service option
+                for cfservice in state.instances[instance][config].services:
+                    if cfservice.service_name == service:
+                        cfservice.config[option] = value
+
+    def unset(self, instance, config, service, option):
+        instance, config, service = (list(on) + [None, None])[:3]
+        with self.state as state:
+            if config is None and service is None:
+                # unsetting an instance option
+                if option in state.instances[instance].config:
+                    state.instances[instance].config.pop(option)
+            elif service is None:
+                # unsetting a config option
+                if option in state.instances[instance][config].config:
+                    state.instances[instance][config].config.pop(option)
+            else:
+                # unsetting a service option
+                for cfservice in state.instances[instance][config].services:
+                    if cfservice.service_name == service \
+                       and option in state.instances[instance][config][service].config:
+                        cfservice.config.pop(option)
+
+    def get(self, instance, config, service, option):
+        if not instance:
+            return self.get_instances()
+        instance_data = self.get_instance(instance)
+        if config:
+            instance_data.config_files = instance_data.config_files[config]
+        if service:
+            instance_data.config_files[config].services = instance_data.config_files[config].services[service]
+        return {instance : instance_data}
 
     def rename(self, old, new):
         if not self.is_registered(old):
@@ -339,24 +379,17 @@ class ConfigManager(object):
             state.config_files[new] = state.config_files.pop(old)
         info('Reregistered config %s as %s', old, new)
 
-    def remove(self, config_files):
-        # FIXME: paths are checked by click now
-        # allow the arg to be instance names
-        configs_by_instance = self.get_registered_configs(instances=config_files)
-        if configs_by_instance:
-            supplied_config_files = []
-            config_files = configs_by_instance.keys()
-        else:
-            supplied_config_files = [ abspath(cf) for cf in config_files ]
-            config_files = []
-        for config_file in supplied_config_files:
-            if not self.is_registered(config_file):
-                warn('%s is not registered', config_file)
-            else:
-                config_files.append(config_file)
-        for config_file in config_files:
-            self._deregister_config_file(config_file)
-            info('Deregistered config: %s', config_file)
+    def remove(self, instance, config_files):
+        if instance not in self.state.instances:
+            warn('Instance %s does not exist' % instance)
+        with self.state as state:
+            for config_file in config_files:
+                if config_file not in state.instances[instance]:
+                    warn('%s is not registered', config_file)
+                    continue
+                # FIXME: this isn't going to work for supervisor of course
+                state.instances[instance].pop(config_file)
+                info('Deregistered config: %s', config_file)
 
     def create_virtualenv(self, venv_path):
         if not exists(venv_path):
