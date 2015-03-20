@@ -19,7 +19,7 @@ def state_dir_option():
     )
 
 
-def required_config_arg(name='config', exists=False, nargs=None):
+def config_arg(name='config', exists=False, nargs=None, required=True):
     arg_type = click.Path(
         exists = exists,
         file_okay = True,
@@ -28,9 +28,18 @@ def required_config_arg(name='config', exists=False, nargs=None):
         resolve_path = True,
     )
     if nargs is None:
-        return click.argument(name, type=arg_type)
+        return click.argument(
+            name,
+            type=arg_type,
+            required=required
+        )
     else:
-        return click.argument(name, nargs=nargs, type=arg_type)
+        return click.argument(
+            name,
+            nargs=nargs,
+            type=arg_type,
+            required=required
+        )
 
 
 def required_instance_arg(nargs=None):
@@ -39,24 +48,36 @@ def required_instance_arg(nargs=None):
     else:
         return click.argument('instance', nargs=-1)
 
-def instance_config_service_arg(name='on', required=True):
-    metavar = 'INSTANCE [CONFIG [SERVICE]]'
+
+def instance_config_arg(name='ic', required=True):
+    metavar = 'INSTANCE/CONFIG'
     if not required:
-        metavar = '[INSTANCE [CONFIG [SERVICE]]]'
+        metavar = 'INSTANCE[/CONFIG]'
     return click.argument(
         name,
         metavar=metavar,
-        nargs=-1
+        required=required
     )
 
-def instance_config_service_arg_parse(ctx, on, required=True):
-    """ Click can't really handle this type of arg, but we'll pretend that it can.
-    """
-    if (len(on) < 1 and required) or len(on) > 3:
-        click.echo(ctx.get_usage() + '\n', err=True)
-        if len(on) < 1:
-            click.echo('Error: Missing argument "instance".', err=True)
-        else:
-            click.echo('Error: Got unexpected extra arguments (%s)' % ' '.join(on[3:]), err=True)
-        ctx.exit(2)
-    return (list(on) + [None, None, None])[:3]
+
+def instance_config_service_arg(name='on', required=True):
+    metavar = 'INSTANCE[/CONFIG[/SERVICE]]'
+    if not required:
+        metavar = '[INSTANCE[/CONFIG[/SERVICE]]]'
+    return click.argument(
+        name,
+        metavar=metavar,
+        required=required
+    )
+
+#def instance_config_service_arg_parse(ctx, on, required=True):
+#    """ Click can't really handle this type of arg, but we'll pretend that it can.
+#    """
+#    if (len(on) < 1 and required) or len(on) > 3:
+#        click.echo(ctx.get_usage() + '\n', err=True)
+#        if len(on) < 1:
+#            click.echo('Error: Missing argument "instance".', err=True)
+#        else:
+#            click.echo('Error: Got unexpected extra arguments (%s)' % ' '.join(on[3:]), err=True)
+#        ctx.exit(2)
+#    return (list(on) + [None, None, None])[:3]

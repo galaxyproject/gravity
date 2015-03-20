@@ -16,8 +16,7 @@ def cli(ctx, on, option):
     """
     with config_manager.config_manager() as cm:
         try:
-            instance, config, service = options.instance_config_service_arg_parse(ctx, on)
-            cm.unset(instance, config, service, option)
+            cm.unset(on, option)
         except Exception as exc:
             error('Caught exception: %s', exc)
             ctx.exit(1)
