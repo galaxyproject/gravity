@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import ast
+import os
+import re
 
-
-from os.path import join
 from setuptools import setup, find_packages
 
 
@@ -13,11 +14,19 @@ long_description += '\n\n'
 with open('HISTORY.rst') as file:
     long_description += file.read()
 
-execfile(join('gravity', '__init__.py'))
+with open(os.path.join('gravity', '__init__.py')) as f:
+    init_contents = f.read()
+
+    def get_var(var_name):
+        pattern = re.compile(r'%s\s+=\s+(.*)' % var_name)
+        match = pattern.search(init_contents).group(1)
+        return str(ast.literal_eval(match))
+
+    version = get_var("__version__")
 
 setup(
     name = 'gravity',
-    version = __version__,
+    version = version,
     packages = find_packages(),
     description = 'Command-line utilities to assist in managing Galaxy servers',
     long_description = long_description,
@@ -42,9 +51,11 @@ setup(
         'License :: OSI Approved :: MIT License',
         'Natural Language :: English',
         'Operating System :: POSIX',
-        'Programming Language :: Python',
-        'Programming Language :: Python :: 2',
-        'Programming Language :: Python :: 2.7'
+        "Programming Language :: Python :: 3",
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
     ],
     zip_safe = False
 )
