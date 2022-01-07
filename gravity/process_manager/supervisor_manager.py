@@ -6,7 +6,7 @@ import time
 import errno
 import shutil
 import signal
-import urllib2
+import urllib.request
 
 from os.path import join, abspath, exists
 
@@ -320,7 +320,7 @@ class SupervisorProcessManager(BaseProcessManager):
                     click.echo('%s: waiting until %s is accepting requests' % (service_name, url), end='')
                     while True:
                         try:
-                            r = urllib2.urlopen(url, None, 5)
+                            r = urllib.request.urlopen(url, None, 5)
                             assert r.getcode() == 200, '%s returned HTTP code: %s' % (url, r.getcode())
                             click.echo(' OK')
                             break

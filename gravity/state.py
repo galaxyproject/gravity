@@ -1,6 +1,9 @@
 """ Classes to represent and manipulate gravity's stored configuration and
 state data.
 """
+import json
+import errno
+
 from gravity.io import info, warn, error
 from gravity.util import AttributeDict
 

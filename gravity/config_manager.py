@@ -273,9 +273,9 @@ class ConfigManager(object):
         """ Return the persisted names of all instances across all registered configs.
         """
         rval = []
-        configs = self.state.config_files.values()
+        configs = list(self.state.config_files.values())
         if include_removed:
-            configs.extend(self.state.remove_configs.values())
+            configs.extend(list(self.state.remove_configs.values()))
         for config in configs:
             if config['instance_name'] not in rval:
                 rval.append(config['instance_name'])
@@ -345,7 +345,7 @@ class ConfigManager(object):
         configs_by_instance = self.get_registered_configs(instances=config_files)
         if configs_by_instance:
             supplied_config_files = []
-            config_files = configs_by_instance.keys()
+            config_files = list(configs_by_instance.keys())
         else:
             supplied_config_files = [ abspath(cf) for cf in config_files ]
             config_files = []

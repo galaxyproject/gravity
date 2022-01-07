@@ -32,9 +32,7 @@ def process_manager(state_dir=None, start_daemon=True):
                     return
 
 
-class BaseProcessManager(object):
-    __metaclass__ = ABCMeta
-
+class BaseProcessManager(object, metaclass=ABCMeta):
     state_dir = '~/.galaxy'
 
     def __init__(self, state_dir=None, start_daemon=True):
