@@ -1,6 +1,7 @@
 *~
 *.*.swp
 *.pyc
+.tox/
 /build/
 /dist/
 /*.egg-info/
