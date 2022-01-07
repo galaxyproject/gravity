@@ -12,8 +12,8 @@ from gravity import options
 
 # FIXME: $GRAVITY_STATE_DIR unimplemented
 # FIXME: -p/--python-exe unimplemented
-#CONTEXT_SETTINGS = dict(auto_envvar_prefix='GRAVITY')
-CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
+# CONTEXT_SETTINGS = dict(auto_envvar_prefix='GRAVITY')
+CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
 # FIXME: incomplete aliases
 COMMAND_ALIASES = {
     "list": "configs",
@@ -23,8 +23,7 @@ COMMAND_ALIASES = {
 }
 
 
-cmd_folder = os.path.abspath(os.path.join(os.path.dirname(__file__),
-                                          'commands'))
+cmd_folder = os.path.abspath(os.path.join(os.path.dirname(__file__), "commands"))
 
 
 def set_debug(debug_opt):
@@ -35,9 +34,8 @@ def set_debug(debug_opt):
 def list_cmds():
     rv = []
     for filename in os.listdir(cmd_folder):
-        if filename.endswith('.py') and \
-           filename.startswith('cmd_'):
-            rv.append(filename[len("cmd_"):-len(".py")])
+        if filename.endswith(".py") and filename.startswith("cmd_"):
+            rv.append(filename[len("cmd_"): -len(".py")])
     rv.sort()
     return rv
 
@@ -45,9 +43,9 @@ def list_cmds():
 def name_to_command(name):
     try:
         if sys.version_info[0] == 2:
-            name = name.encode('ascii', 'replace')
-        mod_name = 'gravity.commands.cmd_' + name
-        mod = __import__(mod_name, None, None, ['cli'])
+            name = name.encode("ascii", "replace")
+        mod_name = "gravity.commands.cmd_" + name
+        mod = __import__(mod_name, None, None, ["cli"])
     except ImportError as e:
         io.error("Problem loading command %s, exception %s" % (name, e))
         return
@@ -55,7 +53,6 @@ def name_to_command(name):
 
 
 class GravityCLI(click.MultiCommand):
-
     def list_commands(self, ctx):
         return list_cmds()
 
@@ -69,6 +66,5 @@ class GravityCLI(click.MultiCommand):
 @options.debug_option()
 @options.state_dir_option()
 def galaxy(debug, state_dir):
-    """ Manage Galaxy server configurations and processes.
-    """
+    """Manage Galaxy server configurations and processes."""
     set_debug(debug)

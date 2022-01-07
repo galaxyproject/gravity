@@ -4,7 +4,6 @@ import json
 
 
 class AttributeDictEncoder(json.JSONEncoder):
-
     def encode(self, o):
         if isinstance(o, AttributeDict):
             return o.serialize(self)
@@ -12,7 +11,6 @@ class AttributeDictEncoder(json.JSONEncoder):
 
 
 class AttributeDict(dict):
-
     @classmethod
     def loads(cls, s, *args, **kwargs):
         return cls(json.loads(s, *args, **kwargs))
@@ -29,15 +27,15 @@ class AttributeDict(dict):
     def serialize(self, encoder):
         d = {}
         for k in self.keys():
-            if not k.startswith('_'):
+            if not k.startswith("_"):
                 d[k] = self[k]
         return json.JSONEncoder.encode(encoder, d)
 
     def dumps(self, *args, **kwargs):
-        kwargs['cls'] = AttributeDictEncoder
+        kwargs["cls"] = AttributeDictEncoder
         return json.dumps(self, *args, **kwargs)
 
     def dump(self, fp, *args, **kwargs):
         raise Exception("This isn't using the Encoder, what gives?")
-        kwargs['cls'] = AttributeDictEncoder
+        kwargs["cls"] = AttributeDictEncoder
         return json.dump(self, fp, *args, **kwargs)
