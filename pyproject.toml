@@ -1,2 +1,5 @@
 [tool.black]
 line-length = 160
+
+[tool.pytest.ini_options]
+norecursedirs = "tests/galaxy.git/*"

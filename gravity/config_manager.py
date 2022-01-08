@@ -1,14 +1,15 @@
 """ Galaxy Process Management superclass and utilities
 """
-import configparser
 import contextlib
 import errno
 import hashlib
 import os
-import subprocess
+import uuid
 import xml.etree.ElementTree as elementtree
 from os import pardir
 from os.path import abspath, dirname, exists, expanduser, isabs, join
+
+from yaml import safe_load
 
 
 from gravity.io import error, info, warn
@@ -22,51 +23,40 @@ def config_manager(state_dir=None, python_exe=None):
 
 class ConfigManager(object):
     state_dir = "~/.galaxy"
-    galaxy_server_config_section = "galaxy:server"
+    galaxy_server_config_section = "galaxy"
 
     @staticmethod
-    def get_ini_config(conf, defaults=None):
+    def get_config(conf, defaults=None):
         # delete this ?
         server_section = ConfigManager.galaxy_server_config_section
-        factory_to_type = {
-            "galaxy.web.buildapp:app_factory": "galaxy",
-            "galaxy.webapps.reports.buildapp:app_factory": "reports",
-            "galaxy.webapps.tool_shed.buildapp:app_factory": "tool_shed",
-        }
+        with open(conf) as config_fh:
+            config_dict = safe_load(config_fh)
 
         defs = {
             "galaxy_root": None,
             "log_dir": join(expanduser(ConfigManager.state_dir), "log"),
             "instance_name": None,
             "job_config_file": "config/job_conf.xml",
-            "virtualenv": None,
-            "uwsgi_path": None,
         }
         if defaults is not None:
             defs.update(defaults)
-        parser = configparser.ConfigParser(defs)
 
-        # will raise IOError if the path is wrong
-        parser.readfp(open(conf))
-
-        try:
-            app_factory = parser.get("app:main", "paste.app_factory")
-            assert app_factory in factory_to_type
-        except Exception as exc:
-            error("Config file does not contain 'paste.app_factory' option in '[app:main]' section. Is this a Galaxy config?: %s", exc)
+        app_config = config_dict.get(server_section)
+        if not app_config:
+            error(f"Config file {conf} does not look like valid Galaxy, Reports or Tool Shed configuration file")
             return None
 
-        if server_section not in parser.sections():
-            parser.add_section(server_section)
-
+        # This is the core that needs to be implemented
         config = ConfigFile()
         config.attribs = {}
         config.services = []
-        config.instance_name = parser.get(server_section, "instance_name") or None
-        config.config_type = factory_to_type[app_factory]
+        config.instance_name = str(uuid.uuid4())
+        config.config_type = server_section
+        config.attribs['log_dir'] = defs['log_dir']
+        webapp_service_names = []
 
-        # shortcut for galaxy configs in the standard locations
-        config.attribs["galaxy_root"] = parser.get(server_section, "galaxy_root")
+        # shortcut for galaxy configs in the standard locations -- explicit arg ?
+        config.attribs["galaxy_root"] = config_dict.get('root')
         if config.attribs["galaxy_root"] is None:
             if exists(join(dirname(conf), pardir, "lib", "galaxy")):
                 config.attribs["galaxy_root"] = abspath(join(dirname(conf), pardir))
@@ -75,36 +65,16 @@ class ConfigManager(object):
             else:
                 raise Exception(f"Cannot locate Galaxy root directory: set `galaxy_root' in the [galaxy] section of {conf}")
 
-        config.attribs["uwsgi_path"] = parser.get(server_section, "uwsgi_path")
-
-        # path attributes used for service definitions or other things that should cause updating
-        for name in ("virtualenv", "log_dir"):
-            val = parser.get(server_section, name)
-            if val is not None:
-                val = abspath(expanduser(val))
-            config.attribs[name] = val
-
-        # Paste servers and uWSGI
-        paste_service_names = []
-        for section in parser.sections():
-            if section.startswith("server:"):
-                service_name = section.split(":", 1)[1]
-                try:
-                    port = int(parser.get(section, "port"))
-                except configparser.Error:
-                    port = 8080
-                config.services.append(Service(config_type=config.config_type, service_type="paste", service_name=service_name, paste_port=port))
-                paste_service_names.append(service_name)
-            elif section == "uwsgi":
-                # this makes it impossible to have >1 uwsgi of the config_type per instance. which is probably fine for now.
-                config.services.append(Service(config_type=config.config_type, service_type="uwsgi", service_name="uwsgi"))
-
+        # Paste had paste_port inn Service arguments, need to add (via CLI ?)?
+        config.services.append(Service(config_type=config.config_type, service_type="gunicorn", service_name="gunicorn"))
         # If this is a Galaxy config, parse job_conf.xml for any standalone handlers
-        job_conf_xml = parser.get("app:main", "job_config_file")
+        # Marius: Don't think that's gonna work if job config file not defined!
+        # TODO: use galaxy config parsing ?
+        job_conf_xml = app_config.get("job_config_file", 'job_conf.xml')
         if not isabs(job_conf_xml):
             job_conf_xml = abspath(join(config.attribs["galaxy_root"], job_conf_xml))
         if config.config_type == "galaxy" and exists(job_conf_xml):
-            for service_name in [x["service_name"] for x in ConfigManager.get_job_config(job_conf_xml) if x["service_name"] not in paste_service_names]:
+            for service_name in [x["    service_name"] for x in ConfigManager.get_job_config(job_conf_xml) if x["service_name"] not in webapp_service_names]:
                 config.services.append(Service(config_type=config.config_type, service_type="standalone", service_name=service_name))
 
         return config
@@ -163,7 +133,7 @@ class ConfigManager(object):
         for config_file, stored_config in self.get_registered_configs().items():
             new_config = stored_config
             try:
-                ini_config = ConfigManager.get_ini_config(config_file, defaults=stored_config.defaults)
+                ini_config = ConfigManager.get_config(config_file, defaults=stored_config.defaults)
             except OSError as exc:
                 warn("Unable to read %s (hint: use `rename` or `remove` to fix): %s", config_file, exc)
                 new_configs[config_file] = stored_config
@@ -180,15 +150,6 @@ class ConfigManager(object):
             else:
                 # instance name is dynamically generated
                 instance_name = stored_config["instance_name"]
-            if ini_config["attribs"] != stored_config["attribs"]:
-                # Ensure that dynamically generated virtualenv is not lost
-                if ini_config["attribs"]["virtualenv"] is None:
-                    ini_config["attribs"]["virtualenv"] = stored_config["attribs"]["virtualenv"]
-                # Recheck to see if dynamic virtualenv was the only change.
-                if ini_config["attribs"] != stored_config["attribs"]:
-                    self.create_virtualenv(ini_config["attribs"]["virtualenv"])
-                    new_config["update_attribs"] = ini_config["attribs"]
-                    meta_changes["changed_instances"].add(instance_name)
             # make sure this instance isn't removed
             instances.add(instance_name)
             services = []
@@ -278,7 +239,7 @@ class ConfigManager(object):
 
     def get_registered_services(self):
         rval = []
-        for config_file, config in self.state.items():
+        for config_file, config in self.state.config_files.items():
             for service in config["services"]:
                 service["config_file"] = config_file
                 service["instance_name"] = config["instance_name"]
@@ -298,16 +259,11 @@ class ConfigManager(object):
             defaults = None
             if galaxy_root is not None:
                 defaults = {"galaxy_root": galaxy_root}
-            conf = ConfigManager.get_ini_config(config_file, defaults=defaults)
+            conf = ConfigManager.get_config(config_file, defaults=defaults)
             if conf is None:
                 raise Exception("Cannot add %s: File is unknown type" % config_file)
             if conf["instance_name"] is None:
                 conf["instance_name"] = conf["config_type"] + "-" + hashlib.md5(os.urandom(32)).hexdigest()[:12]
-            if conf["attribs"]["virtualenv"] is None:
-                conf["attribs"]["virtualenv"] = abspath(join(expanduser(self.state_dir), "virtualenv-" + conf["instance_name"]))
-            # create the virtualenv if necessary
-            # FIXME: delay this so that venv name can be set with `galaxycfg set`?
-            self.create_virtualenv(conf["attribs"]["virtualenv"])
             conf_data = {
                 "config_type": conf["config_type"],
                 "instance_name": conf["instance_name"],
@@ -321,7 +277,7 @@ class ConfigManager(object):
         if not self.is_registered(old):
             error("%s is not registered", old)
             return
-        conf = ConfigManager.get_ini_config(new)
+        conf = ConfigManager.get_config(new)
         if conf is None:
             raise Exception("Cannot add %s: File is unknown type" % new)
         with self.state as state:
@@ -346,19 +302,3 @@ class ConfigManager(object):
         for config_file in config_files:
             self._deregister_config_file(config_file)
             info("Deregistered config: %s", config_file)
-
-    def create_virtualenv(self, venv_path):
-        if not exists(venv_path):
-            info("Creating virtualenv in: %s", venv_path)
-            args = ["virtualenv"]
-            if self.python_exe is not None:
-                args.extend(["-p", self.python_exe])
-            args.append(venv_path)
-            subprocess.check_call(args)
-
-    def install_uwsgi(self, venv_path):
-        if not exists(join(venv_path, "bin", "uwsgi")):
-            info("Installing uWSGI in: %s", venv_path)
-            pip = join(venv_path, "bin", "pip")
-            args = [pip, "install", "PasteDeploy", "uwsgi"]
-            subprocess.check_call(args)

@@ -42,39 +42,25 @@ serverurl = unix://{supervisor_state_dir}/supervisor.sock
 files = {supervisord_conf_dir}/*.d/*.conf {supervisord_conf_dir}/*.conf
 """
 
-supervisord_galaxy_uwsgi_conf_template = """;
+supervisord_galaxy_gunicorn_conf_template = """
 ; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
 ;
 
-[program:{program_name}]
-command         = {uwsgi_path} --ini-paste {galaxy_conf} --pidfile={supervisor_state_dir}/{program_name}.pid
-directory       = {galaxy_root}
-autostart       = false
-autorestart     = true
-startsecs       = 10
-numprocs        = 1
-stopsignal      = INT
-stdout_logfile  = {log_dir}/{program_name}.log
-redirect_stderr = true
-environment     = PYTHON_EGG_CACHE="{virtualenv}/.python-eggs",PATH="{virtualenv}/bin:%(ENV_PATH)s"
-"""
-
-supervisord_galaxy_paste_conf_template = """;
-; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
-;
 
 [program:{program_name}]
-command         = python ./scripts/paster.py serve {galaxy_conf} --server-name={server_name} --pid-file={supervisor_state_dir}/{program_name}.pid
-process_name    = {config_type}_{server_name}
+command         = gunicorn 'galaxy.webapps.galaxy.fast_factory:factory()' --timeout 300 --pythonpath lib -k galaxy.webapps.galaxy.workers.Worker -b {galaxy_bind_ip}:{galaxy_port}
 directory       = {galaxy_root}
-autostart       = false
+process_name    = gunicorn
+umask           = {galaxy_umask}
+autostart       = true
 autorestart     = true
-startsecs       = 20
+startsecs       = 15
+stopwaitsecs    = 65
+environment     = GALAXY_CONFIG_FILE={galaxy_conf}
 numprocs        = 1
-stdout_logfile  = {log_dir}/{program_name}.log
+stdout_logfile  = {log_dir}/gunicorn.log
 redirect_stderr = true
-environment     = PYTHON_EGG_CACHE="{virtualenv}/.python-eggs",PATH="{virtualenv}/bin:%(ENV_PATH)s"
-"""
+"""  # noqa: E501
 
 supervisord_galaxy_standalone_conf_template = """;
 ; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
@@ -90,7 +76,6 @@ startsecs       = 20
 numprocs        = 1
 stdout_logfile  = {log_dir}/{program_name}.log
 redirect_stderr = true
-environment     = PYTHON_EGG_CACHE="{virtualenv}/.python-eggs",PATH="{virtualenv}/bin:%(ENV_PATH)s"
 """
 
 supervisord_galaxy_instance_group_conf_template = """;
@@ -153,8 +138,11 @@ class SupervisorProcessManager(BaseProcessManager):
             "log_dir": attribs["log_dir"],
             "config_type": service["config_type"],
             "server_name": service["service_name"],
+            # TODO: Make config variables
+            "galaxy_bind_ip": service.get("galaxy_bind_ip", "localhost"),
+            "galaxy_port": service.get("galaxy_port", "8080"),
+            "galaxy_umask": service.get("umask", "022"),
             "program_name": "%s_%s_%s_%s" % (instance_name, service["config_type"], service["service_type"], service["service_name"]),
-            "virtualenv": attribs["virtualenv"],
             "galaxy_conf": config_file,
             "galaxy_root": attribs["galaxy_root"],
             "supervisor_state_dir": self.supervisor_state_dir,
@@ -164,25 +152,15 @@ class SupervisorProcessManager(BaseProcessManager):
         if not exists(attribs["log_dir"]):
             os.makedirs(attribs["log_dir"])
 
-        if service["service_type"] == "paste":
-            template = supervisord_galaxy_paste_conf_template
-        elif service["service_type"] == "uwsgi":
-            uwsgi_path = attribs["uwsgi_path"]
-            if uwsgi_path == "install":
-                self.config_manager.install_uwsgi(attribs["virtualenv"])
-                uwsgi_path = join(attribs["virtualenv"], "bin", "uwsgi")
-            elif uwsgi_path is None:
-                uwsgi_path = "uwsgi"
-            format_vars["uwsgi_path"] = uwsgi_path
-            # uwsgi does not live in the process group so that it is not fully restarted with the rest of the processes
-            format_vars["program_name"] = "%s_%s_%s" % (instance_name, service["config_type"], service["service_name"])
-            template = supervisord_galaxy_uwsgi_conf_template
+        if service["service_type"] == "gunicorn":
+            template = supervisord_galaxy_gunicorn_conf_template
         elif service["service_type"] == "standalone":
             template = supervisord_galaxy_standalone_conf_template
         else:
             raise Exception("Unknown service type: %s" % service["service_type"])
 
-        open(conf, "w").write(template.format(**format_vars))
+        with open(conf, "w") as out:
+            out.write(template.format(**format_vars))
 
     def _process_config_changes(self, configs, meta_changes):
         # remove the services of any configs which have been removed
@@ -359,4 +337,10 @@ class SupervisorProcessManager(BaseProcessManager):
         self.supervisorctl("update")
 
     def supervisorctl(self, *args, **kwargs):
-        supervisorctl.main(args=["-c", self.supervisord_conf_path] + list(args))
+        try:
+            supervisorctl.main(args=["-c", self.supervisord_conf_path] + list(args))
+        except SystemExit as e:
+            if e.code == 0:
+                pass
+            else:
+                raise

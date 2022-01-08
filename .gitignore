@@ -6,6 +6,7 @@
 /dist/
 /*.egg-info/
 *.egg
+tests/galaxy.git
 
 # dev scripts
 /galaxycfg

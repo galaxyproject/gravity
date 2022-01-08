@@ -26,7 +26,6 @@ class ConfigFile(AttributeDict):
             "instance_name": self["instance_name"],
             "galaxy_root": self["attribs"]["galaxy_root"],
             "log_dir": self["attribs"]["log_dir"],
-            "virtualenv": self["attribs"]["virtualenv"],
         }
 
 
