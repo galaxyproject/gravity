@@ -4,6 +4,7 @@ import errno
 import os
 import shutil
 import signal
+import subprocess
 import sys
 import time
 import urllib.request
@@ -14,9 +15,7 @@ import click
 from gravity.io import error, info, warn
 from gravity.process_manager import BaseProcessManager
 
-from setproctitle import setproctitle
-
-from supervisor import supervisorctl, supervisord
+from supervisor import supervisorctl
 
 
 supervisord_conf_template = """;
@@ -87,9 +86,21 @@ programs = {programs}
 """
 
 
+def which(file):
+    # http://stackoverflow.com/questions/5226958/which-equivalent-function-in-python
+    if os.path.exists(os.path.dirname(sys.executable) + "/" + file):
+        return os.path.dirname(sys.executable) + "/" + file
+    for path in os.environ["PATH"].split(":"):
+        if os.path.exists(path + "/" + file):
+            return path + "/" + file
+
+    return None
+
+
 class SupervisorProcessManager(BaseProcessManager):
     def __init__(self, state_dir=None, start_daemon=True):
         super(SupervisorProcessManager, self).__init__(state_dir=state_dir)
+        self.supervisord_exe = which("supervisord")
         self.supervisor_state_dir = join(self.state_dir, "supervisor")
         self.supervisord_conf_path = join(self.supervisor_state_dir, "supervisord.conf")
         self.supervisord_conf_dir = join(self.supervisor_state_dir, "supervisord.conf.d")
@@ -110,23 +121,10 @@ class SupervisorProcessManager(BaseProcessManager):
         except Exception:
             # any time that supervisord is not running, let's rewrite supervisord.conf
             open(self.supervisord_conf_path, "w").write(supervisord_conf_template.format(**format_vars))
-            # supervisord detaches, fork so we don't exit here
-            pid = os.fork()
-            if pid == 0:
-                args = ["-c", self.supervisord_conf_path]
-                # set sys.argv so if there's an error it doesn't output a
-                # misleading message that appears to be coming from galaxy
-                sys.argv = ["supervisord"] + args
-                setproctitle(f"supervisord -c {self.supervisord_conf_path}")
-                try:
-                    supervisord.main(args=args)
-                except SystemExit as e:
-                    if e.code > 0:
-                        raise
-            else:
-                pid, rc = os.waitpid(pid, 0)
-                assert rc == 0, "supervisord exited with code %d" % rc
-                info("supervisord started as pid %d", pid)
+            popen = subprocess.Popen([self.supervisord_exe, "-c", self.supervisord_conf_path], env=os.environ)
+            rc = popen.poll()
+            if rc:
+                error("supervisord exited with code %d" % rc)
 
     def __get_supervisor(self):
         """Return the supervisor proxy object

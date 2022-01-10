@@ -1,4 +1,5 @@
 import os
+import signal
 import shutil
 import subprocess
 import tempfile
@@ -30,4 +31,8 @@ def state_dir():
     try:
         yield directory
     finally:
+        try:
+            os.kill(int(open(os.path.join(directory, 'supervisor', 'supervisord.pid')).read()), signal.SIGTERM)
+        except Exception:
+            pass
         shutil.rmtree(directory)

@@ -35,7 +35,7 @@ setup(
     author_email="team@galaxyproject.org",
     license="MIT",
     keywords="gravity galaxy",
-    install_requires=["Click", "supervisor", "setproctitle", "pyyaml"],
+    install_requires=["Click", "supervisor", "pyyaml"],
     entry_points={"console_scripts": ["galaxy = gravity.cli:galaxy"]},
     classifiers=[
         "Intended Audience :: System Administrators",
