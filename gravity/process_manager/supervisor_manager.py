@@ -117,7 +117,7 @@ class SupervisorProcessManager(BaseProcessManager):
                 # set sys.argv so if there's an error it doesn't output a
                 # misleading message that appears to be coming from galaxy
                 sys.argv = ["supervisord"] + args
-                setproctitle("supervisord -c %s" % self.supervisord_conf_path)
+                setproctitle(f"supervisord -c {self.supervisord_conf_path}")
                 supervisord.main(args=args)
             else:
                 pid, rc = os.waitpid(pid, 0)
@@ -142,12 +142,12 @@ class SupervisorProcessManager(BaseProcessManager):
             "galaxy_bind_ip": service.get("galaxy_bind_ip", "localhost"),
             "galaxy_port": service.get("galaxy_port", "8080"),
             "galaxy_umask": service.get("umask", "022"),
-            "program_name": "%s_%s_%s_%s" % (instance_name, service["config_type"], service["service_type"], service["service_name"]),
+            "program_name": f"{instance_name}_{service['config_type']}_{service['service_type']}_{service['service_name']}",
             "galaxy_conf": config_file,
             "galaxy_root": attribs["galaxy_root"],
             "supervisor_state_dir": self.supervisor_state_dir,
         }
-        conf = join(instance_conf_dir, "%s_%s_%s.conf" % (service["config_type"], service["service_type"], service["service_name"]))
+        conf = join(instance_conf_dir, f"{service['config_type']}_{service['service_type']}_{service['service_name']}.conf")
 
         if not exists(attribs["log_dir"]):
             os.makedirs(attribs["log_dir"])
@@ -157,7 +157,7 @@ class SupervisorProcessManager(BaseProcessManager):
         elif service["service_type"] == "standalone":
             template = supervisord_galaxy_standalone_conf_template
         else:
-            raise Exception("Unknown service type: %s" % service["service_type"])
+            raise Exception(f"Unknown service type: {service['service_type']}")
 
         with open(conf, "w") as out:
             out.write(template.format(**format_vars))
@@ -166,10 +166,10 @@ class SupervisorProcessManager(BaseProcessManager):
         # remove the services of any configs which have been removed
         for config in meta_changes["remove_configs"].values():
             instance_name = config.instance_name
-            instance_conf_dir = join(self.supervisord_conf_dir, "%s.d" % instance_name)
+            instance_conf_dir = join(self.supervisord_conf_dir, f"{instance_name}.d")
             for service in config["services"]:
                 info("Removing service %s:%s_%s_%s", instance_name, service.config_type, service.service_type, service.service_name)
-                conf = join(instance_conf_dir, "%s_%s_%s.conf" % (service.config_type, service.service_type, service.service_name))
+                conf = join(instance_conf_dir, f"{service.config_type}_{service.service_type}_{service.service_name}.conf")
                 if exists(conf):
                     os.unlink(conf)
 
@@ -181,7 +181,7 @@ class SupervisorProcessManager(BaseProcessManager):
 
             # config attribs have changed (galaxy_root, virtualenv, etc.)
             if "update_attribs" in config:
-                info("Updating all dependent services of config %s due to changes" % config_file)
+                info(f"Updating all dependent services of config {config_file} due to changes")
                 attribs = config["update_attribs"]
                 update_all_configs = True
 
@@ -192,7 +192,7 @@ class SupervisorProcessManager(BaseProcessManager):
                 update_all_configs = True
 
             # always attempt to make the config dir
-            instance_conf_dir = join(self.supervisord_conf_dir, "%s.d" % instance_name)
+            instance_conf_dir = join(self.supervisord_conf_dir, f"{instance_name}.d")
             try:
                 os.makedirs(instance_conf_dir)
             except OSError as exc:
@@ -214,25 +214,25 @@ class SupervisorProcessManager(BaseProcessManager):
             if "remove_services" in config:
                 for service in config["remove_services"]:
                     info("Removing service %s:%s_%s_%s", instance_name, service["config_type"], service["service_type"], service["service_name"])
-                    conf = join(instance_conf_dir, "%s_%s_%s.conf" % (service["config_type"], service["service_type"], service["service_name"]))
+                    conf = join(instance_conf_dir, f"{service['config_type']}_{service['service_type']}_{service['service_name']}.conf")
                     if exists(conf):
                         os.unlink(conf)
 
             # sanity check, make sure everything that should exist does exist
             for service in config["services"]:
-                conf = join(instance_conf_dir, "%s_%s_%s.conf" % (service["config_type"], service["service_type"], service["service_name"]))
+                conf = join(instance_conf_dir, f"{service['config_type']}_{service['service_type']}_{service['service_name']}.conf")
                 if service not in config.get("remove_services", []) and not exists(conf):
                     self.__update_service(config_file, config, attribs, service, instance_conf_dir, instance_name)
-                    warn("Missing service config recreated: %s" % conf)
+                    warn(f"Missing service config recreated: {conf}")
 
         # all configs referencing an instance name have been removed (or their
         # instance names have changed), nuke the group
         for instance_name in meta_changes["remove_instances"]:
             info("Removing instance %s", instance_name)
-            instance_conf_dir = join(self.supervisord_conf_dir, "%s.d" % instance_name)
+            instance_conf_dir = join(self.supervisord_conf_dir, f"{instance_name}.d")
             if exists(instance_conf_dir):
                 shutil.rmtree(instance_conf_dir)
-            conf = join(self.supervisord_conf_dir, "group_%s.conf" % instance_name)
+            conf = join(self.supervisord_conf_dir, f"group_{instance_name}.conf")
             if exists(conf):
                 os.unlink(join(conf))
 
@@ -244,8 +244,8 @@ class SupervisorProcessManager(BaseProcessManager):
             programs = []
             for service in self.config_manager.get_registered_services():
                 if service["instance_name"] == instance_name and service["service_type"] != "uwsgi":
-                    programs.append("%s_%s_%s_%s" % (instance_name, service["config_type"], service["service_type"], service["service_name"]))
-            conf = join(self.supervisord_conf_dir, "group_%s.conf" % instance_name)
+                    programs.append(f"{instance_name}_{service['config_type']}_{service['service_type']}_{service['service_name']}")
+            conf = join(self.supervisord_conf_dir, f"group_{instance_name}.conf")
             if programs:
                 format_vars = {"instance_conf_dir": instance_conf_dir, "instance_name": instance_name, "programs": ",".join(programs)}
                 open(conf, "w").write(supervisord_galaxy_instance_group_conf_template.format(**format_vars))
@@ -258,10 +258,10 @@ class SupervisorProcessManager(BaseProcessManager):
         self.update()
         instance_names, unknown_instance_names = self.get_instance_names(instance_names)
         for instance_name in instance_names:
-            self.supervisorctl(op, "%s:*" % instance_name)
+            self.supervisorctl(op, f"{instance_name}:*")
             for service in self.config_manager.get_instance_services(instance_name):
                 if service["service_type"] == "uwsgi":
-                    self.supervisorctl(op, "%s_%s_%s" % (instance_name, service["config_type"], service["service_name"]))
+                    self.supervisorctl(op, f"{instance_name}_{service['config_type']}_{service['service_name']}")
         # shortcut for just passing service names directly
         for name in unknown_instance_names:
             self.supervisorctl(op, name)
@@ -271,16 +271,16 @@ class SupervisorProcessManager(BaseProcessManager):
         for instance_name in self.get_instance_names(instance_names)[0]:
             if op == "reload":
                 # restart everything but uwsgi
-                self.supervisorctl("restart", "%s:*" % instance_name)
+                self.supervisorctl("restart", f"{instance_name}:*")
             for service in self.config_manager.get_instance_services(instance_name):
-                service_name = "%s_%s_%s" % (instance_name, service.config_type, service.service_name)
-                group_service_name = "%s:%s_%s" % (instance_name, service.config_type, service.service_name)
+                service_name = f"{instance_name}_{service.config_type}_{service.service_name}"
+                group_service_name = f"{instance_name}:{service.config_type}_{service.service_name}"
                 if service["service_type"] == "uwsgi":
                     procinfo = self.__get_supervisor().getProcessInfo(service_name)
                     # restart uwsgi
                     try:
                         os.kill(procinfo["pid"], signal.SIGHUP)
-                        click.echo("%s: sent HUP signal" % group_service_name)
+                        click.echo(f"{group_service_name}: sent HUP signal")
                     except Exception as exc:
                         warn("Attempt to reload %s failed: %s", service_name, exc)
                 # graceful restarts
@@ -289,11 +289,11 @@ class SupervisorProcessManager(BaseProcessManager):
                 elif op == "graceful" and service["service_type"] == "paste":
                     self.supervisorctl("restart", group_service_name)
                     url = "http://localhost:%d/" % service.paste_port
-                    click.echo("%s: waiting until %s is accepting requests" % (service_name, url), end="")
+                    click.echo(f"{service_name}: waiting until {url} is accepting requests", end="")
                     while True:
                         try:
                             r = urllib.request.urlopen(url, None, 5)
-                            assert r.getcode() == 200, "%s returned HTTP code: %s" % (url, r.getcode())
+                            assert r.getcode() == 200, f"{url} returned HTTP code: {r.getcode()}"
                             click.echo(" OK")
                             break
                         except AssertionError as exc:

@@ -17,6 +17,6 @@ def cli(ctx, config):
     with config_manager.config_manager() as cm:
         config_data = cm.get_registered_config(config)
         if config is None:
-            click.echo("%s not found" % config)
+            click.echo(f"{config} not found")
         else:
             click.echo(json.dumps(config_data, sort_keys=True, indent=4, separators=(",", ": ")))

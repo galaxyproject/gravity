@@ -47,7 +47,7 @@ def name_to_command(name):
         mod_name = "gravity.commands.cmd_" + name
         mod = __import__(mod_name, None, None, ["cli"])
     except ImportError as e:
-        io.error("Problem loading command %s, exception %s" % (name, e))
+        io.error(f"Problem loading command {name}, exception {e}")
         return
     return mod.cli
 
