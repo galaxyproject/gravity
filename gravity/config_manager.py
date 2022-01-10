@@ -22,19 +22,30 @@ def config_manager(state_dir=None, python_exe=None):
 
 
 class ConfigManager(object):
-    state_dir = "~/.galaxy"
+    default_state_dir = "~/.galaxy"
     galaxy_server_config_section = "galaxy"
 
-    @staticmethod
-    def get_config(conf, defaults=None):
+    def __init__(self, state_dir=None, python_exe=None):
+        if state_dir is None:
+            state_dir = ConfigManager.default_state_dir
+        self.state_dir = abspath(expanduser(state_dir))
+        self.config_state_path = join(self.state_dir, "configstate.json")
+        self.python_exe = python_exe
+        try:
+            os.makedirs(self.state_dir)
+        except OSError as exc:
+            if exc.errno != errno.EEXIST:
+                raise
+
+    def get_config(self, conf, defaults=None):
         # delete this ?
-        server_section = ConfigManager.galaxy_server_config_section
+        server_section = self.galaxy_server_config_section
         with open(conf) as config_fh:
             config_dict = safe_load(config_fh)
 
         defs = {
             "galaxy_root": None,
-            "log_dir": join(expanduser(ConfigManager.state_dir), "log"),
+            "log_dir": join(expanduser(self.state_dir), "log"),
             "instance_name": None,
             "job_config_file": "config/job_conf.xml",
         }
@@ -88,18 +99,6 @@ class ConfigManager(object):
             rval.append({"service_name": handler.attrib["id"]})
         return rval
 
-    def __init__(self, state_dir=None, python_exe=None):
-        if state_dir is None:
-            state_dir = ConfigManager.state_dir
-        self.state_dir = abspath(expanduser(state_dir))
-        self.config_state_path = join(self.state_dir, "configstate.json")
-        self.python_exe = python_exe
-        try:
-            os.makedirs(self.state_dir)
-        except OSError as exc:
-            if exc.errno != errno.EEXIST:
-                raise
-
     def _register_config_file(self, key, val):
         """Persist a newly added config file, or update (overwrite) the value
         of a previously persisted config.
@@ -133,7 +132,7 @@ class ConfigManager(object):
         for config_file, stored_config in self.get_registered_configs().items():
             new_config = stored_config
             try:
-                ini_config = ConfigManager.get_config(config_file, defaults=stored_config.defaults)
+                ini_config = self.get_config(config_file, defaults=stored_config.defaults)
             except OSError as exc:
                 warn("Unable to read %s (hint: use `rename` or `remove` to fix): %s", config_file, exc)
                 new_configs[config_file] = stored_config
@@ -259,7 +258,7 @@ class ConfigManager(object):
             defaults = None
             if galaxy_root is not None:
                 defaults = {"galaxy_root": galaxy_root}
-            conf = ConfigManager.get_config(config_file, defaults=defaults)
+            conf = self.get_config(config_file, defaults=defaults)
             if conf is None:
                 raise Exception(f"Cannot add {config_file}: File is unknown type")
             if conf["instance_name"] is None:
@@ -268,7 +267,7 @@ class ConfigManager(object):
                 "config_type": conf["config_type"],
                 "instance_name": conf["instance_name"],
                 "attribs": conf["attribs"],
-                "services": [],
+                "services": conf['services'],
             }  # services will be populated by the update method
             self._register_config_file(config_file, conf_data)
             info("Registered %s config: %s", conf["config_type"], config_file)
@@ -277,7 +276,7 @@ class ConfigManager(object):
         if not self.is_registered(old):
             error("%s is not registered", old)
             return
-        conf = ConfigManager.get_config(new)
+        conf = self.get_config(new)
         if conf is None:
             raise Exception(f"Cannot add {new}: File is unknown type")
         with self.state as state:

@@ -1,5 +1,7 @@
 import os
+import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -23,5 +25,9 @@ def galaxy_root_dir(galaxy_git_dir, tmpdir_factory):
 
 
 @pytest.fixture()
-def state_dir(tmpdir):
-    return tmpdir
+def state_dir():
+    directory = tempfile.mkdtemp()
+    try:
+        yield directory
+    finally:
+        shutil.rmtree(directory)
