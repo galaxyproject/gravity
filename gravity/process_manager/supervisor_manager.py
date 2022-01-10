@@ -118,7 +118,11 @@ class SupervisorProcessManager(BaseProcessManager):
                 # misleading message that appears to be coming from galaxy
                 sys.argv = ["supervisord"] + args
                 setproctitle(f"supervisord -c {self.supervisord_conf_path}")
-                supervisord.main(args=args)
+                try:
+                    supervisord.main(args=args)
+                except SystemExit as e:
+                    if e.code > 0:
+                        raise
             else:
                 pid, rc = os.waitpid(pid, 0)
                 assert rc == 0, "supervisord exited with code %d" % rc
