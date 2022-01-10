@@ -19,3 +19,5 @@ jobs:
         run: pip install tox
       - name: Run tests
         run: tox -e test
+      - name: "Upload coverage to Codecov"
+        uses: codecov/codecov-action@v2
