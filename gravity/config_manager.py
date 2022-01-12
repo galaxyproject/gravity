@@ -16,18 +16,31 @@ from gravity.io import error, info, warn
 from gravity.state import ConfigFile, GravityState, Service
 
 
+DEFAULT_STATE_DIR = join('~', '.config', 'galaxy-gravity')
+if 'XDG_CONFIG_HOME' in os.environ:
+    DEFAULT_STATE_DIR = join(os.environ['XDG_CONFIG_HOME'], 'galaxy-gravity')
+
+
 @contextlib.contextmanager
 def config_manager(state_dir=None, python_exe=None):
     yield ConfigManager(state_dir=state_dir, python_exe=python_exe)
 
 
 class ConfigManager(object):
-    default_state_dir = "~/.galaxy"
     galaxy_server_config_section = "galaxy"
 
     def __init__(self, state_dir=None, python_exe=None):
         if state_dir is None:
-            state_dir = ConfigManager.default_state_dir
+            # if installed in a venv and running from source, use a per-instance state dir
+            if (exists(join('lib', 'galaxy', '__init__.py'))
+                and exists(join('config', 'galaxy.yml.sample'))
+                and exists('database')
+                and os.environ.get('VIRTUAL_ENV')):
+                # Ideally this would use data_dir in the Galaxy config, but this state dir has to be known before we
+                # read the Galaxy config
+                state_dir = join('database', 'gravity')
+            else:
+                state_dir = DEFAULT_STATE_DIR
         self.state_dir = abspath(expanduser(state_dir))
         self.config_state_path = join(self.state_dir, "configstate.json")
         self.python_exe = python_exe
@@ -46,43 +59,50 @@ class ConfigManager(object):
         defs = {
             "galaxy_root": None,
             "log_dir": join(expanduser(self.state_dir), "log"),
-            "instance_name": None,
+            "instance_name": "galaxy",
+            # FIXME: relative to config_dir
             "job_config_file": "config/job_conf.xml",
         }
         if defaults is not None:
             defs.update(defaults)
 
-        app_config = config_dict.get(server_section)
-        if not app_config:
+        _app_config = config_dict.get(server_section)
+        if not _app_config:
             error(f"Config file {conf} does not look like valid Galaxy, Reports or Tool Shed configuration file")
             return None
+
+        app_config = defs | _app_config
 
         # This is the core that needs to be implemented
         config = ConfigFile()
         config.attribs = {}
         config.services = []
-        config.instance_name = str(uuid.uuid4())
+        config.instance_name = app_config["instance_name"]
         config.config_type = server_section
-        config.attribs['log_dir'] = defs['log_dir']
+        config.attribs['log_dir'] = app_config["log_dir"]
         webapp_service_names = []
 
         # shortcut for galaxy configs in the standard locations -- explicit arg ?
-        config.attribs["galaxy_root"] = config_dict.get('root')
+        config.attribs["galaxy_root"] = app_config.get('root')
         if config.attribs["galaxy_root"] is None:
             if exists(join(dirname(conf), pardir, "lib", "galaxy")):
                 config.attribs["galaxy_root"] = abspath(join(dirname(conf), pardir))
-            elif exists(join(dirname(conf), "lib", "galaxy")):
-                config.attribs["galaxy_root"] = abspath(join(dirname(conf)))
             else:
-                raise Exception(f"Cannot locate Galaxy root directory: set `galaxy_root' in the [galaxy] section of {conf}")
+                raise Exception(f"Cannot locate Galaxy root directory: set `galaxy_root' in the `galaxy' section of {conf}")
 
         # Paste had paste_port inn Service arguments, need to add (via CLI ?)?
         config.services.append(Service(config_type=config.config_type, service_type="gunicorn", service_name="gunicorn"))
         # If this is a Galaxy config, parse job_conf.xml for any standalone handlers
         # Marius: Don't think that's gonna work if job config file not defined!
         # TODO: use galaxy config parsing ?
-        job_conf_xml = app_config.get("job_config_file", 'job_conf.xml')
+        # What do we need?
+        # 1. support yaml and xml
+        # 2. see logic in lib/galaxy/web_stack/handlers.py _get_is_handler() to determine handler
+        # 3. new var for number of dynamic handlers if only assign is set and no handler defs? (what to do if both set?)
+        # 4. new var for handler name template?
+        job_conf_xml = app_config["job_config_file"]
         if not isabs(job_conf_xml):
+            # FIXME: relative to root
             job_conf_xml = abspath(join(config.attribs["galaxy_root"], job_conf_xml))
         if config.config_type == "galaxy" and exists(job_conf_xml):
             for service_name in [x["    service_name"] for x in ConfigManager.get_job_config(job_conf_xml) if x["service_name"] not in webapp_service_names]:
@@ -93,6 +113,7 @@ class ConfigManager(object):
     @staticmethod
     def get_job_config(conf):
         """Extract handler names from job_conf.xml"""
+        # FIXME: use galaxy job conf parsing I guess, if it's not a mess of slow loading deps
         rval = []
         root = elementtree.parse(conf).getroot()
         for handler in root.find("handlers"):
