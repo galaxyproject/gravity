@@ -11,7 +11,7 @@ from os.path import abspath, dirname, exists, expanduser, isabs, join
 
 from yaml import safe_load
 
-from gravity.io import error, info, warn
+from gravity.io import debug, error, info, warn
 from gravity.state import ConfigFile, GravityState, Service
 
 
@@ -30,17 +30,9 @@ class ConfigManager(object):
 
     def __init__(self, state_dir=None, python_exe=None):
         if state_dir is None:
-            # if installed in a venv and running from source, use a per-instance state dir
-            if (exists(join('lib', 'galaxy', '__init__.py'))
-                and exists(join('config', 'galaxy.yml.sample'))
-                and exists('database')
-                and os.environ.get('VIRTUAL_ENV')):
-                # Ideally this would use data_dir in the Galaxy config, but this state dir has to be known before we
-                # read the Galaxy config
-                state_dir = join('database', 'gravity')
-            else:
-                state_dir = DEFAULT_STATE_DIR
+            state_dir = DEFAULT_STATE_DIR
         self.state_dir = abspath(expanduser(state_dir))
+        debug(f"Gravity state dir: {self.state_dir}")
         self.config_state_path = join(self.state_dir, "configstate.json")
         self.python_exe = python_exe
         try:

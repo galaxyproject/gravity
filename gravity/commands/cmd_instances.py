@@ -7,7 +7,7 @@ from gravity import config_manager
 @click.pass_context
 def cli(ctx):
     """List all known instances."""
-    with config_manager.config_manager() as cm:
+    with config_manager.config_manager(state_dir=ctx.parent.state_dir) as cm:
         configs = cm.get_registered_configs()
         instances = cm.get_registered_instances()
         if instances:

@@ -8,5 +8,5 @@ from gravity import process_manager
 @click.pass_context
 def cli(ctx, supervisorctl_arg):
     """Invoke supervisorctl directly."""
-    with process_manager.process_manager() as pm:
+    with process_manager.process_manager(state_dir=ctx.parent.state_dir) as pm:
         pm.supervisorctl(*supervisorctl_arg)

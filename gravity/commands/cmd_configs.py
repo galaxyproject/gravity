@@ -10,7 +10,7 @@ def cli(ctx):
 
     aliases: list
     """
-    with config_manager.config_manager() as cm:
+    with config_manager.config_manager(state_dir=ctx.parent.state_dir) as cm:
         registered = cm.get_registered_configs()
         if registered:
             click.echo("%-12s  %-24s  %s" % ("TYPE", "INSTANCE NAME", "CONFIG PATH"))

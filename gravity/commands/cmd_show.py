@@ -14,7 +14,7 @@ def cli(ctx, config):
 
     aliases: get
     """
-    with config_manager.config_manager() as cm:
+    with config_manager.config_manager(state_dir=ctx.parent.state_dir) as cm:
         config_data = cm.get_registered_config(config)
         if config is None:
             click.echo(f"{config} not found")

@@ -14,7 +14,7 @@ def cli(ctx, old_config, new_config):
 
     aliases: rename
     """
-    with config_manager.config_manager() as cm:
+    with config_manager.config_manager(state_dir=ctx.parent.state_dir) as cm:
         try:
             cm.rename(old_config, new_config)
         except Exception as exc:

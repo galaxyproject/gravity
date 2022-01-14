@@ -10,10 +10,12 @@ from gravity import io
 from gravity import options
 
 
-# FIXME: $GRAVITY_STATE_DIR unimplemented
 # FIXME: -p/--python-exe unimplemented
-# CONTEXT_SETTINGS = dict(auto_envvar_prefix='GRAVITY')
-CONTEXT_SETTINGS = dict(help_option_names=["-h", "--help"])
+CONTEXT_SETTINGS = {
+    "auto_envvar_prefix": "GRAVITY",
+    "help_option_names": ["-h", "--help"]
+}
+
 # FIXME: incomplete aliases
 COMMAND_ALIASES = {
     "list": "configs",
@@ -42,8 +44,6 @@ def list_cmds():
 
 def name_to_command(name):
     try:
-        if sys.version_info[0] == 2:
-            name = name.encode("ascii", "replace")
         mod_name = "gravity.commands.cmd_" + name
         mod = __import__(mod_name, None, None, ["cli"])
     except ImportError as e:
@@ -65,6 +65,8 @@ class GravityCLI(click.MultiCommand):
 @click.command(cls=GravityCLI, context_settings=CONTEXT_SETTINGS)
 @options.debug_option()
 @options.state_dir_option()
-def galaxy(debug, state_dir):
+@click.pass_context
+def galaxy(ctx, debug, state_dir):
     """Manage Galaxy server configurations and processes."""
     set_debug(debug)
+    ctx.state_dir = state_dir

@@ -13,7 +13,7 @@ def cli(ctx, config):
 
     aliases: add
     """
-    with config_manager.config_manager() as cm:
+    with config_manager.config_manager(state_dir=ctx.parent.state_dir) as cm:
         try:
             cm.add(config)
         except Exception as exc:
