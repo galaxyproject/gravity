@@ -11,7 +11,6 @@ from os.path import abspath, dirname, exists, expanduser, isabs, join
 
 from yaml import safe_load
 
-
 from gravity.io import error, info, warn
 from gravity.state import ConfigFile, GravityState, Service
 
@@ -92,14 +91,10 @@ class ConfigManager(object):
 
         # Paste had paste_port inn Service arguments, need to add (via CLI ?)?
         config.services.append(Service(config_type=config.config_type, service_type="gunicorn", service_name="gunicorn"))
-        # If this is a Galaxy config, parse job_conf.xml for any standalone handlers
+        # If this is a Galaxy config, parse job_conf.xml for any *static* standalone handlers
         # Marius: Don't think that's gonna work if job config file not defined!
         # TODO: use galaxy config parsing ?
-        # What do we need?
-        # 1. support yaml and xml
-        # 2. see logic in lib/galaxy/web_stack/handlers.py _get_is_handler() to determine handler
-        # 3. new var for number of dynamic handlers if only assign is set and no handler defs? (what to do if both set?)
-        # 4. new var for handler name template?
+        # TODO: if not, need yaml job config parsing
         job_conf_xml = app_config["job_config_file"]
         if not isabs(job_conf_xml):
             # FIXME: relative to root
@@ -107,6 +102,20 @@ class ConfigManager(object):
         if config.config_type == "galaxy" and exists(job_conf_xml):
             for service_name in [x["    service_name"] for x in ConfigManager.get_job_config(job_conf_xml) if x["service_name"] not in webapp_service_names]:
                 config.services.append(Service(config_type=config.config_type, service_type="standalone", service_name=service_name))
+
+        # Dynamic job handlers are configured using `job_handler_count` in galaxy.yml.
+        #
+        # FIXME: This should imply explicit configuration of the handler assignment method. If not explicitly set, the
+        # web process will be a handler, which is not desirable when dynamic handlers are used. Currently Gravity
+        # doesn't parse that part of the job config. See logic in lib/galaxy/web_stack/handlers.py _get_is_handler() to
+        # see how this is determined.
+        handler_count = app_config.get("job_handler_count", 0)
+        handler_name = app_config.get("job_handler_name_template", "job-handler-{instance_number}")
+        for i in range(0, handler_count):
+            service_name = handler_name.format(instance_number=i)
+            config.services.append(
+                Service(config_type=config.config_type, service_type="standalone", service_name=service_name,
+                        server_pool="job-handlers"))
 
         return config
 

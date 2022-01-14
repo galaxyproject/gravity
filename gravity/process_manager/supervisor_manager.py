@@ -41,7 +41,7 @@ serverurl = unix://{supervisor_state_dir}/supervisor.sock
 files = {supervisord_conf_dir}/*.d/*.conf {supervisord_conf_dir}/*.conf
 """
 
-supervisord_galaxy_gunicorn_conf_template = """
+supervisord_galaxy_gunicorn_conf_template = """;
 ; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
 ;
 
@@ -66,7 +66,7 @@ supervisord_galaxy_standalone_conf_template = """;
 ;
 
 [program:{program_name}]
-command         = python ./lib/galaxy/main.py -c {galaxy_conf} --server-name={server_name} --pid-file={supervisor_state_dir}/{program_name}.pid
+command         = python ./lib/galaxy/main.py -c {galaxy_conf} --server-name={server_name}{attach_to_pool_opt} --pid-file={supervisor_state_dir}/{program_name}.pid
 process_name    = {config_type}_{server_name}
 directory       = {galaxy_root}
 autostart       = false
@@ -140,6 +140,7 @@ class SupervisorProcessManager(BaseProcessManager):
             "log_dir": attribs["log_dir"],
             "config_type": service["config_type"],
             "server_name": service["service_name"],
+            "attach_to_pool_opt": "",
             # TODO: Make config variables
             "galaxy_bind_ip": service.get("galaxy_bind_ip", "localhost"),
             "galaxy_port": service.get("galaxy_port", "8080"),
@@ -158,6 +159,9 @@ class SupervisorProcessManager(BaseProcessManager):
             template = supervisord_galaxy_gunicorn_conf_template
         elif service["service_type"] == "standalone":
             template = supervisord_galaxy_standalone_conf_template
+            server_pool = service.get("server_pool")
+            if server_pool:
+                format_vars["attach_to_pool_opt"] = f" --attach-to-pool={server_pool}"
         else:
             raise Exception(f"Unknown service type: {service['service_type']}")
 
