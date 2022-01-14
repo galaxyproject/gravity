@@ -12,13 +12,13 @@ from os.path import exists, join
 
 import click
 
-from gravity.io import error, info, warn
+from gravity.io import debug, error, info, warn
 from gravity.process_manager import BaseProcessManager
 
 from supervisor import supervisorctl
 
 
-supervisord_conf_template = """;
+SUPERVISORD_CONF_TEMPLATE = """;
 ; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
 ;
 
@@ -41,15 +41,15 @@ serverurl = unix://{supervisor_state_dir}/supervisor.sock
 files = {supervisord_conf_dir}/*.d/*.conf {supervisord_conf_dir}/*.conf
 """
 
-supervisord_galaxy_gunicorn_conf_template = """;
+# TODO: with more templating you only need one of these
+SUPERVISORD_SERVICE_TEMPLATES = {}
+SUPERVISORD_SERVICE_TEMPLATES["gunicorn"] = """;
 ; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
 ;
-
 
 [program:{program_name}]
 command         = gunicorn 'galaxy.webapps.galaxy.fast_factory:factory()' --timeout 300 --pythonpath lib -k galaxy.webapps.galaxy.workers.Worker -b {galaxy_bind_ip}:{galaxy_port}
 directory       = {galaxy_root}
-process_name    = gunicorn
 umask           = {galaxy_umask}
 autostart       = true
 autorestart     = true
@@ -57,27 +57,67 @@ startsecs       = 15
 stopwaitsecs    = 65
 environment     = GALAXY_CONFIG_FILE={galaxy_conf}
 numprocs        = 1
-stdout_logfile  = {log_dir}/gunicorn.log
+stdout_logfile  = {log_dir}/{program_name}.log
 redirect_stderr = true
+{process_name_opt}
 """  # noqa: E501
 
-supervisord_galaxy_standalone_conf_template = """;
+SUPERVISORD_SERVICE_TEMPLATES["celery"] = """;
+; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
+;
+
+[program:{program_name}]
+command         = celery --app galaxy.celery worker --concurrency 2 -l debug
+directory       = {galaxy_root}
+umask           = {galaxy_umask}
+autostart       = true
+autorestart     = true
+startsecs       = 10
+stopwaitsecs    = 10
+environment     = PYTHONPATH=lib
+numprocs        = 1
+stdout_logfile  = {log_dir}/{program_name}.log
+redirect_stderr = true
+{process_name_opt}
+"""
+
+SUPERVISORD_SERVICE_TEMPLATES["celery-beat"] = """;
+; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
+;
+
+[program:{program_name}]
+command         = celery --app galaxy.celery beat -l debug
+directory       = {galaxy_root}
+umask           = {galaxy_umask}
+autostart       = true
+autorestart     = true
+startsecs       = 10
+stopwaitsecs    = 10
+environment     = PYTHONPATH=lib
+numprocs        = 1
+stdout_logfile  = {log_dir}/{program_name}.log
+redirect_stderr = true
+{process_name_opt}
+"""
+
+SUPERVISORD_SERVICE_TEMPLATES["standalone"] = """;
 ; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
 ;
 
 [program:{program_name}]
 command         = python ./lib/galaxy/main.py -c {galaxy_conf} --server-name={server_name}{attach_to_pool_opt} --pid-file={supervisor_state_dir}/{program_name}.pid
-process_name    = {config_type}_{server_name}
 directory       = {galaxy_root}
-autostart       = false
+autostart       = true
 autorestart     = true
 startsecs       = 20
+stopwaitsecs    = 65
 numprocs        = 1
 stdout_logfile  = {log_dir}/{program_name}.log
 redirect_stderr = true
+{process_name_opt}
 """
 
-supervisord_galaxy_instance_group_conf_template = """;
+SUPERVISORD_GROUP_TEMPLATE = """;
 ; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
 ;
 
@@ -104,6 +144,9 @@ class SupervisorProcessManager(BaseProcessManager):
         self.supervisor_state_dir = join(self.state_dir, "supervisor")
         self.supervisord_conf_path = join(self.supervisor_state_dir, "supervisord.conf")
         self.supervisord_conf_dir = join(self.supervisor_state_dir, "supervisord.conf.d")
+        self.supervisord_pid_path = join(self.supervisor_state_dir, "supervisord.pid")
+        self.supervisord_sock_path = join(self.supervisor_state_dir, "supervisor.sock")
+        self.use_group = not self.config_manager.single_instance
 
         if not exists(self.supervisord_conf_dir):
             os.makedirs(self.supervisord_conf_dir)
@@ -111,20 +154,28 @@ class SupervisorProcessManager(BaseProcessManager):
         if start_daemon:
             self.__supervisord()
 
+    def __supervisord_is_running(self):
+        try:
+            assert exists(self.supervisord_pid_path)
+            assert exists(self.supervisord_sock_path)
+            os.kill(int(open(self.supervisord_pid_path).read()), 0)
+            return True
+        except Exception:
+            return False
+
     def __supervisord(self):
         format_vars = {"supervisor_state_dir": self.supervisor_state_dir, "supervisord_conf_dir": self.supervisord_conf_dir}
-        supervisord_pid_path = join(self.supervisor_state_dir, "supervisord.pid")
-
-        try:
-            assert exists(supervisord_pid_path)
-            os.kill(int(open(supervisord_pid_path).read()), 0)
-        except Exception:
+        if not self.__supervisord_is_running():
             # any time that supervisord is not running, let's rewrite supervisord.conf
-            open(self.supervisord_conf_path, "w").write(supervisord_conf_template.format(**format_vars))
+            open(self.supervisord_conf_path, "w").write(SUPERVISORD_CONF_TEMPLATE.format(**format_vars))
             popen = subprocess.Popen([self.supervisord_exe, "-c", self.supervisord_conf_path], env=os.environ)
             rc = popen.poll()
             if rc:
                 error("supervisord exited with code %d" % rc)
+            # FIXME: don't wait forever
+            while not exists(self.supervisord_pid_path) or not exists(self.supervisord_sock_path):
+                debug(f"Waiting for {self.supervisord_pid_path}")
+                time.sleep(0.5)
 
     def __get_supervisor(self):
         """Return the supervisor proxy object
@@ -136,16 +187,30 @@ class SupervisorProcessManager(BaseProcessManager):
         return supervisorctl.Controller(options).get_supervisor()
 
     def __update_service(self, config_file, config, attribs, service, instance_conf_dir, instance_name):
+        if self.use_group:
+            process_name_opt = f"process_name    = {service['service_name']}"
+            program_name = f"{instance_name}_{service['config_type']}_{service['service_type']}_{service['service_name']}"
+        else:
+            process_name_opt = ""
+            program_name = service["service_name"]
+
+        # used by the "standalone" service type
+        attach_to_pool_opt = ""
+        server_pool = service.get("server_pool")
+        if server_pool:
+            attach_to_pool_opt = f" --attach-to-pool={server_pool}"
+
         format_vars = {
             "log_dir": attribs["log_dir"],
             "config_type": service["config_type"],
             "server_name": service["service_name"],
-            "attach_to_pool_opt": "",
+            "attach_to_pool_opt": attach_to_pool_opt,
             # TODO: Make config variables
             "galaxy_bind_ip": service.get("galaxy_bind_ip", "localhost"),
             "galaxy_port": service.get("galaxy_port", "8080"),
             "galaxy_umask": service.get("umask", "022"),
-            "program_name": f"{instance_name}_{service['config_type']}_{service['service_type']}_{service['service_name']}",
+            "program_name": program_name,
+            "process_name_opt": process_name_opt,
             "galaxy_conf": config_file,
             "galaxy_root": attribs["galaxy_root"],
             "supervisor_state_dir": self.supervisor_state_dir,
@@ -155,14 +220,8 @@ class SupervisorProcessManager(BaseProcessManager):
         if not exists(attribs["log_dir"]):
             os.makedirs(attribs["log_dir"])
 
-        if service["service_type"] == "gunicorn":
-            template = supervisord_galaxy_gunicorn_conf_template
-        elif service["service_type"] == "standalone":
-            template = supervisord_galaxy_standalone_conf_template
-            server_pool = service.get("server_pool")
-            if server_pool:
-                format_vars["attach_to_pool_opt"] = f" --attach-to-pool={server_pool}"
-        else:
+        template = SUPERVISORD_SERVICE_TEMPLATES.get(service["service_type"])
+        if not template:
             raise Exception(f"Unknown service type: {service['service_type']}")
 
         with open(conf, "w") as out:
@@ -252,9 +311,9 @@ class SupervisorProcessManager(BaseProcessManager):
                 if service["instance_name"] == instance_name and service["service_type"] != "uwsgi":
                     programs.append(f"{instance_name}_{service['config_type']}_{service['service_type']}_{service['service_name']}")
             conf = join(self.supervisord_conf_dir, f"group_{instance_name}.conf")
-            if programs:
+            if programs and self.use_group:
                 format_vars = {"instance_conf_dir": instance_conf_dir, "instance_name": instance_name, "programs": ",".join(programs)}
-                open(conf, "w").write(supervisord_galaxy_instance_group_conf_template.format(**format_vars))
+                open(conf, "w").write(SUPERVISORD_GROUP_TEMPLATE.format(**format_vars))
             else:
                 # no programs for the group, so it should be removed
                 if exists(conf):
@@ -264,7 +323,8 @@ class SupervisorProcessManager(BaseProcessManager):
         self.update()
         instance_names, unknown_instance_names = self.get_instance_names(instance_names)
         for instance_name in instance_names:
-            self.supervisorctl(op, f"{instance_name}:*")
+            target = f"{instance_name}:*" if self.use_group else "all"
+            self.supervisorctl(op, target)
             for service in self.config_manager.get_instance_services(instance_name):
                 if service["service_type"] == "uwsgi":
                     self.supervisorctl(op, f"{instance_name}_{service['config_type']}_{service['service_name']}")
@@ -277,7 +337,8 @@ class SupervisorProcessManager(BaseProcessManager):
         for instance_name in self.get_instance_names(instance_names)[0]:
             if op == "reload":
                 # restart everything but uwsgi
-                self.supervisorctl("restart", f"{instance_name}:*")
+                target = f"{instance_name}:*" if self.use_group else "all"
+                self.supervisorctl("restart", target)
             for service in self.config_manager.get_instance_services(instance_name):
                 service_name = f"{instance_name}_{service.config_type}_{service.service_name}"
                 group_service_name = f"{instance_name}:{service.config_type}_{service.service_name}"
@@ -340,9 +401,14 @@ class SupervisorProcessManager(BaseProcessManager):
         """Add newly defined servers, remove any that are no longer present"""
         configs, meta_changes = self.config_manager.determine_config_changes()
         self._process_config_changes(configs, meta_changes)
-        self.supervisorctl("update")
+        # only need to update if supervisord is running, otherwise changes will be picked up at next start
+        if self.__supervisord_is_running():
+            self.supervisorctl("update")
 
     def supervisorctl(self, *args, **kwargs):
+        if not self.__supervisord_is_running():
+            warn("supervisord is not running")
+            return
         try:
             supervisorctl.main(args=["-c", self.supervisord_conf_path] + list(args))
         except SystemExit as e:

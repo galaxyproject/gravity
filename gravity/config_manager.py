@@ -15,9 +15,10 @@ from gravity.io import debug, error, info, warn
 from gravity.state import ConfigFile, GravityState, Service
 
 
-DEFAULT_STATE_DIR = join('~', '.config', 'galaxy-gravity')
-if 'XDG_CONFIG_HOME' in os.environ:
-    DEFAULT_STATE_DIR = join(os.environ['XDG_CONFIG_HOME'], 'galaxy-gravity')
+DEFAULT_INSTANCE_NAME = "_default_"
+DEFAULT_STATE_DIR = join("~", ".config", "galaxy-gravity")
+if "XDG_CONFIG_HOME" in os.environ:
+    DEFAULT_STATE_DIR = join(os.environ["XDG_CONFIG_HOME"], "galaxy-gravity")
 
 
 @contextlib.contextmanager
@@ -50,7 +51,7 @@ class ConfigManager(object):
         defs = {
             "galaxy_root": None,
             "log_dir": join(expanduser(self.state_dir), "log"),
-            "instance_name": "galaxy",
+            "instance_name": DEFAULT_INSTANCE_NAME,
             # FIXME: relative to config_dir
             "job_config_file": "config/job_conf.xml",
         }
@@ -83,6 +84,8 @@ class ConfigManager(object):
 
         # Paste had paste_port inn Service arguments, need to add (via CLI ?)?
         config.services.append(Service(config_type=config.config_type, service_type="gunicorn", service_name="gunicorn"))
+        config.services.append(Service(config_type=config.config_type, service_type="celery", service_name="celery"))
+        config.services.append(Service(config_type=config.config_type, service_type="celery-beat", service_name="celery-beat"))
         # If this is a Galaxy config, parse job_conf.xml for any *static* standalone handlers
         # Marius: Don't think that's gonna work if job config file not defined!
         # TODO: use galaxy config parsing ?
@@ -103,6 +106,7 @@ class ConfigManager(object):
         # see how this is determined.
         handler_count = app_config.get("job_handler_count", 0)
         handler_name = app_config.get("job_handler_name_template", "job-handler-{instance_number}")
+        # TODO: should we use supervisor's native process count instead?
         for i in range(0, handler_count):
             service_name = handler_name.format(instance_number=i)
             config.services.append(
@@ -222,6 +226,11 @@ class ConfigManager(object):
     def state(self):
         """Public property to access persisted config state"""
         return GravityState.open(self.config_state_path)
+
+    @property
+    def single_instance(self):
+        """Indicate if there is only one configured instance"""
+        return len(self.state.config_files) == 1
 
     def get_registered_configs(self, instances=None):
         """Return the persisted values of all config files registered with the config manager."""

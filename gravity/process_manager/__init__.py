@@ -4,6 +4,7 @@
 import contextlib
 import errno
 import importlib
+import inspect
 import os
 from abc import ABCMeta, abstractmethod
 
@@ -20,13 +21,13 @@ def process_manager(state_dir=None, start_daemon=True):
             mod = importlib.import_module("gravity.process_manager." + filename[: -len(".py")])
             for name in dir(mod):
                 obj = getattr(mod, name)
-                if not name.startswith("_") and isinstance(obj, object) and issubclass(obj, BaseProcessManager) and obj != BaseProcessManager:
+                if not name.startswith("_") and inspect.isclass(obj) and issubclass(obj, BaseProcessManager) and obj != BaseProcessManager:
                     yield obj(state_dir=state_dir, start_daemon=start_daemon)
                     return
 
 
 class BaseProcessManager(object, metaclass=ABCMeta):
-    state_dir = "~/.galaxy"
+    #state_dir = "~/.galaxy"
 
     def __init__(self, state_dir=None, start_daemon=True):
         # Why all this duplication? The config manager sets up the state dir
@@ -38,7 +39,7 @@ class BaseProcessManager(object, metaclass=ABCMeta):
         #except OSError as exc:
         #    if exc.errno != errno.EEXIST:
         #        raise
-        self.config_manager = ConfigManager()
+        self.config_manager = ConfigManager(state_dir=state_dir)
         self.state_dir = self.config_manager.state_dir
 
     @abstractmethod
