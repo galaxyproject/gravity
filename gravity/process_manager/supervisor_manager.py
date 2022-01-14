@@ -55,7 +55,7 @@ autostart       = true
 autorestart     = true
 startsecs       = 15
 stopwaitsecs    = 65
-environment     = GALAXY_CONFIG_FILE={galaxy_conf}
+environment     = GALAXY_CONFIG_FILE="{galaxy_conf}"
 numprocs        = 1
 stdout_logfile  = {log_dir}/{program_name}.log
 redirect_stderr = true
@@ -74,7 +74,7 @@ autostart       = true
 autorestart     = true
 startsecs       = 10
 stopwaitsecs    = 10
-environment     = PYTHONPATH=lib
+environment     = PYTHONPATH=lib,GALAXY_CONFIG_FILE="{galaxy_conf}"
 numprocs        = 1
 stdout_logfile  = {log_dir}/{program_name}.log
 redirect_stderr = true
@@ -93,7 +93,7 @@ autostart       = true
 autorestart     = true
 startsecs       = 10
 stopwaitsecs    = 10
-environment     = PYTHONPATH=lib
+environment     = PYTHONPATH=lib,GALAXY_CONFIG_FILE="{galaxy_conf}"
 numprocs        = 1
 stdout_logfile  = {log_dir}/{program_name}.log
 redirect_stderr = true
@@ -375,6 +375,7 @@ class SupervisorProcessManager(BaseProcessManager):
     def start(self, instance_names):
         super(SupervisorProcessManager, self).start(instance_names)
         self.__start_stop("start", instance_names)
+        self.supervisorctl("status")
 
     def stop(self, instance_names):
         self.__start_stop("stop", instance_names)
