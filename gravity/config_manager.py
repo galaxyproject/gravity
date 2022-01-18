@@ -83,7 +83,8 @@ class ConfigManager(object):
                 raise Exception(f"Cannot locate Galaxy root directory: set `galaxy_root' in the `galaxy' section of {conf}")
 
         # Paste had paste_port inn Service arguments, need to add (via CLI ?)?
-        config.services.append(Service(config_type=config.config_type, service_type="gunicorn", service_name="gunicorn"))
+        # service name to follow with `galaxy start -f`
+        config.services.append(Service(config_type=config.config_type, service_type="gunicorn", service_name="gunicorn", follow=True))
         config.services.append(Service(config_type=config.config_type, service_type="celery", service_name="celery"))
         config.services.append(Service(config_type=config.config_type, service_type="celery-beat", service_name="celery-beat"))
         # If this is a Galaxy config, parse job_conf.xml for any *static* standalone handlers

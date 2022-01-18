@@ -146,6 +146,7 @@ class SupervisorProcessManager(BaseProcessManager):
         self.supervisord_conf_dir = join(self.supervisor_state_dir, "supervisord.conf.d")
         self.supervisord_pid_path = join(self.supervisor_state_dir, "supervisord.pid")
         self.supervisord_sock_path = join(self.supervisor_state_dir, "supervisor.sock")
+        self.__supervisord_popen = None
         self.use_group = not self.config_manager.single_instance
 
         if not exists(self.supervisord_conf_dir):
@@ -168,8 +169,8 @@ class SupervisorProcessManager(BaseProcessManager):
         if not self.__supervisord_is_running():
             # any time that supervisord is not running, let's rewrite supervisord.conf
             open(self.supervisord_conf_path, "w").write(SUPERVISORD_CONF_TEMPLATE.format(**format_vars))
-            popen = subprocess.Popen([self.supervisord_exe, "-c", self.supervisord_conf_path], env=os.environ)
-            rc = popen.poll()
+            self.__supervisord_popen = subprocess.Popen([self.supervisord_exe, "-c", self.supervisord_conf_path, '--nodaemon'], env=os.environ)
+            rc = self.__supervisord_popen.poll()
             if rc:
                 error("supervisord exited with code %d" % rc)
             # FIXME: don't wait forever
@@ -395,6 +396,27 @@ class SupervisorProcessManager(BaseProcessManager):
         # all_infos = supervisor.getAllProcessInfo()
         self.supervisorctl("status")
 
+    # FIXME: service_name is probably not right here
+    def follow(self, instance_names):
+        if not instance_names:
+            instance_names = self.get_instance_names(instance_names)[0]
+        if len(instance_names) != 1:
+            error(f"Can only follow logs of one instance at a time! {instance_names}")
+            return
+        instance_name = instance_names[0]
+        services = self.config_manager.get_instance_services(instance_names)
+        if len(services) == 1:
+            service_name == services[0].service_name
+        else:
+            for service in services:
+                if service.get("follow", False):
+                    service_name = service.service_name
+                    break
+            else:
+                error("Don't know which service to follow!")
+                return
+        self.supervisorctl("tail", "-f", service_name)
+
     def shutdown(self):
         self.supervisorctl("shutdown")
 
@@ -413,6 +435,7 @@ class SupervisorProcessManager(BaseProcessManager):
         try:
             supervisorctl.main(args=["-c", self.supervisord_conf_path] + list(args))
         except SystemExit as e:
+            # supervisorctl.main calls sys.exit(), so we catch that
             if e.code == 0:
                 pass
             else:
