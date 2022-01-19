@@ -399,6 +399,14 @@ class SupervisorProcessManager(BaseProcessManager):
 
     def stop(self, instance_names):
         self.__start_stop("stop", instance_names)
+        # Exit supervisor if all processes are stopped
+        supervisor = self.__get_supervisor()
+        proc_infos = supervisor.getAllProcessInfo()
+        if all([i["state"] == 0 for i in proc_infos]):
+            info("All processes stopped, supervisord will exit")
+            self.shutdown()
+        else:
+            info("Not all processes stopped, supervisord not shut down (hint: see `galaxyctl status`)")
 
     def restart(self, instance_names):
         self.__start_stop("restart", instance_names)
