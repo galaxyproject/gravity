@@ -225,8 +225,8 @@ class SupervisorProcessManager(BaseProcessManager):
             "config_type": service["config_type"],
             "server_name": service["service_name"],
             "attach_to_pool_opt": attach_to_pool_opt,
-            "bind_address": service.get("bind_address"),
-            "bind_port": service.get("bind_port"),
+            "bind_address": attribs["bind_address"],
+            "bind_port": attribs["bind_port"],
             "galaxy_umask": service.get("umask", "022"),
             "program_name": program_name,
             "process_name_opt": process_name_opt,
@@ -286,7 +286,7 @@ class SupervisorProcessManager(BaseProcessManager):
 
             if update_all_configs:
                 for service in config["services"]:
-                    info("Updating service %s:%s_%s_%s", self.__service_program_name(instance_name, service))
+                    info("Updating service %s", self.__service_program_name(instance_name, service))
                     self.__update_service(config_file, config, attribs, service, instance_conf_dir, instance_name)
 
             # new services

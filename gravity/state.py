@@ -23,7 +23,7 @@ class Service(AttributeDict):
         return self["config_type"] == other["config_type"] and self["service_type"] == other["service_type"] and self["service_name"] == other["service_name"]
 
     def full_match(self, other):
-        return set(self.keys()) == set(other.keys()) and all([self[k] == other[k] for k in self])
+        return set(self.keys()) == set(other.keys()) and all([self[k] == other[k] for k in self if not k.startswith("_")])
 
 
 class GalaxyGunicornService(Service):
@@ -31,19 +31,20 @@ class GalaxyGunicornService(Service):
     service_name = "gunicorn"
     command_template = "gunicorn 'galaxy.webapps.galaxy.fast_factory:factory()' --timeout 300 --pythonpath lib -k galaxy.webapps.galaxy.workers.Worker -b {bind_address}:{bind_port}"
 
-    def __init__(self, *args, **kwargs):
-        super(GalaxyGunicornService, self).__init__(*args, **kwargs)
-        if not kwargs.get("bind_address"):
-            self["bind_address"] = self.defaults["bind_address"]
-        if not kwargs.get("bind_port"):
-            self["bind_port"] = self.defaults["bind_port"]
+    # Moved to instance attribs, which allows for the admin to set it in the gravity state/config
+    #def __init__(self, *args, **kwargs):
+    #    super(GalaxyGunicornService, self).__init__(*args, **kwargs)
+    #    if not kwargs.get("bind_address"):
+    #        self["bind_address"] = self.defaults["bind_address"]
+    #    if not kwargs.get("bind_port"):
+    #        self["bind_port"] = self.defaults["bind_port"]
 
-    @property
-    def defaults(self):
-        return {
-            "bind_address": "localhost",
-            "bind_port": 8080,
-        }
+    #@property
+    #def defaults(self):
+    #    return {
+    #        "bind_address": self["attribs"]["bind_address"],
+    #        "bind_port": self["attribs"]["bind_port"],
+    #    }
 
 
 class GalaxyCeleryService(Service):
@@ -80,6 +81,8 @@ class ConfigFile(AttributeDict):
             "instance_name": self["instance_name"],
             "galaxy_root": self["attribs"]["galaxy_root"],
             "log_dir": self["attribs"]["log_dir"],
+            "bind_address": self["attribs"]["bind_address"],
+            "bind_port": self["attribs"]["bind_port"],
         }
 
 

@@ -77,6 +77,8 @@ class ConfigManager(object):
             "galaxy_root": None,
             "log_dir": join(expanduser(self.state_dir), "log"),
             "instance_name": DEFAULT_INSTANCE_NAME,
+            "bind_address": "localhost",
+            "bind_port": 8080,
             # FIXME: relative to config_dir
             "job_config_file": "config/job_conf.xml",
         }
@@ -96,7 +98,9 @@ class ConfigManager(object):
         config.services = []
         config.instance_name = app_config["instance_name"]
         config.config_type = server_section
-        config.attribs['log_dir'] = app_config["log_dir"]
+        config.attribs["log_dir"] = app_config["log_dir"]
+        config.attribs["bind_address"] = app_config["bind_address"]
+        config.attribs["bind_port"] = app_config["bind_port"]
         webapp_service_names = []
 
         # shortcut for galaxy configs in the standard locations -- explicit arg ?
@@ -117,8 +121,8 @@ class ConfigManager(object):
         #))
         config.services.append(GalaxyGunicornService(
             config_type=config.config_type,
-            bind_address=app_config.get("bind_address"),
-            bind_port=app_config.get("bind_port"),
+            #bind_address=app_config.get("bind_address"),
+            #bind_port=app_config.get("bind_port"),
         ))
         #config.services.append(Service(config_type=config.config_type, service_type="celery", service_name="celery"))
         config.services.append(GalaxyCeleryService(config_type=config.config_type))
@@ -214,6 +218,9 @@ class ConfigManager(object):
             else:
                 # instance name is dynamically generated
                 instance_name = stored_config["instance_name"]
+            if ini_config["attribs"] != stored_config["attribs"]:
+                new_config["update_attribs"] = ini_config["attribs"]
+                meta_changes["changed_instances"].add(instance_name)
             # make sure this instance isn't removed
             instances.add(instance_name)
             services = []
