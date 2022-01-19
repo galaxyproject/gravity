@@ -35,7 +35,7 @@ setup(
     author_email="team@galaxyproject.org",
     license="MIT",
     keywords="gravity galaxy",
-    install_requires=["Click", "supervisor", "pyyaml"],
+    install_requires=["Click", "supervisor", "pyyaml", "ruamel.yaml"],
     entry_points={"console_scripts": [
         "galaxy = gravity.cli:galaxy",
         "galaxyctl = gravity.cli:galaxyctl",

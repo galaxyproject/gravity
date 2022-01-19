@@ -1,8 +1,9 @@
 """ Classes to represent and manipulate gravity's stored configuration and
 state data.
 """
-import json
 import errno
+
+import yaml
 
 from gravity.util import AttributeDict
 
@@ -89,7 +90,7 @@ class GravityState(AttributeDict):
             s = cls.loads(open(name).read())
         except (OSError, IOError) as exc:
             if exc.errno == errno.ENOENT:
-                json.dump({}, open(name, "w"))
+                yaml.dump({}, open(name, "w"))
                 s = cls()
         s._name = name
         return s
@@ -106,8 +107,8 @@ class GravityState(AttributeDict):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        open(self._name, "w").write(self.dumps())
-        # self.dump(open(self._name, 'w'))
+        with open(self._name, "w") as fh:
+            self.dump(fh)
 
     def set_name(self, name):
         self._name = name

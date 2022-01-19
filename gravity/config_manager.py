@@ -42,13 +42,30 @@ class ConfigManager(object):
             state_dir = DEFAULT_STATE_DIR
         self.state_dir = abspath(expanduser(state_dir))
         debug(f"Gravity state dir: {self.state_dir}")
-        self.config_state_path = join(self.state_dir, "configstate.json")
+        self.config_state_path = join(self.state_dir, "configstate.yaml")
         self.python_exe = python_exe
         try:
             os.makedirs(self.state_dir)
         except OSError as exc:
             if exc.errno != errno.EEXIST:
                 raise
+        self.__convert_config()
+
+    def __copy_config(self, old_path):
+        with GravityState.open(old_path) as state:
+            state.set_name(self.config_state_path)
+        # copies on __exit__
+
+    def __convert_config(self):
+        config_state_json = join(self.state_dir, "configstate.json")
+        if exists(config_state_json) and not exists(self.config_state_path):
+            warn(f"Converting {config_state_json} to {self.config_state_path}")
+            json_state = GravityState.open(config_state_json)
+            self.__copy_config(config_state_json)
+            assert exists(self.config_state_path), f"Conversion failed ({self.config_state_path} does not exist)"
+            yaml_state = GravityState.open(self.config_state_path)
+            assert json_state == yaml_state, f"Converted config differs from previous config, remove {self.config_state_path} to retry"
+            os.unlink(config_state_json)
 
     def get_config(self, conf, defaults=None):
         # delete this ?
