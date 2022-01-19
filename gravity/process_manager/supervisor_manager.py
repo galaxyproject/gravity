@@ -57,7 +57,7 @@ startsecs       = 15
 stopwaitsecs    = 65
 environment     = GALAXY_CONFIG_FILE="{galaxy_conf}"
 numprocs        = 1
-stdout_logfile  = {log_dir}/{program_name}.log
+stdout_logfile  = {log_file}
 redirect_stderr = true
 {process_name_opt}
 """  # noqa: E501
@@ -76,7 +76,7 @@ startsecs       = 10
 stopwaitsecs    = 10
 environment     = PYTHONPATH=lib,GALAXY_CONFIG_FILE="{galaxy_conf}"
 numprocs        = 1
-stdout_logfile  = {log_dir}/{program_name}.log
+stdout_logfile  = {log_file}
 redirect_stderr = true
 {process_name_opt}
 """
@@ -95,7 +95,7 @@ startsecs       = 10
 stopwaitsecs    = 10
 environment     = PYTHONPATH=lib,GALAXY_CONFIG_FILE="{galaxy_conf}"
 numprocs        = 1
-stdout_logfile  = {log_dir}/{program_name}.log
+stdout_logfile  = {log_file}
 redirect_stderr = true
 {process_name_opt}
 """
@@ -112,7 +112,7 @@ autorestart     = true
 startsecs       = 20
 stopwaitsecs    = 65
 numprocs        = 1
-stdout_logfile  = {log_dir}/{program_name}.log
+stdout_logfile  = {log_file}
 redirect_stderr = true
 {process_name_opt}
 """
@@ -138,7 +138,7 @@ def which(file):
 
 
 class SupervisorProcessManager(BaseProcessManager):
-    def __init__(self, state_dir=None, start_daemon=True):
+    def __init__(self, state_dir=None, start_daemon=True, foreground=False):
         super(SupervisorProcessManager, self).__init__(state_dir=state_dir)
         self.supervisord_exe = which("supervisord")
         self.supervisor_state_dir = join(self.state_dir, "supervisor")
@@ -148,6 +148,8 @@ class SupervisorProcessManager(BaseProcessManager):
         self.supervisord_sock_path = join(self.supervisor_state_dir, "supervisor.sock")
         self.__supervisord_popen = None
         self.use_group = not self.config_manager.single_instance
+        self.foreground = foreground
+        self.tail = which("tail")
 
         if not exists(self.supervisord_conf_dir):
             os.makedirs(self.supervisord_conf_dir)
@@ -166,10 +168,13 @@ class SupervisorProcessManager(BaseProcessManager):
 
     def __supervisord(self):
         format_vars = {"supervisor_state_dir": self.supervisor_state_dir, "supervisord_conf_dir": self.supervisord_conf_dir}
+        supervisord_cmd = [self.supervisord_exe, "-c", self.supervisord_conf_path]
+        if self.foreground:
+            supervisord_cmd.append('--nodaemon')
         if not self.__supervisord_is_running():
             # any time that supervisord is not running, let's rewrite supervisord.conf
             open(self.supervisord_conf_path, "w").write(SUPERVISORD_CONF_TEMPLATE.format(**format_vars))
-            self.__supervisord_popen = subprocess.Popen([self.supervisord_exe, "-c", self.supervisord_conf_path, '--nodaemon'], env=os.environ)
+            self.__supervisord_popen = subprocess.Popen(supervisord_cmd, env=os.environ)
             rc = self.__supervisord_popen.poll()
             if rc:
                 error("supervisord exited with code %d" % rc)
@@ -187,13 +192,27 @@ class SupervisorProcessManager(BaseProcessManager):
         options.realize(args=["-c", self.supervisord_conf_path])
         return supervisorctl.Controller(options).get_supervisor()
 
+    def terminate(self):
+        if self.foreground:
+            # if running in foreground, if terminate is called, then supervisord should've already received a SIGINT
+            self.__supervisord_popen.wait()
+
+    def __service_program_name(self, instance_name, service):
+        if self.use_group:
+            return f"{instance_name}_{service['config_type']}_{service['service_type']}_{service['service_name']}"
+        else:
+            return service["service_name"]
+
+    def __service_log_file(self, log_dir, program_name):
+        return join(log_dir, program_name + ".log")
+
     def __update_service(self, config_file, config, attribs, service, instance_conf_dir, instance_name):
         if self.use_group:
             process_name_opt = f"process_name    = {service['service_name']}"
-            program_name = f"{instance_name}_{service['config_type']}_{service['service_type']}_{service['service_name']}"
         else:
             process_name_opt = ""
-            program_name = service["service_name"]
+
+        program_name = self.__service_program_name(instance_name, service)
 
         # used by the "standalone" service type
         attach_to_pool_opt = ""
@@ -202,7 +221,7 @@ class SupervisorProcessManager(BaseProcessManager):
             attach_to_pool_opt = f" --attach-to-pool={server_pool}"
 
         format_vars = {
-            "log_dir": attribs["log_dir"],
+            "log_file": self.__service_log_file(attribs["log_dir"], program_name),
             "config_type": service["config_type"],
             "server_name": service["service_name"],
             "attach_to_pool_opt": attach_to_pool_opt,
@@ -404,18 +423,19 @@ class SupervisorProcessManager(BaseProcessManager):
             error(f"Can only follow logs of one instance at a time! {instance_names}")
             return
         instance_name = instance_names[0]
-        services = self.config_manager.get_instance_services(instance_names)
-        if len(services) == 1:
-            service_name == services[0].service_name
-        else:
+        if self.tail:
+            services = self.config_manager.get_instance_services(instance_name)
+            config = self.config_manager.get_instance_config(instance_name)
+            log_dir = config["attribs"]["log_dir"]
+            log_files = []
             for service in services:
-                if service.get("follow", False):
-                    service_name = service.service_name
-                    break
-            else:
-                error("Don't know which service to follow!")
-                return
-        self.supervisorctl("tail", "-f", service_name)
+                program_name = self.__service_program_name(instance_name, service)
+                log_files.append(self.__service_log_file(log_dir, program_name))
+            cmd = [self.tail, "-f"] + log_files
+            tail_popen = subprocess.Popen(cmd)
+            tail_popen.wait()
+        else:
+            self.supervisorctl("tail", "-f", service_name)
 
     def shutdown(self):
         self.supervisorctl("shutdown")

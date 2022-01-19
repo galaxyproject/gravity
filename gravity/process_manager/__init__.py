@@ -14,7 +14,7 @@ from gravity.config_manager import ConfigManager
 # If at some point we have additional process managers we can make a factory,
 # but for the moment there's only supervisor.
 @contextlib.contextmanager
-def process_manager(state_dir=None, start_daemon=True):
+def process_manager(*args, **kwargs):
     # roulette!
     for filename in os.listdir(os.path.dirname(__file__)):
         if filename.endswith(".py") and not filename.startswith("_"):
@@ -22,14 +22,18 @@ def process_manager(state_dir=None, start_daemon=True):
             for name in dir(mod):
                 obj = getattr(mod, name)
                 if not name.startswith("_") and inspect.isclass(obj) and issubclass(obj, BaseProcessManager) and obj != BaseProcessManager:
-                    yield obj(state_dir=state_dir, start_daemon=start_daemon)
+                    pm = obj(*args, **kwargs)
+                    try:
+                        yield pm
+                    finally:
+                        pm.terminate()
                     return
 
 
 class BaseProcessManager(object, metaclass=ABCMeta):
     #state_dir = "~/.galaxy"
 
-    def __init__(self, state_dir=None, start_daemon=True):
+    def __init__(self, state_dir=None, start_daemon=True, foreground=False):
         # Why all this duplication? The config manager sets up the state dir
         #if state_dir is None:
         #    state_dir = BaseProcessManager.state_dir

@@ -4,8 +4,8 @@ from gravity import process_manager
 
 
 NO_START_COMMANDS = (
-    'shutdown',
-    'status',
+    "shutdown",
+    "status",
 )
 
 

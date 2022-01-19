@@ -83,8 +83,7 @@ class ConfigManager(object):
                 raise Exception(f"Cannot locate Galaxy root directory: set `galaxy_root' in the `galaxy' section of {conf}")
 
         # Paste had paste_port inn Service arguments, need to add (via CLI ?)?
-        # service name to follow with `galaxy start -f`
-        config.services.append(Service(config_type=config.config_type, service_type="gunicorn", service_name="gunicorn", follow=True))
+        config.services.append(Service(config_type=config.config_type, service_type="gunicorn", service_name="gunicorn"))
         config.services.append(Service(config_type=config.config_type, service_type="celery", service_name="celery"))
         config.services.append(Service(config_type=config.config_type, service_type="celery-beat", service_name="celery-beat"))
         # If this is a Galaxy config, parse job_conf.xml for any *static* standalone handlers
@@ -261,12 +260,14 @@ class ConfigManager(object):
                 rval.append(config["instance_name"])
         return rval
 
-    def get_instance_services(self, instance_name):
-        rval = []
+    def get_instance_config(self, instance_name):
         for config in self.state.config_files.values():
             if config["instance_name"] == instance_name:
-                rval.extend(config["services"])
-        return rval
+                return config
+        return None
+
+    def get_instance_services(self, instance_name):
+        return self.get_instance_config(instance_name)["services"]
 
     def get_registered_services(self):
         rval = []

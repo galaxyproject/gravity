@@ -10,7 +10,7 @@ from gravity import process_manager
 @click.pass_context
 def cli(ctx, foreground, instance):
     """Start configured services."""
-    with process_manager.process_manager(state_dir=ctx.parent.state_dir) as pm:
+    with process_manager.process_manager(state_dir=ctx.parent.state_dir, foreground=foreground) as pm:
         pm.start(instance)
         if foreground:
             pm.follow(instance)

@@ -36,7 +36,10 @@ setup(
     license="MIT",
     keywords="gravity galaxy",
     install_requires=["Click", "supervisor", "pyyaml"],
-    entry_points={"console_scripts": ["galaxy = gravity.cli:galaxy"]},
+    entry_points={"console_scripts": [
+        "galaxy = gravity.cli:galaxy",
+        "galaxyctl = gravity.cli:galaxyctl",
+    ]},
     classifiers=[
         "Intended Audience :: System Administrators",
         "License :: OSI Approved :: MIT License",
