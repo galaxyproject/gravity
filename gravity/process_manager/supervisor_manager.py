@@ -253,7 +253,7 @@ class SupervisorProcessManager(BaseProcessManager):
             instance_name = config.instance_name
             instance_conf_dir = join(self.supervisord_conf_dir, f"{instance_name}.d")
             for service in config["services"]:
-                info("Removing service %s:%s_%s_%s", instance_name, service.config_type, service.service_type, service.service_name)
+                info("Removing service %s", self.__service_program_name(instance_name, service))
                 conf = join(instance_conf_dir, f"{service.config_type}_{service.service_type}_{service.service_name}.conf")
                 if exists(conf):
                     os.unlink(conf)
@@ -286,19 +286,19 @@ class SupervisorProcessManager(BaseProcessManager):
 
             if update_all_configs:
                 for service in config["services"]:
-                    info("Updating service %s:%s_%s_%s", instance_name, service["config_type"], service["service_type"], service["service_name"])
+                    info("Updating service %s:%s_%s_%s", self.__service_program_name(instance_name, service))
                     self.__update_service(config_file, config, attribs, service, instance_conf_dir, instance_name)
 
             # new services
             if "update_services" in config:
                 for service in config["update_services"]:
-                    info("Creating or updating service %s:%s_%s_%s", instance_name, service["config_type"], service["service_type"], service["service_name"])
+                    info("Creating or updating service %s", self.__service_program_name(instance_name, service))
                     self.__update_service(config_file, config, attribs, service, instance_conf_dir, instance_name)
 
             # deleted services
             if "remove_services" in config:
                 for service in config["remove_services"]:
-                    info("Removing service %s:%s_%s_%s", instance_name, service["config_type"], service["service_type"], service["service_name"])
+                    info("Removing service %s:%s_%s_%s", self.__service_program_name(instance_name, service))
                     conf = join(instance_conf_dir, f"{service['config_type']}_{service['service_type']}_{service['service_name']}.conf")
                     if exists(conf):
                         os.unlink(conf)
