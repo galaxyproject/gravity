@@ -48,7 +48,7 @@ SUPERVISORD_SERVICE_TEMPLATES["gunicorn"] = """;
 ;
 
 [program:{program_name}]
-command         = gunicorn 'galaxy.webapps.galaxy.fast_factory:factory()' --timeout 300 --pythonpath lib -k galaxy.webapps.galaxy.workers.Worker -b {galaxy_bind_ip}:{galaxy_port}
+command         = {command}
 directory       = {galaxy_root}
 umask           = {galaxy_umask}
 autostart       = true
@@ -67,7 +67,7 @@ SUPERVISORD_SERVICE_TEMPLATES["celery"] = """;
 ;
 
 [program:{program_name}]
-command         = celery --app galaxy.celery worker --concurrency 2 -l debug
+command         = {command}
 directory       = {galaxy_root}
 umask           = {galaxy_umask}
 autostart       = true
@@ -86,7 +86,7 @@ SUPERVISORD_SERVICE_TEMPLATES["celery-beat"] = """;
 ;
 
 [program:{program_name}]
-command         = celery --app galaxy.celery beat -l debug
+command         = {command}
 directory       = {galaxy_root}
 umask           = {galaxy_umask}
 autostart       = true
@@ -105,7 +105,7 @@ SUPERVISORD_SERVICE_TEMPLATES["standalone"] = """;
 ;
 
 [program:{program_name}]
-command         = python ./lib/galaxy/main.py -c {galaxy_conf} --server-name={server_name}{attach_to_pool_opt} --pid-file={supervisor_state_dir}/{program_name}.pid
+command         = {command}
 directory       = {galaxy_root}
 autostart       = true
 autorestart     = true
@@ -225,9 +225,8 @@ class SupervisorProcessManager(BaseProcessManager):
             "config_type": service["config_type"],
             "server_name": service["service_name"],
             "attach_to_pool_opt": attach_to_pool_opt,
-            # TODO: Make config variables
-            "galaxy_bind_ip": service.get("galaxy_bind_ip", "localhost"),
-            "galaxy_port": service.get("galaxy_port", "8080"),
+            "bind_address": service.get("bind_address"),
+            "bind_port": service.get("bind_port"),
             "galaxy_umask": service.get("umask", "022"),
             "program_name": program_name,
             "process_name_opt": process_name_opt,
@@ -235,6 +234,7 @@ class SupervisorProcessManager(BaseProcessManager):
             "galaxy_root": attribs["galaxy_root"],
             "supervisor_state_dir": self.supervisor_state_dir,
         }
+        format_vars["command"] = service.command_template.format(**format_vars)
         conf = join(instance_conf_dir, f"{service['config_type']}_{service['service_type']}_{service['service_name']}.conf")
 
         if not exists(attribs["log_dir"]):
@@ -292,7 +292,7 @@ class SupervisorProcessManager(BaseProcessManager):
             # new services
             if "update_services" in config:
                 for service in config["update_services"]:
-                    info("Creating service %s:%s_%s_%s", instance_name, service["config_type"], service["service_type"], service["service_name"])
+                    info("Creating or updating service %s:%s_%s_%s", instance_name, service["config_type"], service["service_type"], service["service_name"])
                     self.__update_service(config_file, config, attribs, service, instance_conf_dir, instance_name)
 
             # deleted services
