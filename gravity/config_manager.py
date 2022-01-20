@@ -71,7 +71,7 @@ class ConfigManager(object):
         with open(conf) as config_fh:
             config_dict = safe_load(config_fh)
 
-        defs = {
+        app_config = {
             "galaxy_root": None,
             "log_dir": join(expanduser(self.state_dir), "log"),
             "instance_name": DEFAULT_INSTANCE_NAME,
@@ -81,14 +81,14 @@ class ConfigManager(object):
             "job_config_file": "config/job_conf.xml",
         }
         if defaults is not None:
-            defs.update(defaults)
+            app_config.update(defaults)
 
         _app_config = config_dict.get(server_section)
         if not _app_config:
             error(f"Config file {conf} does not look like valid Galaxy, Reports or Tool Shed configuration file")
             return None
 
-        app_config = defs | _app_config
+        app_config.update(_app_config)
 
         # This is the core that needs to be implemented
         config = ConfigFile()
