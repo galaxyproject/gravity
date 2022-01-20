@@ -1,5 +1,8 @@
 """
 """
+import os
+import sys
+
 import ruamel.yaml
 import yaml
 
@@ -38,3 +41,13 @@ class AttributeDict(dict):
 
     def dump(self, fp, *args, **kwargs):
         self._yaml.dump(self, fp)
+
+
+def which(file):
+    # http://stackoverflow.com/questions/5226958/which-equivalent-function-in-python
+    if os.path.exists(os.path.dirname(sys.executable) + "/" + file):
+        return os.path.dirname(sys.executable) + "/" + file
+    for path in os.environ["PATH"].split(":"):
+        if os.path.exists(path + "/" + file):
+            return path + "/" + file
+    return None
