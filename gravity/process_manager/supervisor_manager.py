@@ -423,7 +423,6 @@ class SupervisorProcessManager(BaseProcessManager):
         # all_infos = supervisor.getAllProcessInfo()
         self.supervisorctl("status")
 
-    # FIXME: service_name is probably not right here
     def follow(self, instance_names):
         if not instance_names:
             instance_names = self.get_instance_names(instance_names)[0]
@@ -431,8 +430,8 @@ class SupervisorProcessManager(BaseProcessManager):
             error(f"Can only follow logs of one instance at a time! {instance_names}")
             return
         instance_name = instance_names[0]
+        services = self.config_manager.get_instance_services(instance_name)
         if self.tail:
-            services = self.config_manager.get_instance_services(instance_name)
             config = self.config_manager.get_instance_config(instance_name)
             log_dir = config["attribs"]["log_dir"]
             log_files = []
@@ -443,7 +442,11 @@ class SupervisorProcessManager(BaseProcessManager):
             tail_popen = subprocess.Popen(cmd)
             tail_popen.wait()
         else:
-            self.supervisorctl("tail", "-f", service_name)
+            program_name = self.__service_program_name(instance_name, services[0])
+            if len(services) > 1:
+                warn(f"`tail` not found on $PATH and more than one service configured, following only {program_name}."
+                     " Install `tail` to follow all configured services.")
+            self.supervisorctl("tail", "-f", program_name)
 
     def shutdown(self):
         self.supervisorctl("shutdown")

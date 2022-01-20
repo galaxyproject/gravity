@@ -4,7 +4,6 @@ import contextlib
 import errno
 import hashlib
 import os
-import uuid
 import xml.etree.ElementTree as elementtree
 from os import pardir
 from os.path import abspath, dirname, exists, expanduser, isabs, join
@@ -15,7 +14,6 @@ from gravity.io import debug, error, info, warn
 from gravity.state import (
     ConfigFile,
     GravityState,
-    Service,
     GalaxyGunicornService,
     GalaxyCeleryService,
     GalaxyCeleryBeatService,
@@ -111,22 +109,8 @@ class ConfigManager(object):
             else:
                 raise Exception(f"Cannot locate Galaxy root directory: set `galaxy_root' in the `galaxy' section of {conf}")
 
-        # Paste had paste_port inn Service arguments, need to add (via CLI ?)?
-        #config.services.append(Service(
-        #    config_type=config.config_type,
-        #    service_type="gunicorn",
-        #    service_name="gunicorn",
-        #    bind_address=app_config.get("bind_address", "localhost"),
-        #    bind_port=app_config.get("bind_port", "8080")
-        #))
-        config.services.append(GalaxyGunicornService(
-            config_type=config.config_type,
-            #bind_address=app_config.get("bind_address"),
-            #bind_port=app_config.get("bind_port"),
-        ))
-        #config.services.append(Service(config_type=config.config_type, service_type="celery", service_name="celery"))
+        config.services.append(GalaxyGunicornService(config_type=config.config_type))
         config.services.append(GalaxyCeleryService(config_type=config.config_type))
-        #config.services.append(Service(config_type=config.config_type, service_type="celery-beat", service_name="celery-beat"))
         config.services.append(GalaxyCeleryBeatService(config_type=config.config_type))
         # If this is a Galaxy config, parse job_conf.xml for any *static* standalone handlers
         # Marius: Don't think that's gonna work if job config file not defined!
@@ -138,7 +122,6 @@ class ConfigManager(object):
             job_conf_xml = abspath(join(config.attribs["galaxy_root"], job_conf_xml))
         if config.config_type == "galaxy" and exists(job_conf_xml):
             for service_name in [x["    service_name"] for x in ConfigManager.get_job_config(job_conf_xml) if x["service_name"] not in webapp_service_names]:
-                #config.services.append(Service(config_type=config.config_type, service_type="standalone", service_name=service_name))
                 config.services.append(GalaxyStandaloneService(config_type=config.config_type, service_name=service_name))
 
         # Dynamic job handlers are configured using `job_handler_count` in galaxy.yml.
@@ -153,8 +136,7 @@ class ConfigManager(object):
         for i in range(0, handler_count):
             service_name = handler_name.format(instance_number=i)
             config.services.append(
-                GalaxyStandaloneService(config_type=config.config_type, service_name=service_name,
-                        server_pool="job-handlers"))
+                GalaxyStandaloneService(config_type=config.config_type, service_name=service_name, server_pool="job-handlers"))
 
         return config
 
@@ -229,7 +211,6 @@ class ConfigManager(object):
             instances.add(instance_name)
             services = []
             for service in ini_config["services"]:
-                #if service not in stored_config["services"]:
                 for stored_service in stored_config["services"]:
                     if service.full_match(stored_service):
                         # service is configured and has no changes
@@ -355,7 +336,7 @@ class ConfigManager(object):
                 "config_type": conf["config_type"],
                 "instance_name": conf["instance_name"],
                 "attribs": conf["attribs"],
-                "services": [], # services will be populated by the update method
+                "services": [],  # services will be populated by the update method
             }
             self._register_config_file(config_file, conf_data)
             info("Registered %s config: %s", conf["config_type"], config_file)

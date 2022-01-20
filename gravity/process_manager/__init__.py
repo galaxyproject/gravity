@@ -2,7 +2,6 @@
 """
 
 import contextlib
-import errno
 import importlib
 import inspect
 import os
@@ -31,18 +30,8 @@ def process_manager(*args, **kwargs):
 
 
 class BaseProcessManager(object, metaclass=ABCMeta):
-    #state_dir = "~/.galaxy"
 
     def __init__(self, state_dir=None, start_daemon=True, foreground=False):
-        # Why all this duplication? The config manager sets up the state dir
-        #if state_dir is None:
-        #    state_dir = BaseProcessManager.state_dir
-        #self.state_dir = os.path.abspath(os.path.expanduser(state_dir))
-        #try:
-        #    os.makedirs(self.state_dir)
-        #except OSError as exc:
-        #    if exc.errno != errno.EEXIST:
-        #        raise
         self.config_manager = ConfigManager(state_dir=state_dir)
         self.state_dir = self.config_manager.state_dir
 

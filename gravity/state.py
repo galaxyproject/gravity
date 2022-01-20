@@ -29,22 +29,8 @@ class Service(AttributeDict):
 class GalaxyGunicornService(Service):
     service_type = "gunicorn"
     service_name = "gunicorn"
-    command_template = "gunicorn 'galaxy.webapps.galaxy.fast_factory:factory()' --timeout 300 --pythonpath lib -k galaxy.webapps.galaxy.workers.Worker -b {bind_address}:{bind_port}"
-
-    # Moved to instance attribs, which allows for the admin to set it in the gravity state/config
-    #def __init__(self, *args, **kwargs):
-    #    super(GalaxyGunicornService, self).__init__(*args, **kwargs)
-    #    if not kwargs.get("bind_address"):
-    #        self["bind_address"] = self.defaults["bind_address"]
-    #    if not kwargs.get("bind_port"):
-    #        self["bind_port"] = self.defaults["bind_port"]
-
-    #@property
-    #def defaults(self):
-    #    return {
-    #        "bind_address": self["attribs"]["bind_address"],
-    #        "bind_port": self["attribs"]["bind_port"],
-    #    }
+    command_template = "gunicorn 'galaxy.webapps.galaxy.fast_factory:factory()' --timeout 300" \
+                       " --pythonpath lib -k galaxy.webapps.galaxy.workers.Worker -b {bind_address}:{bind_port}"
 
 
 class GalaxyCeleryService(Service):
@@ -63,7 +49,8 @@ class GalaxyStandaloneService(Service):
     service_type = "standalone"
     service_name = "standalone"
     # FIXME: supervisor-specific
-    command_template = "python ./lib/galaxy/main.py -c {galaxy_conf} --server-name={server_name}{attach_to_pool_opt} --pid-file={supervisor_state_dir}/{program_name}.pid"
+    command_template = "python ./lib/galaxy/main.py -c {galaxy_conf} --server-name={server_name}{attach_to_pool_opt}" \
+                       " --pid-file={supervisor_state_dir}/{program_name}.pid"
 
 
 class ConfigFile(AttributeDict):
