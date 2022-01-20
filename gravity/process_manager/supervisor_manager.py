@@ -147,7 +147,6 @@ class SupervisorProcessManager(BaseProcessManager):
         self.supervisord_pid_path = join(self.supervisor_state_dir, "supervisord.pid")
         self.supervisord_sock_path = join(self.supervisor_state_dir, "supervisor.sock")
         self.__supervisord_popen = None
-        self.use_group = not self.config_manager.single_instance
         self.foreground = foreground
         self.tail = which("tail")
 
@@ -156,6 +155,10 @@ class SupervisorProcessManager(BaseProcessManager):
 
         if start_daemon:
             self.__supervisord()
+
+    @property
+    def use_group(self):
+        return not self.config_manager.single_instance
 
     def __supervisord_is_running(self):
         try:
@@ -298,7 +301,7 @@ class SupervisorProcessManager(BaseProcessManager):
             # deleted services
             if "remove_services" in config:
                 for service in config["remove_services"]:
-                    info("Removing service %s:%s_%s_%s", self.__service_program_name(instance_name, service))
+                    info("Removing service %s", self.__service_program_name(instance_name, service))
                     conf = join(instance_conf_dir, f"{service['config_type']}_{service['service_type']}_{service['service_name']}.conf")
                     if exists(conf):
                         os.unlink(conf)
@@ -450,6 +453,10 @@ class SupervisorProcessManager(BaseProcessManager):
 
     def shutdown(self):
         self.supervisorctl("shutdown")
+        while self.__supervisord_is_running():
+            debug("Waiting for supervisord to terminate")
+            time.sleep(0.5)
+        info("supervisord has terminated")
 
     def update(self):
         """Add newly defined servers, remove any that are no longer present"""

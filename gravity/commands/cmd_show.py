@@ -1,9 +1,10 @@
-import json
+import sys
 
 import click
 
 from gravity import config_manager
 from gravity import options
+from gravity.io import error
 
 
 @click.command("show")
@@ -17,6 +18,6 @@ def cli(ctx, config):
     with config_manager.config_manager(state_dir=ctx.parent.state_dir) as cm:
         config_data = cm.get_registered_config(config)
         if config is None:
-            click.echo(f"{config} not found")
+            error(f"{config} not found")
         else:
-            click.echo(json.dumps(config_data, sort_keys=True, indent=4, separators=(",", ": ")))
+            config_data.dump(sys.stdout)

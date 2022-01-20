@@ -5,9 +5,11 @@ import contextlib
 import importlib
 import inspect
 import os
+import sys
 from abc import ABCMeta, abstractmethod
 
 from gravity.config_manager import ConfigManager
+from gravity.io import error
 
 
 # If at some point we have additional process managers we can make a factory,
@@ -40,8 +42,8 @@ class BaseProcessManager(object, metaclass=ABCMeta):
         """If start is called from the root of a Galaxy source directory with
         no args, automatically add this instance.
         """
-        if not instance_names:
-            configs = (os.path.join("config", "galaxy.ini"), os.path.join("config", "galaxy.ini.sample"))
+        if not instance_names and self.config_manager.instance_count == 0:
+            configs = (os.path.join("config", "galaxy.yml"), os.path.join("config", "galaxy.yml.sample"))
             for config in configs:
                 if os.path.exists(config):
                     if not self.config_manager.is_registered(os.path.abspath(config)):
@@ -86,5 +88,6 @@ class BaseProcessManager(object, metaclass=ABCMeta):
         elif registered_instance_names:
             instance_names = registered_instance_names
         else:
-            raise Exception("No instances registered (hint: `galaxy add /path/to/galaxy.ini`)")
+            error("No instances registered (hint: `galaxyctl register /path/to/galaxy.yml`)")
+            sys.exit(1)
         return instance_names, unknown_instance_names

@@ -4,163 +4,259 @@
 
 A process manager (`supervisor`_) and management tools for `Galaxy`_ servers.
 
-Installing this will give you an executables, ``galaxy`` which is used to
-manage Galaxy.  A virtualenv will automatically be created for your Galaxy
-server. It's a good thing.
+Installing this will give you two executables, ``galaxyctl`` which is used to manage the starting, stopping, and logging
+of Galaxy's various processes, and ``galaxy``, which can be used to run a Galaxy server in the foreground.
 
 Installation
 ============
 
-Python 2.7 is required. Sadly, Python 3 won't work, because supervisor doesn't
-support it, `although work is in progress <supervisor issue 491_>`_.
+Python 3.7 or later is required. Gravity can be installed independently of Galaxy, but please read the section on Galaxy
+Integration below.
 
-To install:
+To install::
 
-``pip install gravity``
+    $ pip install gravity
 
-To make your life easier, you are encourged to install into a `virtualenv`_,
-and to make that trivial, you are encouraged to use `virtualenv-burrito`_.
+To make your life easier, you are encourged to install into a `virtualenv`_. The easiest way to do this is with Python's
+built-in `venv`_ module::
 
-Notes
+    $ python3 -m venv ~/gravity
+    $ . ~/gravity/bin/activate
+
+By default, Gravity will store its state, configuration, and log files in ``$XDG_CONFIG_HOME/galaxy-gravity``, where
+``$XDG_CONFIG_HOME`` typically defaults to ``~/.config``. You can change this with the ``--state-dir`` option to the
+Gravity commands, or by setting ``$GRAVITY_STATE_DIR`` in your environment.
+
+Galaxy 22.01 Integration
+========================
+
+Gravity was originally designed to support managing multiple Galaxy (as well as Galaxy Reports and Tool Shed) servers on
+a single host, but hides some of this complexity from you if you are working with a single Galaxy server. Additionally,
+Galaxy 22.01 has added Gravity as a dependency, and changes have been made to Gravity to support this mode of operation.
+
+- The current version of Gravity has dropped support for running Galaxy with uWSGI in favor of `gunicorn`_ and `FastAPI`_.
+- This version cannot be used with Galaxy versions older than 22.01.
+- As of Galaxy 22.01, Gravity is automatically installed into Galaxy's virtualenv by Galaxy's setup scripts (as called
+  by ``run.sh``)
+- Galaxy's setup scripts as of 22.01 also set ``$GRAVITY_STATE_DIR`` to ``<galaxy_root>/database/gravity`` when running
+  Galaxy from the source directory. This keeps each Galaxy instance's Gravity configuration separate.
+
+Usage
 =====
 
-``[galaxy:server]``
+If running from the root of a Galaxy source tree, you can start and run Galaxy in the foreground with::
 
-Add this section to your ``galaxy.ini``, ``reports_wsgi.ini``,
-``tool_shed_wsgi.ini`` to set:
+    $ galaxy
+    Registered galaxy config: /home/nate/work/galaxy/config/galaxy.yml
+    Creating or updating service gunicorn
+    Creating or updating service celery
+    Creating or updating service celery-beat
+    celery: added process group
+    2022-01-20 14:44:24,619 INFO spawned: 'celery' with pid 291651
+    celery-beat: added process group
+    2022-01-20 14:44:24,620 INFO spawned: 'celery-beat' with pid 291652
+    gunicorn: added process group
+    2022-01-20 14:44:24,622 INFO spawned: 'gunicorn' with pid 291653
+    celery                           STARTING
+    celery-beat                      STARTING
+    gunicorn                         STARTING
+    ==> /home/nate/work/galaxy/database/gravity/log/gunicorn.log <==
+    ...log output follows...
 
-::
+Galaxy will continue to run and output logs to stdout until terminate it with ``CTRL+C``.
 
-    instance_name = string  # override the default auto-generated instance name
-    galaxy_root = /path     # if galaxy is not at ../ or ./ from the config file
-    virtualenv = /path      # override default auto-generated virtualenv path (it
-                            #   will be created if it does not exist)
-    log_dir = /path         # where to log galaxy server output. for uwsgi you
-                            #   probably want to use uwsgi's logto option though
-    uwsgi_path = /path      # explicit path to uwsgi, otherwise it will be found on
-                            #   $PATH. Or, the special value `install`, which will
-                            #   cause it to be installed into service's virtualenv
+The ``galaxy`` command is actually a shortcut for three separate steps: 1. Register your Galaxy configuration file
+(``galaxy.yml``) with Gravity, 2. write out the process manager configurations, and 3. start and run Galaxy using the
+process manager (`supervisor`_). You can perform these steps separately (and in this example, start Galaxy as a
+backgrounded daemon)::
 
-Potentially useful information, tricks, etc.:
+    $ galaxyctl register config/galaxy.yml
+    Registered galaxy config: /home/nate/work/galaxy/config/galaxy.yml
+    $ galaxyctl update
+    Creating or updating service gunicorn
+    Creating or updating service celery
+    Creating or updating service celery-beat
+    $ galaxyctl start
+    celery                           STARTING
+    celery-beat                      STARTING
+    gunicorn                         STARTING
+    Log files are in /home/nate/work/galaxy/database/gravity/log
 
--  Unless you set different state dirs with ``--state-dir`` or
-   ``$GRAVITY_STATE_DIR``, there will only be one supervisord for all
-   of your galaxy instances. But they will be separated out by a
-   generated ``instance_name``. You can override this with
-   ``instance_name`` in ``[galaxy:server]``.
+When running as a daemon, the ``stop`` subcommand stops your Galaxy server::
 
--  To put configs (galaxy configs, galaxy + reports, whatever) into the
-   same instance, set their ``instance_name`` to the same string in each
-   config's ``[galaxy:server]``. This puts them into a single supervisor
-   group, which may be what you want, although note that any
-   start/stop/restart/etc. is performed on the entire group, which may
-   not be what you want.
+    $ galaxyctl stop
+    celery-beat: stopped
+    gunicorn: stopped
+    celery: stopped
+    All processes stopped, supervisord will exit
+    Shut down
 
--  The config manager generally views things in terms of config files.
-   If you change the virtualenv or ``galaxy_root`` in a config file, it
-   will not change that value for all services in the instance
-   (supervisor group), it will only change it for the services started
-   from that config.
+Configuration
+=============
 
--  Anything you drop in to ``$GRAVITY_STATE_DIR/supervisor/supervisord.conf.d``
-   will be picked up by supervisord on a ``galaxy supervisorctl update`` or just
-   ``galaxy update``
+The following options in the ``galaxy`` section of ``galaxy.yml`` can be used to control Gravity::
+unset are shown)::
 
--  The ``job_conf.xml`` parsed corresponds to the galaxy config, it'll
-   check the path in ``job_config_file`` in ``[app:main]`` or default to
-   ``galaxy_root/config/job_conf.xml`` if that file exists. If handlers
-   in ``job_conf.xml`` have a corresponding ``[server:]`` in
-   ``galaxy.ini``, they will be started using Paste. If there is not a
-   corresponding ``[server:]`` they will be started as a "standalone"
-   server with ``galaxy_root/lib/galaxy/main.py``
+    # Override the default instance name, this is mostly hidden from you when running a single instance # of Galaxy
+    instance_name: _default_
+
+    # Application server, either gunicorn (default) or unicornherder
+    app_server: gunicorn
+
+    # Application/web server bind address (default: localhost), use 0.0.0.0 for all interfaces on host
+    bind_address: localhost
+
+    # Application/web server bind port (default: 8080)
+    bind_port: 8080
+
+    # Path to Galaxy source if not running from the source directory
+    galaxy_root:
+
+    # Path to directory where log files will be written (default: $GRAVITY_STATE_DIR/log)
+    log_dir:
+
+    # Number of dynamic job handler processes to start (default: web server handles jobs)
+    job_handler_count:
+
+    # Template for dynamic job handler server naming (default: job-handler-{instance_number})
+    job_handler_name_template:
+
+Regarding choices for the ``app_server`` option:
+
+- `gunicorn`_ (default): The Gunicorn Python WSGI server
+- `unicornherder`_: Production-oriented manager for (G)unicorn servers that allows for zero-downtime Galaxy server
+  restarts, similar to uWSGI Zerg Mode used in the past.
+
+Configuration Precendence
+-------------------------
+
+Gravity's configuration is defined in Galaxy's configuration file to be easy and familiar for Galaxy administrators, but
+Gravity maintains its own state in ``$GRAVITY_STATE_DIR/configstate.yaml``.  **If set**, the options in ``galaxy.yml``
+will override Gravity's saved state whenever ``galaxyctl update`` is run, but if later **unset**, then the persisted
+values in Gravity's saved state are used.
+
+The exception is the values of ``app_server`` and ``job_handler_*``, which will revert to default values if unset in
+``galaxy.yml``, because Gravity dynamically adds and removes services based on the Galaxy configuration by design.
+
+Administrators deploying Galaxy with a deployment tool (e.g. `Ansible`_) can take advantage of this to deploy a Gravity
+state file as part of their Galaxy deployment.
+
+Galaxy Job Handlers
+-------------------
+
+Gravity has limited support for reading Galaxy's job configuration: it can read statically configured job handlers in
+the ``job_conf.xml`` file, but cannot read the newer YAML-format job configuration, or the job configuration inline from
+``galaxy.yml``. Improved support for reading Galaxy's job configuration is planned, but for the time being, Gravity will
+run standalone Galaxy job handler processes if you:
+
+1. Set ``job_handler_count`` to a number greater than ``0``. **You must also explicitly set the `job handler assignment
+   method`_ to ``db-skip-locked`` or ``db-transaction-isolation`` to prevent the web process from also handling jobs.**
+   This is the preferred method for specifying job handlers.
+2. Define static ``<handler id="..."/>`` handlers in the XML-format job configuration file.
 
 Subcommands
 ===========
 
-Use ``galaxy -h`` for help. Subcommands also support ``-h``, e.g.  ``galaxy add
--h``.
+Use ``galaxyctl --help`` for help. Subcommands also support ``--help``, e.g. ``galaxy register --help``
 
-``add``
+register
+--------
 
-Register a Galaxy, Reports, or Tool Shed server config with the process
-manager, create a virtualenv, create supervisor configs, and update.
-Does not start.
+Register a Galaxy server config (``galaxy.yml``) with Gravity. Does not update or start. Run ``galaxyctl update`` after
+registering to apply changes.
 
-``list``
+list
+----
 
 List config files registered with the process manager.
 
-``instances``
+deregister
+----------
 
-List known instances and services.
+Deregister a Galaxy server config, Gravity will no longer manage this Galaxy instance. Run ``galaxyctl update`` after
+deregistering to apply changes.
 
-``get /path/to/galaxy.ini``
+start
+-----
 
-Show stored configuration details for the named config file.
+Start and run Galaxy and associated processes in daemonized (background) mode, or ``-f`` to run in the foreground and
+follow log files. The ``galaxy`` command is a shortcut for ``galaxyctl start -f``.
 
-``rename /path/to/old.ini /path/to/new.ini``
+If no config files are registered and you run ``galaxyctl start`` from the root of a Galaxy source tree, it
+automatically runs the equivalent of::
 
-Use this if you move your config.
+    $ galaxyctl register config/galaxy.yml  # or galaxy.yml.sample if galaxy.yml does not exist
+    $ galaxyctl update
+    $ galaxyctl start
 
-``remove /path/to/galaxy.ini`` ``remove instance_name``
+stop
+----
 
-Deregister a Galaxy et. al. server config., or all configs referencing
-the supplied ``instance_name``.
+Stop daemonized Galaxy server processes. If no processes remain running after this step (which should be the case when
+working with a single Galaxy instance), ``supervisord`` will terminate.
 
-| ``start [instance_name]``
-| ``stop [instance_name]``
-| ``restart [instance_name]``
+restart
+-------
 
-Roughly what you'd expect. If ``instance_name`` isn't provided, perform
-the operation on all known instances.
+Restart Galaxy server processes. This is done in a relatively "brutal" fashion: processes are signaled (by supervisor)
+to exit, and then are restarted. See the ``graceful`` subcommand to restart gracefully.
 
-If you call ``start`` from the root (or from 1 subdirectory deep) of a Galaxy
-source tree, ``config/galaxy.ini`` if it exists, or else
-``config/galaxy.ini.sample`` will automatically be registered with ``galaxy
-add`` and then ``galaxy start`` will start the newly added server.
+graceful
+--------
 
-``reload [instance_name]``
+Restart Galaxy with minimal interruption. If running with `gunicorn`_ this means holding the web socket open while
+restarting (connections to Galaxy will block). If running with `unicornherder`_, a new Galaxy application will be
+started and the old one shut down only once the new one is accepting connections. A graceful restart with unicornherder
+should be transparent to clients.
 
-The same as restart but uWSGI master processes will only receive a
-``SIGHUP`` so the workers restart but the master stays up.
-
-``graceful [instance_name]``
-
-The same as reload but Paste servers will be restarted sequentially, and
-the next one will not be restarted until the previous one is up and
-accepting requests.
-
-``update``
+update
+------
 
 Figure out what has changed in configs, which could be:
 
--  changes to ``[galaxy:server]``
--  adding or removing ``[server:]`` sections
--  adding or removing a ``[uwsgi]`` section
+-  changes to the Gravity configuration options in ``galaxy.yml``
 -  adding or removing handlers in ``job_conf.xml``
 
-This will perform the operation for all registered configs, which may
-cause unintended service restarts.
+This may cause service restarts if there are any changes.
 
-Any needed changes to supervisor configs will be performed and then
-``supervisorctl update`` will be called. You will need to do a
-``galaxy start`` after this to start any newly added instances (or
-possibly even old instances, since adding new programs to a group in
-supervisor causes the entire group to be stopped).
+Any needed changes to supervisor configs will be performed and then ``supervisorctl update`` will be called.
 
-Update is called automatically for the ``start``, ``stop``, ``restart``,
-``reload``, and ``graceful`` subcommands.
+``update`` is called automatically for the ``start``, ``stop``, ``restart``, and ``graceful`` subcommands.
 
-``supervisorctl [subcommand]``
+shutdown
+--------
 
-Pass through directly to supervisor
+Stop all processes and cause ``supervisord`` to terminate. Similar to ``stop`` but there is no ambiguity as to whether
+``supervisord`` remains running.
 
-``shutdown``
+supervisorctl
+-------------
 
-Stop supervisord
+Pass through directly to supervisor. Run ``galaxyctl supervisorctl`` to invoke the supervisorctl shell, or ``galaxyctl
+supervisorctl [command]`` to call a supervisorctl command directly. See the `supervisor`_ documentation or ``galaxyctl
+supervisorctl help`` for help.
+
+instances
+---------
+
+List known (configured) Galaxy instances and services.
+
+show
+----
+
+Show stored configuration details for the named config file.
+
+rename
+------
+
+If your ``galaxy.yml`` has moved, you can update its path in Gravity's saved state with this command.
 
 .. _supervisor: http://supervisord.org/
 .. _Galaxy: http://galaxyproject.org/
-.. _supervisor issue 491: https://github.com/Supervisor/supervisor/issues/491
 .. _virtualenv: https://virtualenv.pypa.io/
-.. _virtualenv-burrito: https://github.com/brainsik/virtualenv-burrito
+.. _venv: https://docs.python.org/3/library/venv.html
+.. _gunicorn: https://gunicorn.org/
+.. _FastAPI: https://fastapi.tiangolo.com/
+.. _unicornherder: https://github.com/alphagov/unicornherder
+.. _job handler assignment method: https://docs.galaxyproject.org/en/master/admin/scaling.html#job-handler-assignment-methods
+.. _Ansible: http://www.ansible.com/
