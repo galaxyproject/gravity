@@ -180,6 +180,8 @@ class ConfigManager(object):
         ensure that it was previously registered.
         """
         with self.state as state:
+            if "remove_configs" not in state:
+                state.remove_configs = {}
             state.remove_configs[key] = state.config_files.pop(key)
 
     def _purge_config_file(self, key):
@@ -187,7 +189,9 @@ class ConfigManager(object):
         ensure that it was previously deregistered.
         """
         with self.state as state:
-            del state["remove_configs"][key]
+            del state.remove_configs[key]
+            if not state.remove_configs:
+                del state["remove_configs"]
 
     def determine_config_changes(self):
         """The magic: Determine what has changed since the last time.
@@ -294,7 +298,7 @@ class ConfigManager(object):
 
     def get_remove_configs(self):
         """Return the persisted values of all config files pending removal by the process manager."""
-        return self.state.remove_configs
+        return self.state.get("remove_configs", {})
 
     def get_registered_config(self, config_file):
         """Return the persisted value of the named config file."""
@@ -305,7 +309,7 @@ class ConfigManager(object):
         rval = []
         configs = list(self.state.config_files.values())
         if include_removed:
-            configs.extend(list(self.state.remove_configs.values()))
+            configs.extend(list(self.get_remove_configs().values()))
         for config in configs:
             if config["instance_name"] not in rval:
                 rval.append(config["instance_name"])
@@ -351,8 +355,8 @@ class ConfigManager(object):
                 "config_type": conf["config_type"],
                 "instance_name": conf["instance_name"],
                 "attribs": conf["attribs"],
-                "services": conf['services'],
-            }  # services will be populated by the update method
+                "services": [], # services will be populated by the update method
+            }
             self._register_config_file(config_file, conf_data)
             info("Registered %s config: %s", conf["config_type"], config_file)
 

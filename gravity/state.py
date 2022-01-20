@@ -100,7 +100,7 @@ class GravityState(AttributeDict):
 
     def __init__(self, *args, **kwargs):
         super(GravityState, self).__init__(*args, **kwargs)
-        for key in ("config_files", "remove_configs"):
+        for key in ("config_files",):
             if key not in self:
                 self[key] = {}
             for config_file, config_dict in self[key].items():

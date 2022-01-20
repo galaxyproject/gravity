@@ -250,11 +250,11 @@ class SupervisorProcessManager(BaseProcessManager):
     def _process_config_changes(self, configs, meta_changes):
         # remove the services of any configs which have been removed
         for config in meta_changes["remove_configs"].values():
-            instance_name = config.instance_name
+            instance_name = config["instance_name"]
             instance_conf_dir = join(self.supervisord_conf_dir, f"{instance_name}.d")
             for service in config["services"]:
                 info("Removing service %s", self.__service_program_name(instance_name, service))
-                conf = join(instance_conf_dir, f"{service.config_type}_{service.service_type}_{service.service_name}.conf")
+                conf = join(instance_conf_dir, f"{service['config_type']}_{service['service_type']}_{service['service_name']}.conf")
                 if exists(conf):
                     os.unlink(conf)
 
