@@ -1,10 +1,12 @@
 *~
 *.*.swp
 *.pyc
+.tox/
 /build/
 /dist/
 /*.egg-info/
 *.egg
+tests/galaxy.git
 
 # dev scripts
 /galaxycfg

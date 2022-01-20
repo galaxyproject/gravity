@@ -2,6 +2,20 @@
  History
 =========
 
+0.9
+===
+
+- Converted CLI from `argparse`_ to `click`_.
+- Stole ideas and code from `planemo`_ in general.
+- Improve the AttributeDict so that it can have "hidden" items (anything that
+  starts with a ``_``) that won't be serialized. Also, it serializes itself and
+  can be created via deserialization from a classmethod. This simplifies using
+  it to persist state data in the new GravityState subclass.
+
+.. _argparse: https://docs.python.org/3/library/argparse.html
+.. _click: http://click.pocoo.org/
+.. _planemo: https://github.com/galaxyproject/planemo
+
 0.8.3
 =====
 
@@ -14,7 +28,6 @@
   via the ``start``, ``stop``, and ``restart`` methods.
 - Fix a bug where uWSGI would not start when using the automatic virtualenv
   install method.
-- Fix a bug where the reload method was not reloading everything.
 
 0.8.1
 =====
