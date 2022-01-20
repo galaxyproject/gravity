@@ -43,6 +43,25 @@ files = {supervisord_conf_dir}/*.d/*.conf {supervisord_conf_dir}/*.conf
 
 # TODO: with more templating you only need one of these
 SUPERVISORD_SERVICE_TEMPLATES = {}
+SUPERVISORD_SERVICE_TEMPLATES["unicornherder"] = """;
+; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
+;
+
+[program:{program_name}]
+command         = {command}
+directory       = {galaxy_root}
+umask           = {galaxy_umask}
+autostart       = true
+autorestart     = true
+startsecs       = 15
+stopwaitsecs    = 65
+environment     = GALAXY_CONFIG_FILE="{galaxy_conf}"
+numprocs        = 1
+stdout_logfile  = {log_file}
+redirect_stderr = true
+{process_name_opt}
+"""  # noqa: E501
+
 SUPERVISORD_SERVICE_TEMPLATES["gunicorn"] = """;
 ; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
 ;
@@ -224,6 +243,7 @@ class SupervisorProcessManager(BaseProcessManager):
             attach_to_pool_opt = f" --attach-to-pool={server_pool}"
 
         format_vars = {
+            "log_dir": attribs["log_dir"],
             "log_file": self.__service_log_file(attribs["log_dir"], program_name),
             "config_type": service["config_type"],
             "server_name": service["service_name"],
