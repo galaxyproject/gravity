@@ -21,6 +21,7 @@ COMMAND_ALIASES = {
     "add": "register",
     "remove": "deregister",
     "forget": "deregister",
+    "get": "show",
 }
 
 

@@ -121,7 +121,7 @@ class ConfigManager(object):
             # FIXME: relative to root
             job_conf_xml = abspath(join(config.attribs["galaxy_root"], job_conf_xml))
         if config.config_type == "galaxy" and exists(job_conf_xml):
-            for service_name in [x["    service_name"] for x in ConfigManager.get_job_config(job_conf_xml) if x["service_name"] not in webapp_service_names]:
+            for service_name in [x["service_name"] for x in ConfigManager.get_job_config(job_conf_xml) if x["service_name"] not in webapp_service_names]:
                 config.services.append(GalaxyStandaloneService(config_type=config.config_type, service_name=service_name))
 
         # Dynamic job handlers are configured using `job_handler_count` in galaxy.yml.
@@ -264,9 +264,14 @@ class ConfigManager(object):
         return GravityState.open(self.config_state_path)
 
     @property
+    def instance_count(self):
+        """The number of configured instances"""
+        return len(self.state.config_files)
+
+    @property
     def single_instance(self):
         """Indicate if there is only one configured instance"""
-        return len(self.state.config_files) == 1
+        return self.instance_count == 1
 
     def get_registered_configs(self, instances=None):
         """Return the persisted values of all config files registered with the config manager."""
