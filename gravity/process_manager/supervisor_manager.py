@@ -4,13 +4,13 @@ import errno
 import os
 import shutil
 import subprocess
-import sys
 import time
 from os.path import exists, join
 
 from gravity.io import debug, error, info, warn
 from gravity.process_manager import BaseProcessManager
 from gravity.state import GracefulMethod
+from gravity.util import which
 
 from supervisor import supervisorctl
 
@@ -142,17 +142,6 @@ programs = {programs}
 """
 
 
-def which(file):
-    # http://stackoverflow.com/questions/5226958/which-equivalent-function-in-python
-    if os.path.exists(os.path.dirname(sys.executable) + "/" + file):
-        return os.path.dirname(sys.executable) + "/" + file
-    for path in os.environ["PATH"].split(":"):
-        if os.path.exists(path + "/" + file):
-            return path + "/" + file
-
-    return None
-
-
 class SupervisorProcessManager(BaseProcessManager):
     def __init__(self, state_dir=None, start_daemon=True, foreground=False):
         super(SupervisorProcessManager, self).__init__(state_dir=state_dir)
@@ -164,7 +153,6 @@ class SupervisorProcessManager(BaseProcessManager):
         self.supervisord_sock_path = join(self.supervisor_state_dir, "supervisor.sock")
         self.__supervisord_popen = None
         self.foreground = foreground
-        self.tail = which("tail")
 
         if not exists(self.supervisord_conf_dir):
             os.makedirs(self.supervisord_conf_dir)
@@ -216,14 +204,11 @@ class SupervisorProcessManager(BaseProcessManager):
             # if running in foreground, if terminate is called, then supervisord should've already received a SIGINT
             self.__supervisord_popen.wait()
 
-    def __service_program_name(self, instance_name, service):
+    def _service_program_name(self, instance_name, service):
         if self.use_group:
             return f"{instance_name}_{service['config_type']}_{service['service_type']}_{service['service_name']}"
         else:
             return service["service_name"]
-
-    def __service_log_file(self, log_dir, program_name):
-        return join(log_dir, program_name + ".log")
 
     def __update_service(self, config_file, config, attribs, service, instance_conf_dir, instance_name):
         if self.use_group:
@@ -231,7 +216,7 @@ class SupervisorProcessManager(BaseProcessManager):
         else:
             process_name_opt = ""
 
-        program_name = self.__service_program_name(instance_name, service)
+        program_name = self._service_program_name(instance_name, service)
 
         # used by the "standalone" service type
         attach_to_pool_opt = ""
@@ -241,7 +226,7 @@ class SupervisorProcessManager(BaseProcessManager):
 
         format_vars = {
             "log_dir": attribs["log_dir"],
-            "log_file": self.__service_log_file(attribs["log_dir"], program_name),
+            "log_file": self._service_log_file(attribs["log_dir"], program_name),
             "config_type": service["config_type"],
             "server_name": service["service_name"],
             "attach_to_pool_opt": attach_to_pool_opt,
@@ -273,7 +258,7 @@ class SupervisorProcessManager(BaseProcessManager):
             instance_name = config["instance_name"]
             instance_conf_dir = join(self.supervisord_conf_dir, f"{instance_name}.d")
             for service in config["services"]:
-                info("Removing service %s", self.__service_program_name(instance_name, service))
+                info("Removing service %s", self._service_program_name(instance_name, service))
                 conf = join(instance_conf_dir, f"{service['config_type']}_{service['service_type']}_{service['service_name']}.conf")
                 if exists(conf):
                     os.unlink(conf)
@@ -306,13 +291,13 @@ class SupervisorProcessManager(BaseProcessManager):
 
             if update_all_configs:
                 for service in config["services"]:
-                    info("Updating service %s", self.__service_program_name(instance_name, service))
+                    info("Updating service %s", self._service_program_name(instance_name, service))
                     self.__update_service(config_file, config, attribs, service, instance_conf_dir, instance_name)
 
             # new services
             if "update_services" in config:
                 for service in config["update_services"]:
-                    info("Creating or updating service %s", self.__service_program_name(instance_name, service))
+                    info("Creating or updating service %s", self._service_program_name(instance_name, service))
                     self.__update_service(config_file, config, attribs, service, instance_conf_dir, instance_name)
 
             # deleted services
@@ -412,31 +397,6 @@ class SupervisorProcessManager(BaseProcessManager):
         # supervisor = self.get_supervisor()
         # all_infos = supervisor.getAllProcessInfo()
         self.supervisorctl("status")
-
-    def follow(self, instance_names):
-        if not instance_names:
-            instance_names = self.get_instance_names(instance_names)[0]
-        if len(instance_names) != 1:
-            error(f"Can only follow logs of one instance at a time! {instance_names}")
-            return
-        instance_name = instance_names[0]
-        services = self.config_manager.get_instance_services(instance_name)
-        if self.tail:
-            config = self.config_manager.get_instance_config(instance_name)
-            log_dir = config["attribs"]["log_dir"]
-            log_files = []
-            for service in services:
-                program_name = self.__service_program_name(instance_name, service)
-                log_files.append(self.__service_log_file(log_dir, program_name))
-            cmd = [self.tail, "-f"] + log_files
-            tail_popen = subprocess.Popen(cmd)
-            tail_popen.wait()
-        else:
-            program_name = self.__service_program_name(instance_name, services[0])
-            if len(services) > 1:
-                warn(f"`tail` not found on $PATH and more than one service configured, following only {program_name}."
-                     " Install `tail` to follow all configured services.")
-            self.supervisorctl("tail", "-f", program_name)
 
     def shutdown(self):
         self.supervisorctl("shutdown")
