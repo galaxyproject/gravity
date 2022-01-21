@@ -22,6 +22,7 @@ COMMAND_ALIASES = {
     "remove": "deregister",
     "forget": "deregister",
     "get": "show",
+    "reload": "graceful",
 }
 
 

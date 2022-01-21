@@ -1,6 +1,7 @@
 """ Classes to represent and manipulate gravity's stored configuration and
 state data.
 """
+import enum
 import errno
 
 import yaml
@@ -8,9 +9,15 @@ import yaml
 from gravity.util import AttributeDict
 
 
+class GracefulMethod(enum.Enum):
+    DEFAULT = 0
+    SIGHUP = 1
+
+
 class Service(AttributeDict):
     service_type = "service"
     service_name = "_default_"
+    graceful_method = GracefulMethod.DEFAULT
 
     def __init__(self, *args, **kwargs):
         super(Service, self).__init__(*args, **kwargs)
@@ -29,8 +36,20 @@ class Service(AttributeDict):
 class GalaxyGunicornService(Service):
     service_type = "gunicorn"
     service_name = "gunicorn"
+    graceful_method = GracefulMethod.SIGHUP
     command_template = "gunicorn 'galaxy.webapps.galaxy.fast_factory:factory()' --timeout 300" \
                        " --pythonpath lib -k galaxy.webapps.galaxy.workers.Worker -b {bind_address}:{bind_port}"
+
+
+class GalaxyUnicornHerderService(Service):
+    service_type = "unicornherder"
+    service_name = "unicornherder"
+    graceful_method = GracefulMethod.SIGHUP
+    command_template = "unicornherder --pidfile {supervisor_state_dir}/{program_name}.pid --" \
+                       " 'galaxy.webapps.galaxy.fast_factory:factory()' --timeout 300" \
+                       " --pythonpath lib -k galaxy.webapps.galaxy.workers.Worker -b {bind_address}:{bind_port}" \
+                       " --access-logfile {log_dir}/gunicorn.access.log" \
+                       " --error-logfile {log_dir}/gunicorn.error.log --capture-output"
 
 
 class GalaxyCeleryService(Service):
@@ -104,9 +123,17 @@ class GravityState(AttributeDict):
         self._name = name
 
 
+def service_for_service_type(service_type):
+    try:
+        return SERVICE_CLASS_MAP[service_type]
+    except KeyError:
+        raise RuntimeError(f"Unknown service type: {service_type}")
+
+
 # TODO: better to pull this from __class__.service_type
 SERVICE_CLASS_MAP = {
     "gunicorn": GalaxyGunicornService,
+    "unicornherder": GalaxyUnicornHerderService,
     "celery": GalaxyCeleryService,
     "celery-beat": GalaxyCeleryBeatService,
     "standalone": GalaxyStandaloneService,

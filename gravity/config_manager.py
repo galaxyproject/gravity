@@ -14,10 +14,7 @@ from gravity.io import debug, error, info, warn
 from gravity.state import (
     ConfigFile,
     GravityState,
-    GalaxyGunicornService,
-    GalaxyCeleryService,
-    GalaxyCeleryBeatService,
-    GalaxyStandaloneService,
+    service_for_service_type,
 )
 
 
@@ -75,6 +72,7 @@ class ConfigManager(object):
             "galaxy_root": None,
             "log_dir": join(expanduser(self.state_dir), "log"),
             "instance_name": DEFAULT_INSTANCE_NAME,
+            "app_server": "gunicorn",
             "bind_address": "localhost",
             "bind_port": 8080,
             # FIXME: relative to config_dir
@@ -96,6 +94,7 @@ class ConfigManager(object):
         config.services = []
         config.instance_name = app_config["instance_name"]
         config.config_type = server_section
+        config.attribs["app_server"] = app_config["app_server"]
         config.attribs["log_dir"] = app_config["log_dir"]
         config.attribs["bind_address"] = app_config["bind_address"]
         config.attribs["bind_port"] = app_config["bind_port"]
@@ -109,9 +108,9 @@ class ConfigManager(object):
             else:
                 raise Exception(f"Cannot locate Galaxy root directory: set `galaxy_root' in the `galaxy' section of {conf}")
 
-        config.services.append(GalaxyGunicornService(config_type=config.config_type))
-        config.services.append(GalaxyCeleryService(config_type=config.config_type))
-        config.services.append(GalaxyCeleryBeatService(config_type=config.config_type))
+        config.services.append(service_for_service_type(config.attribs["app_server"])(config_type=config.config_type))
+        config.services.append(service_for_service_type("celery")(config_type=config.config_type))
+        config.services.append(service_for_service_type("celery-beat")(config_type=config.config_type))
         # If this is a Galaxy config, parse job_conf.xml for any *static* standalone handlers
         # Marius: Don't think that's gonna work if job config file not defined!
         # TODO: use galaxy config parsing ?
@@ -122,7 +121,7 @@ class ConfigManager(object):
             job_conf_xml = abspath(join(config.attribs["galaxy_root"], job_conf_xml))
         if config.config_type == "galaxy" and exists(job_conf_xml):
             for service_name in [x["service_name"] for x in ConfigManager.get_job_config(job_conf_xml) if x["service_name"] not in webapp_service_names]:
-                config.services.append(GalaxyStandaloneService(config_type=config.config_type, service_name=service_name))
+                config.services.append(service_for_service_type("standalone")(config_type=config.config_type, service_name=service_name))
 
         # Dynamic job handlers are configured using `job_handler_count` in galaxy.yml.
         #
@@ -136,7 +135,7 @@ class ConfigManager(object):
         for i in range(0, handler_count):
             service_name = handler_name.format(instance_number=i)
             config.services.append(
-                GalaxyStandaloneService(config_type=config.config_type, service_name=service_name, server_pool="job-handlers"))
+                service_for_service_type("standalone")(config_type=config.config_type, service_name=service_name, server_pool="job-handlers"))
 
         return config
 

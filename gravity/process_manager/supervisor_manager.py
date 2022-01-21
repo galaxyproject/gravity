@@ -3,17 +3,14 @@
 import errno
 import os
 import shutil
-import signal
 import subprocess
 import sys
 import time
-import urllib.request
 from os.path import exists, join
-
-import click
 
 from gravity.io import debug, error, info, warn
 from gravity.process_manager import BaseProcessManager
+from gravity.state import GracefulMethod
 
 from supervisor import supervisorctl
 
@@ -43,6 +40,25 @@ files = {supervisord_conf_dir}/*.d/*.conf {supervisord_conf_dir}/*.conf
 
 # TODO: with more templating you only need one of these
 SUPERVISORD_SERVICE_TEMPLATES = {}
+SUPERVISORD_SERVICE_TEMPLATES["unicornherder"] = """;
+; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
+;
+
+[program:{program_name}]
+command         = {command}
+directory       = {galaxy_root}
+umask           = {galaxy_umask}
+autostart       = true
+autorestart     = true
+startsecs       = 15
+stopwaitsecs    = 65
+environment     = GALAXY_CONFIG_FILE="{galaxy_conf}"
+numprocs        = 1
+stdout_logfile  = {log_file}
+redirect_stderr = true
+{process_name_opt}
+"""  # noqa: E501
+
 SUPERVISORD_SERVICE_TEMPLATES["gunicorn"] = """;
 ; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
 ;
@@ -224,6 +240,7 @@ class SupervisorProcessManager(BaseProcessManager):
             attach_to_pool_opt = f" --attach-to-pool={server_pool}"
 
         format_vars = {
+            "log_dir": attribs["log_dir"],
             "log_file": self.__service_log_file(attribs["log_dir"], program_name),
             "config_type": service["config_type"],
             "server_name": service["service_name"],
@@ -358,42 +375,12 @@ class SupervisorProcessManager(BaseProcessManager):
     def __reload_graceful(self, op, instance_names):
         self.update()
         for instance_name in self.get_instance_names(instance_names)[0]:
-            if op == "reload":
-                # restart everything but uwsgi
-                target = f"{instance_name}:*" if self.use_group else "all"
-                self.supervisorctl("restart", target)
             for service in self.config_manager.get_instance_services(instance_name):
-                service_name = f"{instance_name}_{service.config_type}_{service.service_name}"
-                group_service_name = f"{instance_name}:{service.config_type}_{service.service_name}"
-                if service["service_type"] == "uwsgi":
-                    procinfo = self.__get_supervisor().getProcessInfo(service_name)
-                    # restart uwsgi
-                    try:
-                        os.kill(procinfo["pid"], signal.SIGHUP)
-                        click.echo(f"{group_service_name}: sent HUP signal")
-                    except Exception as exc:
-                        warn("Attempt to reload %s failed: %s", service_name, exc)
-                # graceful restarts
-                elif op == "graceful" and service["service_type"] == "standalone":
-                    self.supervisorctl("restart", group_service_name)
-                elif op == "graceful" and service["service_type"] == "paste":
-                    self.supervisorctl("restart", group_service_name)
-                    url = "http://localhost:%d/" % service.paste_port
-                    click.echo(f"{service_name}: waiting until {url} is accepting requests", end="")
-                    while True:
-                        try:
-                            r = urllib.request.urlopen(url, None, 5)
-                            assert r.getcode() == 200, f"{url} returned HTTP code: {r.getcode()}"
-                            click.echo(" OK")
-                            break
-                        except AssertionError as exc:
-                            click.echo()
-                            error(exc)
-                            return
-                        except Exception:
-                            click.echo(".", nl=False)
-                            sys.stdout.flush()
-                            time.sleep(1)
+                program_name = self.__service_program_name(instance_name, service)
+                if service.graceful_method == GracefulMethod.SIGHUP:
+                    self.supervisorctl("signal", "SIGHUP", program_name)
+                else:
+                    self.supervisorctl("restart", program_name)
 
     def start(self, instance_names):
         super(SupervisorProcessManager, self).start(instance_names)
