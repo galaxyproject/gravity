@@ -48,19 +48,14 @@ class BaseProcessManager(object, metaclass=ABCMeta):
 
     @abstractmethod
     def start(self, instance_names):
-        """If start is called from the root of a Galaxy source directory with
-        no args, automatically add this instance.
-        """
-        if not instance_names and self.config_manager.instance_count == 0:
-            configs = (os.path.join("config", "galaxy.yml"), os.path.join("config", "galaxy.yml.sample"))
-            for config in configs:
-                if os.path.exists(config):
-                    if not self.config_manager.is_registered(os.path.abspath(config)):
-                        self.config_manager.add([config])
-                    break
+        """ """
 
     @abstractmethod
     def _process_config_changes(self, configs, meta_changes):
+        """ """
+
+    @abstractmethod
+    def terminate(self):
         """ """
 
     @abstractmethod

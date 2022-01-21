@@ -101,12 +101,14 @@ class ConfigManager(object):
         webapp_service_names = []
 
         # shortcut for galaxy configs in the standard locations -- explicit arg ?
-        config.attribs["galaxy_root"] = app_config.get('root')
+        config.attribs["galaxy_root"] = app_config.get("root")
         if config.attribs["galaxy_root"] is None:
-            if exists(join(dirname(conf), pardir, "lib", "galaxy")):
+            if os.environ.get("GALAXY_ROOT_DIR"):
+                config.attribs["galaxy_root"] = abspath(os.environ["GALAXY_ROOT_DIR"])
+            elif exists(join(dirname(conf), pardir, "lib", "galaxy")):
                 config.attribs["galaxy_root"] = abspath(join(dirname(conf), pardir))
             else:
-                raise Exception(f"Cannot locate Galaxy root directory: set `galaxy_root' in the `galaxy' section of {conf}")
+                raise Exception(f"Cannot locate Galaxy root directory: set $GALAXY_ROOT_DIR or `root' in the `galaxy' section of {conf}")
 
         config.services.append(service_for_service_type(config.attribs["app_server"])(config_type=config.config_type))
         config.services.append(service_for_service_type("celery")(config_type=config.config_type))
@@ -317,6 +319,20 @@ class ConfigManager(object):
                 service["instance_name"] = config["instance_name"]
                 rval.append(service)
         return rval
+
+    def auto_register(self):
+        """Attempt to automatically register a config file if none are registered."""
+        if self.instance_count == 0:
+            if os.environ.get("GALAXY_CONFIG_FILE"):
+                configs = [os.environ["GALAXY_CONFIG_FILE"]]
+            else:
+                configs = (os.path.join("config", "galaxy.yml"), os.path.join("config", "galaxy.yml.sample"))
+            for config in configs:
+                if exists(config):
+                    # This should always be the case if instance_count == 0
+                    if not self.is_registered(abspath(config)):
+                        self.add([config])
+                    return
 
     def is_registered(self, config_file):
         return config_file in self.get_registered_configs()

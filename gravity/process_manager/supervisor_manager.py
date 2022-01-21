@@ -368,7 +368,6 @@ class SupervisorProcessManager(BaseProcessManager):
                     self.supervisorctl("restart", program_name)
 
     def start(self, instance_names):
-        super(SupervisorProcessManager, self).start(instance_names)
         self.__start_stop("start", instance_names)
         self.supervisorctl("status")
 
