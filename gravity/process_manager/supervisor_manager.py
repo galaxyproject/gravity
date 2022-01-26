@@ -20,11 +20,11 @@ SUPERVISORD_CONF_TEMPLATE = """;
 ;
 
 [unix_http_server]
-file = {supervisor_state_dir}/supervisor.sock
+file = %(here)s/supervisor.sock
 
 [supervisord]
-logfile = {supervisor_state_dir}/supervisord.log
-pidfile = {supervisor_state_dir}/supervisord.pid
+logfile = %(here)s/supervisord.log
+pidfile = %(here)s/supervisord.pid
 loglevel = info
 nodaemon = false
 
@@ -32,10 +32,10 @@ nodaemon = false
 supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
 
 [supervisorctl]
-serverurl = unix://{supervisor_state_dir}/supervisor.sock
+serverurl = unix://%(here)s/supervisor.sock
 
 [include]
-files = {supervisord_conf_dir}/*.d/*.conf {supervisord_conf_dir}/*.conf
+files = supervisord.conf.d/*.d/*.conf supervisord.conf.d/*.conf
 """
 
 # TODO: with more templating you only need one of these
