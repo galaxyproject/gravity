@@ -147,7 +147,7 @@ class ConfigManager(object):
         # FIXME: use galaxy job conf parsing I guess, if it's not a mess of slow loading deps
         rval = []
         root = elementtree.parse(conf).getroot()
-        for handler in root.find("handlers"):
+        for handler in (root.find("handlers") or []):
             rval.append({"service_name": handler.attrib["id"]})
         return rval
 
