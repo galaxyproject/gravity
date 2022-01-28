@@ -11,6 +11,11 @@ def test_schema_json():
     assert "Configuration for Gravity process manager" in json.loads(schema)["description"]
 
 
+def test_extra_fields_allowed():
+    s = Settings(extra=1)
+    assert not hasattr(s, "extra")
+
+
 def test_defaults_loaded():
     settings = Settings()
     assert settings.gunicorn.bind == "localhost:8080"

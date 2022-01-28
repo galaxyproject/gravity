@@ -121,6 +121,13 @@ def gxit_config(free_port, another_free_port):
 
 
 @pytest.fixture
+def tusd_config(startup_config, free_port, another_free_port):
+    startup_config["gravity"] = {"tusd": {"enable": True, "port": another_free_port, "upload_dir": "/tmp"}}
+    startup_config["galaxy"]["galaxy_infrastructure_url"] = f"http://localhost:{free_port}"
+    return startup_config
+
+
+@pytest.fixture
 def gxit_startup_config(galaxy_virtualenv, gxit_config):
     gxit_config['gravity']['virtualenv'] = galaxy_virtualenv
     return gxit_config
