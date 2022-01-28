@@ -19,6 +19,7 @@ def none_to_default(cls, v, field):
     else:
         return v
 
+
 class LogLevel(str, Enum):
     debug = "DEBUG"
     info = "INFO"
@@ -43,7 +44,6 @@ Directory to store uploads in.
 Must match ``tus_upload_store`` setting in ``galaxy:`` section.
 """)
     extra_args: str = Field(default="", description="Extra arguments to pass to tusd command line.")
-
 
 
 class CelerySettings(BaseModel):
@@ -163,7 +163,6 @@ The ``tusd`` binary must be installed manually and made available on PATH (e.g i
 Configure dynamic handlers in this section.
 See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defined-handlers for details.
 """)
-
 
     # Use validators to turn None to default value
     _normalize_gunicorn = validator("gunicorn", allow_reuse=True, pre=True)(none_to_default)

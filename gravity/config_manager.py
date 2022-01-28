@@ -90,8 +90,8 @@ class ConfigManager(object):
         config.services = []
         config.instance_name = gravity_config.instance_name
         config.config_type = server_section
-        config.attribs["galaxy_infrastructure_url"] = app_config.get("galaxy_infrastructure_url")
-        if gravity_config.tusd.enable and config.attribs["galaxy_infrastructure_url"] is None:
+        config.attribs["galaxy_infrastructure_url"] = app_config.get("galaxy_infrastructure_url", "").rstrip("/")
+        if gravity_config.tusd.enable and not config.attribs["galaxy_infrastructure_url"]:
             exception("To run the tusd server you need to set galaxy_infrastructure_url in the galaxy section of galaxy.yml")
         config.attribs["app_server"] = gravity_config.app_server
         config.attribs["log_dir"] = gravity_config.log_dir
