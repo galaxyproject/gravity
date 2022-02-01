@@ -81,11 +81,11 @@ class ConfigManager(object):
         if defaults is not None:
             app_config.update(defaults)
 
-        _app_config = config_dict.get(server_section)
-        if not _app_config:
+        if server_section not in config_dict:
             error(f"Config file {conf} does not look like valid Galaxy, Reports or Tool Shed configuration file")
             return None
 
+        _app_config = config_dict.get(server_section) or {}
         app_config.update(_app_config)
 
         # This is the core that needs to be implemented
