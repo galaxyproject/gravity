@@ -29,10 +29,19 @@ def galaxy_root_dir(galaxy_git_dir, tmpdir_factory):
 def state_dir():
     directory = tempfile.mkdtemp()
     try:
-        yield directory
+        yield Path(directory)
     finally:
         try:
             os.kill(int(open(os.path.join(directory, 'supervisor', 'supervisord.pid')).read()), signal.SIGTERM)
         except Exception:
             pass
         shutil.rmtree(directory)
+
+
+@pytest.fixture()
+def job_conf(request, galaxy_root_dir):
+    job_conf_path = galaxy_root_dir / 'config' / 'job_conf.xml'
+    with open(job_conf_path, 'w') as jcfh:
+        jcfh.write(request.param[0])
+    yield job_conf_path
+    os.unlink(job_conf_path)
