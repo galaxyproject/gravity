@@ -63,9 +63,9 @@ If running from the root of a Galaxy source tree, you can start and run Galaxy i
     ==> /home/nate/work/galaxy/database/gravity/log/gunicorn.log <==
     ...log output follows...
 
-Galaxy will continue to run and output logs to stdout until terminate it with ``CTRL+C``.
+Galaxy will continue to run and output logs to stdout until terminated with ``CTRL+C``.
 
-The ``galaxy`` command is actually a shortcut for three separate steps: 1. Register your Galaxy configuration file
+The ``galaxy`` command is actually a shortcut for three separate steps: 1. register your Galaxy configuration file
 (``galaxy.yml``) with Gravity, 2. write out the process manager configurations, and 3. start and run Galaxy in the
 foreground using the process manager (`supervisor`_). You can perform these steps separately (and in this example, start
 Galaxy as a backgrounded daemon instead of in the foreground)::
