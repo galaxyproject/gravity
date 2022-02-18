@@ -97,7 +97,7 @@ Once a Galaxy configuration file has been registered with Gravity, it doesn't ma
 Configuration
 =============
 
-The following options in the ``galaxy`` section of ``galaxy.yml`` can be used to control Gravity::
+The following options in the ``gravity`` section of ``galaxy.yml`` can be used to control Gravity::
 unset are shown)::
 
     # Override the default instance name, this is mostly hidden from you when running a single instance # of Galaxy
