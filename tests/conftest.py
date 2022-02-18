@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 
 import pytest
+from gravity import config_manager
 
 TEST_DIR = Path(os.path.dirname(__file__))
 
@@ -26,6 +27,17 @@ def galaxy_root_dir(galaxy_git_dir, tmpdir_factory):
 
 
 @pytest.fixture()
+def galaxy_yml(galaxy_root_dir):
+    config = galaxy_root_dir / 'config' / 'galaxy.yml'
+    sample_config = galaxy_root_dir / 'config' / 'galaxy.yml.sample'
+    sample_config.copy(config)
+    try:
+        yield config
+    finally:
+        config.remove()
+
+
+@pytest.fixture()
 def state_dir():
     directory = tempfile.mkdtemp()
     try:
@@ -36,6 +48,11 @@ def state_dir():
         except Exception:
             pass
         shutil.rmtree(directory)
+
+@pytest.fixture
+def default_config_manager(state_dir):
+    with config_manager.config_manager(state_dir=state_dir) as cm:
+        yield cm
 
 
 @pytest.fixture()
