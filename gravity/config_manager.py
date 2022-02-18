@@ -17,7 +17,7 @@ from gravity.defaults import (
     DEFAULT_INSTANCE_NAME,
     GUNICORN_DEFAULT_CONFIG,
 )
-from gravity.io import debug, error, info, warn
+from gravity.io import debug, error, exception, info, warn
 from gravity.state import (
     ConfigFile,
     GravityState,
@@ -312,10 +312,13 @@ class ConfigManager(object):
         return rval
 
     def get_instance_config(self, instance_name):
-        for config in self.state.config_files.values():
+        for config in list(self.state.config_files.values()):
             if config["instance_name"] == instance_name:
                 return config
-        return None
+        exception(f'Instance "{instance_name}" unknown, known instance(s) are {", ".join(self.get_registered_instance_names())}.')
+
+    def get_registered_instance_names(self):
+        return [c['instance_name'] for c in self.state.config_files.values()]
 
     def get_instance_services(self, instance_name):
         return self.get_instance_config(instance_name)["services"]
