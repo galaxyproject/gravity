@@ -106,9 +106,9 @@ class BaseProcessManager(object, metaclass=ABCMeta):
         registered_instance_names = self.config_manager.get_registered_instances()
         unknown_instance_names = []
         if instance_names:
-            for i, n in enumerate(instance_names):
+            for n in instance_names:
                 if n not in registered_instance_names:
-                    unknown_instance_names.append(instance_names.pop(i))
+                    unknown_instance_names.append(n)
         elif registered_instance_names:
             instance_names = registered_instance_names
         else:
