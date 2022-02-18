@@ -85,7 +85,7 @@ class ConfigManager(object):
             "gunicorn": GUNICORN_DEFAULT_CONFIG,
         }
         if defaults is not None:
-            default_config.update(defaults)
+            recursive_update(default_config, defaults)
 
         if server_section not in config_dict and self.gravity_config_section not in config_dict:
             error(f"Config file {conf} does not look like valid Galaxy, Reports or Tool Shed configuration file")
