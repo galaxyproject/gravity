@@ -1,5 +1,7 @@
 """
 """
+import collections.abc
+import copy
 import os
 import sys
 
@@ -41,6 +43,21 @@ class AttributeDict(dict):
 
     def dump(self, fp, *args, **kwargs):
         self._yaml.dump(self, fp)
+
+
+def recursive_update(to_update, update_from):
+    """
+    Update values in `to_update` with values in `update_from`.
+
+    Does not mutate values in to_update, but returns a new dictionary.
+    """
+    d = copy.deepcopy(to_update)
+    for k, v in update_from.items():
+        if isinstance(v, collections.abc.Mapping):
+            d[k] = recursive_update(d.get(k, {}), v)
+        else:
+            d[k] = v
+    return d
 
 
 def which(file):

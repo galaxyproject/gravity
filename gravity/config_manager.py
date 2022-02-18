@@ -1,7 +1,5 @@
 """ Galaxy Process Management superclass and utilities
 """
-import collections.abc
-import copy
 import contextlib
 import errno
 import hashlib
@@ -13,33 +11,26 @@ from os.path import abspath, dirname, exists, expanduser, isabs, join
 
 from yaml import safe_load
 
+
+from gravity import __version__
+from gravity.defaults import (
+    DEFAULT_INSTANCE_NAME,
+    GUNICORN_DEFAULT_CONFIG,
+)
 from gravity.io import debug, error, info, warn
 from gravity.state import (
     ConfigFile,
     GravityState,
     service_for_service_type,
 )
+from gravity.util import recursive_update
 
 log = logging.getLogger(__name__)
 
-DEFAULT_INSTANCE_NAME = "_default_"
-DEFAULT_GUNICORN_BIND = "localhost:8080"
-DEFAULT_GUNICORN_TIMEOUT = 300
-DEFAULT_GUNICORN_WORKERS = 1
-DEFAULT_GUNICORN_EXTRA_ARGS = ""
 DEFAULT_JOB_CONFIG_FILE = "config/job_conf.xml"
 DEFAULT_STATE_DIR = join("~", ".config", "galaxy-gravity")
 if "XDG_CONFIG_HOME" in os.environ:
     DEFAULT_STATE_DIR = join(os.environ["XDG_CONFIG_HOME"], "galaxy-gravity")
-
-
-def update(d, u):
-    for k, v in u.items():
-        if isinstance(v, collections.abc.Mapping):
-            d[k] = update(d.get(k, {}), v)
-        else:
-            d[k] = v
-    return d
 
 
 @contextlib.contextmanager
@@ -86,18 +77,12 @@ class ConfigManager(object):
         with open(conf) as config_fh:
             config_dict = safe_load(config_fh)
 
-        gunicorn_default_config = {
-                "bind": DEFAULT_GUNICORN_BIND,
-                "workers": DEFAULT_GUNICORN_WORKERS,
-                "timeout": DEFAULT_GUNICORN_TIMEOUT,
-                "extra_args": DEFAULT_GUNICORN_EXTRA_ARGS
-        }
         default_config = {
             "galaxy_root": None,
             "log_dir": join(expanduser(self.state_dir), "log"),
             "instance_name": DEFAULT_INSTANCE_NAME,
             "app_server": "gunicorn",
-            "gunicorn": gunicorn_default_config,
+            "gunicorn": GUNICORN_DEFAULT_CONFIG,
         }
         if defaults is not None:
             default_config.update(defaults)
@@ -108,10 +93,8 @@ class ConfigManager(object):
 
         app_config = config_dict.get(server_section) or {}
         _gravity_config = config_dict.get(self.gravity_config_section) or {}
-        gravity_config = copy.deepcopy(default_config)
-        update(gravity_config, _gravity_config)
+        gravity_config = recursive_update(default_config, _gravity_config)
 
-        # This is the core that needs to be implemented
         config = ConfigFile()
         config.attribs = {}
         config.services = []
@@ -120,10 +103,12 @@ class ConfigManager(object):
         config.attribs["app_server"] = gravity_config["app_server"]
         config.attribs["log_dir"] = gravity_config["log_dir"]
         config.attribs["gunicorn"] = gravity_config["gunicorn"]
+        # Store gravity version, in case we need to convert old setting
+        config.attribs['gravity_version'] = __version__
         webapp_service_names = []
 
         # shortcut for galaxy configs in the standard locations -- explicit arg ?
-        config.attribs["galaxy_root"] = app_config.get("root")
+        config.attribs["galaxy_root"] = app_config.get("root") or gravity_config.get("galaxy_root")
         if config.attribs["galaxy_root"] is None:
             if os.environ.get("GALAXY_ROOT_DIR"):
                 config.attribs["galaxy_root"] = abspath(os.environ["GALAXY_ROOT_DIR"])
