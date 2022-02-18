@@ -1,8 +1,10 @@
 """ Galaxy Process Management superclass and utilities
 """
+import copy
 import contextlib
 import errno
 import hashlib
+import logging
 import os
 import xml.etree.ElementTree as elementtree
 from os import pardir
@@ -17,8 +19,11 @@ from gravity.state import (
     service_for_service_type,
 )
 
+log = logging.getLogger(__name__)
 
 DEFAULT_INSTANCE_NAME = "_default_"
+DEFAULT_GUNICORN_BIND = "localhost:8080"
+DEFAULT_JOB_CONFIG_FILE = "config/job_conf.xml"
 DEFAULT_STATE_DIR = join("~", ".config", "galaxy-gravity")
 if "XDG_CONFIG_HOME" in os.environ:
     DEFAULT_STATE_DIR = join(os.environ["XDG_CONFIG_HOME"], "galaxy-gravity")
@@ -31,6 +36,7 @@ def config_manager(state_dir=None, python_exe=None):
 
 class ConfigManager(object):
     galaxy_server_config_section = "galaxy"
+    gravity_config_section = "gravity"
 
     def __init__(self, state_dir=None, python_exe=None):
         if state_dir is None:
@@ -63,41 +69,40 @@ class ConfigManager(object):
             os.unlink(config_state_json)
 
     def get_config(self, conf, defaults=None):
-        # delete this ?
         server_section = self.galaxy_server_config_section
         with open(conf) as config_fh:
             config_dict = safe_load(config_fh)
 
-        app_config = {
+        default_config = {
             "galaxy_root": None,
             "log_dir": join(expanduser(self.state_dir), "log"),
             "instance_name": DEFAULT_INSTANCE_NAME,
             "app_server": "gunicorn",
-            "bind_address": "localhost",
-            "bind_port": 8080,
-            # FIXME: relative to config_dir
-            "job_config_file": "config/job_conf.xml",
+            "gunicorn": {
+                "bind": DEFAULT_GUNICORN_BIND,
+            },
         }
         if defaults is not None:
-            app_config.update(defaults)
+            default_config.update(defaults)
 
-        if server_section not in config_dict:
+        if server_section not in config_dict and self.gravity_config_section not in config_dict:
             error(f"Config file {conf} does not look like valid Galaxy, Reports or Tool Shed configuration file")
             return None
 
-        _app_config = config_dict.get(server_section) or {}
-        app_config.update(_app_config)
+        app_config = config_dict.get(server_section) or {}
+        _gravity_config = config_dict.get(self.gravity_config_section) or {}
+        gravity_config = copy.deepcopy(default_config)
+        gravity_config.update(_gravity_config)
 
         # This is the core that needs to be implemented
         config = ConfigFile()
         config.attribs = {}
         config.services = []
-        config.instance_name = app_config["instance_name"]
+        config.instance_name = gravity_config["instance_name"]
         config.config_type = server_section
-        config.attribs["app_server"] = app_config["app_server"]
-        config.attribs["log_dir"] = app_config["log_dir"]
-        config.attribs["bind_address"] = app_config["bind_address"]
-        config.attribs["bind_port"] = app_config["bind_port"]
+        config.attribs["app_server"] = gravity_config["app_server"]
+        config.attribs["log_dir"] = gravity_config["log_dir"]
+        config.attribs["gunicorn"] = gravity_config["gunicorn"]
         webapp_service_names = []
 
         # shortcut for galaxy configs in the standard locations -- explicit arg ?
@@ -117,11 +122,13 @@ class ConfigManager(object):
         # Marius: Don't think that's gonna work if job config file not defined!
         # TODO: use galaxy config parsing ?
         # TODO: if not, need yaml job config parsing
-        job_conf_xml = app_config["job_config_file"]
+        job_conf_xml = app_config.get("job_config_file", DEFAULT_JOB_CONFIG_FILE)
         if not isabs(job_conf_xml):
             # FIXME: relative to root
             job_conf_xml = abspath(join(config.attribs["galaxy_root"], job_conf_xml))
         if config.config_type == "galaxy" and exists(job_conf_xml):
+            if not job_conf_xml.endswith('.xml'):
+                log.warning(f"Cannot read job configuration from non-xml file: '{job_conf_xml}'")
             for service_name in [x["service_name"] for x in ConfigManager.get_job_config(job_conf_xml) if x["service_name"] not in webapp_service_names]:
                 config.services.append(service_for_service_type("standalone")(config_type=config.config_type, service_name=service_name))
 
@@ -131,8 +138,8 @@ class ConfigManager(object):
         # web process will be a handler, which is not desirable when dynamic handlers are used. Currently Gravity
         # doesn't parse that part of the job config. See logic in lib/galaxy/web_stack/handlers.py _get_is_handler() to
         # see how this is determined.
-        handler_count = app_config.get("job_handler_count", 0)
-        handler_name = app_config.get("job_handler_name_template", "job-handler-{instance_number}")
+        handler_count = gravity_config.get("job_handler_count", 0)
+        handler_name = gravity_config.get("job_handler_name_template", "job-handler-{instance_number}")
         # TODO: should we use supervisor's native process count instead?
         for i in range(0, handler_count):
             service_name = handler_name.format(instance_number=i)

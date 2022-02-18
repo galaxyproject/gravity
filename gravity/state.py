@@ -38,7 +38,7 @@ class GalaxyGunicornService(Service):
     service_name = "gunicorn"
     graceful_method = GracefulMethod.SIGHUP
     command_template = "gunicorn 'galaxy.webapps.galaxy.fast_factory:factory()' --timeout 300" \
-                       " --pythonpath lib -k galaxy.webapps.galaxy.workers.Worker -b {bind_address}:{bind_port}"
+                       " --pythonpath lib -k galaxy.webapps.galaxy.workers.Worker -b {gunicorn[bind]}"
 
 
 class GalaxyUnicornHerderService(Service):
@@ -47,7 +47,7 @@ class GalaxyUnicornHerderService(Service):
     graceful_method = GracefulMethod.SIGHUP
     command_template = "unicornherder --pidfile {supervisor_state_dir}/{program_name}.pid --" \
                        " 'galaxy.webapps.galaxy.fast_factory:factory()' --timeout 300" \
-                       " --pythonpath lib -k galaxy.webapps.galaxy.workers.Worker -b {bind_address}:{bind_port}" \
+                       " --pythonpath lib -k galaxy.webapps.galaxy.workers.Worker -b {gunicorn[bind]}" \
                        " --access-logfile {log_dir}/gunicorn.access.log" \
                        " --error-logfile {log_dir}/gunicorn.error.log --capture-output"
 
@@ -87,9 +87,16 @@ class ConfigFile(AttributeDict):
             "instance_name": self["instance_name"],
             "galaxy_root": self["attribs"]["galaxy_root"],
             "log_dir": self["attribs"]["log_dir"],
-            "bind_address": self["attribs"]["bind_address"],
-            "bind_port": self["attribs"]["bind_port"],
+            "gunicorn":  self.gunicorn_config,
         }
+
+    @property
+    def gunicorn_config(self):
+        # We used to store bind_address and bind_port instead of a gunicorn config key, so restore from here
+        gunicorn = self["attribs"].get("gunicorn")
+        if not gunicorn and 'bind_address' in self["attribs"]:
+            return {'bind': f'{self["attribs"]["bind_address"]}:{self["attribs"]["bind_port"]}'}
+        return gunicorn
 
 
 class GravityState(AttributeDict):
