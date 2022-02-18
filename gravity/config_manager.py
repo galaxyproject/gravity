@@ -1,5 +1,6 @@
 """ Galaxy Process Management superclass and utilities
 """
+import collections.abc
 import copy
 import contextlib
 import errno
@@ -23,10 +24,22 @@ log = logging.getLogger(__name__)
 
 DEFAULT_INSTANCE_NAME = "_default_"
 DEFAULT_GUNICORN_BIND = "localhost:8080"
+DEFAULT_GUNICORN_TIMEOUT = 300
+DEFAULT_GUNICORN_WORKERS = 1
+DEFAULT_GUNICORN_EXTRA_ARGS = ""
 DEFAULT_JOB_CONFIG_FILE = "config/job_conf.xml"
 DEFAULT_STATE_DIR = join("~", ".config", "galaxy-gravity")
 if "XDG_CONFIG_HOME" in os.environ:
     DEFAULT_STATE_DIR = join(os.environ["XDG_CONFIG_HOME"], "galaxy-gravity")
+
+
+def update(d, u):
+    for k, v in u.items():
+        if isinstance(v, collections.abc.Mapping):
+            d[k] = update(d.get(k, {}), v)
+        else:
+            d[k] = v
+    return d
 
 
 @contextlib.contextmanager
@@ -73,14 +86,18 @@ class ConfigManager(object):
         with open(conf) as config_fh:
             config_dict = safe_load(config_fh)
 
+        gunicorn_default_config = {
+                "bind": DEFAULT_GUNICORN_BIND,
+                "workers": DEFAULT_GUNICORN_WORKERS,
+                "timeout": DEFAULT_GUNICORN_TIMEOUT,
+                "extra_args": DEFAULT_GUNICORN_EXTRA_ARGS
+        }
         default_config = {
             "galaxy_root": None,
             "log_dir": join(expanduser(self.state_dir), "log"),
             "instance_name": DEFAULT_INSTANCE_NAME,
             "app_server": "gunicorn",
-            "gunicorn": {
-                "bind": DEFAULT_GUNICORN_BIND,
-            },
+            "gunicorn": gunicorn_default_config,
         }
         if defaults is not None:
             default_config.update(defaults)
@@ -92,7 +109,7 @@ class ConfigManager(object):
         app_config = config_dict.get(server_section) or {}
         _gravity_config = config_dict.get(self.gravity_config_section) or {}
         gravity_config = copy.deepcopy(default_config)
-        gravity_config.update(_gravity_config)
+        update(gravity_config, _gravity_config)
 
         # This is the core that needs to be implemented
         config = ConfigFile()

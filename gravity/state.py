@@ -37,8 +37,13 @@ class GalaxyGunicornService(Service):
     service_type = "gunicorn"
     service_name = "gunicorn"
     graceful_method = GracefulMethod.SIGHUP
-    command_template = "gunicorn 'galaxy.webapps.galaxy.fast_factory:factory()' --timeout 300" \
-                       " --pythonpath lib -k galaxy.webapps.galaxy.workers.Worker -b {gunicorn[bind]}"
+    command_template = "gunicorn 'galaxy.webapps.galaxy.fast_factory:factory()'" \
+                       " --timeout {gunicorn[timeout]}" \
+                       " --pythonpath lib" \
+                       " -k galaxy.webapps.galaxy.workers.Worker" \
+                       " -b {gunicorn[bind]}" \
+                       " --workers={gunicorn[workers]}" \
+                       " {gunicorn[extra_args]}"
 
 
 class GalaxyUnicornHerderService(Service):
@@ -46,10 +51,15 @@ class GalaxyUnicornHerderService(Service):
     service_name = "unicornherder"
     graceful_method = GracefulMethod.SIGHUP
     command_template = "unicornherder --pidfile {supervisor_state_dir}/{program_name}.pid --" \
-                       " 'galaxy.webapps.galaxy.fast_factory:factory()' --timeout 300" \
-                       " --pythonpath lib -k galaxy.webapps.galaxy.workers.Worker -b {gunicorn[bind]}" \
+                       " 'galaxy.webapps.galaxy.fast_factory:factory()'" \
+                       " --timeout {gunicorn[timeout]}" \
+                       " --pythonpath lib" \
+                       " -k galaxy.webapps.galaxy.workers.Worker" \
+                       " -b {gunicorn[bind]}" \
+                       " --workers={gunicorn[workers]}" \
                        " --access-logfile {log_dir}/gunicorn.access.log" \
-                       " --error-logfile {log_dir}/gunicorn.error.log --capture-output"
+                       " --error-logfile {log_dir}/gunicorn.error.log --capture-output" \
+                       " {gunicorn[extra_args]}"
 
 
 class GalaxyCeleryService(Service):

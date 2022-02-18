@@ -49,6 +49,7 @@ def state_dir():
             pass
         shutil.rmtree(directory)
 
+
 @pytest.fixture
 def default_config_manager(state_dir):
     with config_manager.config_manager(state_dir=state_dir) as cm:

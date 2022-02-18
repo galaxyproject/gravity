@@ -27,8 +27,9 @@ def test_register_bind(galaxy_yml, default_config_manager):
     galaxy_yml.write(json.dumps({'galaxy': None, 'gravity': {'gunicorn': {'bind': new_bind}}}))
     default_config_manager.add([str(galaxy_yml)])
     state = default_config_manager.state['config_files'][str(galaxy_yml)]
-    attributes = state['attribs']
-    assert attributes['gunicorn']['bind'] == new_bind
+    gunicorn_attributes = state['attribs']['gunicorn']
+    assert gunicorn_attributes['bind'] == new_bind
+    assert gunicorn_attributes['workers'] == config_manager.DEFAULT_GUNICORN_WORKERS
 
 
 def test_deregister(galaxy_yml, default_config_manager):
