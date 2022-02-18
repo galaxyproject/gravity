@@ -6,6 +6,7 @@ from gravity.defaults import (
     DEFAULT_GUNICORN_TIMEOUT,
     DEFAULT_GUNICORN_WORKERS,
     DEFAULT_INSTANCE_NAME,
+    CELERY_DEFAULT_CONFIG
 
 )
 
@@ -26,16 +27,30 @@ def test_register_defaults(galaxy_yml, galaxy_root_dir, state_dir, default_confi
     assert gunicorn_attributes['workers'] == DEFAULT_GUNICORN_WORKERS
     assert gunicorn_attributes['timeout'] == DEFAULT_GUNICORN_TIMEOUT
     assert gunicorn_attributes['extra_args'] == ""
+    assert attributes['celery'] == CELERY_DEFAULT_CONFIG
 
 
-def test_register_bind(galaxy_yml, default_config_manager):
+def test_register_non_default(galaxy_yml, default_config_manager):
     new_bind = 'localhost:8081'
-    galaxy_yml.write(json.dumps({'galaxy': None, 'gravity': {'gunicorn': {'bind': new_bind}}}))
+    concurrency = 4
+    galaxy_yml.write(json.dumps({
+        'galaxy': None,
+        'gravity': {
+            'gunicorn': {
+                'bind': new_bind
+            },
+            'celery': {
+                'concurrency': concurrency
+            }
+        }
+    }))
     default_config_manager.add([str(galaxy_yml)])
     state = default_config_manager.state['config_files'][str(galaxy_yml)]
     gunicorn_attributes = state['attribs']['gunicorn']
     assert gunicorn_attributes['bind'] == new_bind
     assert gunicorn_attributes['workers'] == DEFAULT_GUNICORN_WORKERS
+    celery_attributes = state['attribs']['celery']
+    assert celery_attributes['concurrency'] == concurrency
 
 
 def test_deregister(galaxy_yml, default_config_manager):

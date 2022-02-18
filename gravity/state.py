@@ -65,13 +65,13 @@ class GalaxyUnicornHerderService(Service):
 class GalaxyCeleryService(Service):
     service_type = "celery"
     service_name = "celery"
-    command_template = "celery --app galaxy.celery worker --concurrency 2 -l debug"
+    command_template = "celery --app galaxy.celery worker --concurrency {celery[concurrency]} --loglevel {celery[loglevel]} {celery[extra_args]}"
 
 
 class GalaxyCeleryBeatService(Service):
     service_type = "celery-beat"
     service_name = "celery-beat"
-    command_template = "celery --app galaxy.celery beat -l debug"
+    command_template = "celery --app galaxy.celery beat --loglevel debug"
 
 
 class GalaxyStandaloneService(Service):

@@ -14,6 +14,7 @@ from yaml import safe_load
 
 from gravity import __version__
 from gravity.defaults import (
+    CELERY_DEFAULT_CONFIG,
     DEFAULT_INSTANCE_NAME,
     GUNICORN_DEFAULT_CONFIG,
 )
@@ -83,6 +84,7 @@ class ConfigManager(object):
             "instance_name": DEFAULT_INSTANCE_NAME,
             "app_server": "gunicorn",
             "gunicorn": GUNICORN_DEFAULT_CONFIG,
+            "celery": CELERY_DEFAULT_CONFIG,
         }
         if defaults is not None:
             recursive_update(default_config, defaults)
@@ -103,6 +105,7 @@ class ConfigManager(object):
         config.attribs["app_server"] = gravity_config["app_server"]
         config.attribs["log_dir"] = gravity_config["log_dir"]
         config.attribs["gunicorn"] = gravity_config["gunicorn"]
+        config.attribs["celery"] = gravity_config["celery"]
         # Store gravity version, in case we need to convert old setting
         config.attribs['gravity_version'] = __version__
         webapp_service_names = []

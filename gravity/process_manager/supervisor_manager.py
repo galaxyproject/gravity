@@ -231,6 +231,7 @@ class SupervisorProcessManager(BaseProcessManager):
             "server_name": service["service_name"],
             "attach_to_pool_opt": attach_to_pool_opt,
             "gunicorn": attribs["gunicorn"],
+            "celery": attribs["celery"],
             "galaxy_umask": service.get("umask", "022"),
             "program_name": program_name,
             "process_name_opt": process_name_opt,

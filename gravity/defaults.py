@@ -9,3 +9,8 @@ GUNICORN_DEFAULT_CONFIG = {
     "timeout": DEFAULT_GUNICORN_TIMEOUT,
     "extra_args": DEFAULT_GUNICORN_EXTRA_ARGS
 }
+CELERY_DEFAULT_CONFIG = {
+    "loglevel": "debug",
+    "concurrency": 2,
+    "extra_args": ""
+}
