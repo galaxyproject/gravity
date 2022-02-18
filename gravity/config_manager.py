@@ -85,6 +85,8 @@ class ConfigManager(object):
             "app_server": "gunicorn",
             "gunicorn": GUNICORN_DEFAULT_CONFIG,
             "celery": CELERY_DEFAULT_CONFIG,
+            "job_handler": {},
+            "workflow_handler": {},
         }
         if defaults is not None:
             recursive_update(default_config, defaults)
@@ -106,6 +108,8 @@ class ConfigManager(object):
         config.attribs["log_dir"] = gravity_config["log_dir"]
         config.attribs["gunicorn"] = gravity_config["gunicorn"]
         config.attribs["celery"] = gravity_config["celery"]
+        config.attribs["job_handler"] = gravity_config["job_handler"]
+        config.attribs["workflow_handler"] = gravity_config["workflow_handler"]
         # Store gravity version, in case we need to convert old setting
         config.attribs['gravity_version'] = __version__
         webapp_service_names = []
@@ -143,15 +147,20 @@ class ConfigManager(object):
         # web process will be a handler, which is not desirable when dynamic handlers are used. Currently Gravity
         # doesn't parse that part of the job config. See logic in lib/galaxy/web_stack/handlers.py _get_is_handler() to
         # see how this is determined.
-        handler_count = gravity_config.get("job_handler_count", 0)
-        handler_name = gravity_config.get("job_handler_name_template", "job-handler-{instance_number}")
+        self.create_handler_services(gravity_config, config, 'job')
+        self.create_handler_services(gravity_config, config, 'workflow')
+        return config
+
+    @staticmethod
+    def create_handler_services(gravity_config, config, handler_type):
+        handler = gravity_config.get(f"{handler_type}_handler", {})
+        handler_count = handler.get("processes", 0)
+        handler_name = handler.get("name_template", f"{handler_type}-handler-{{instance_number}}")
         # TODO: should we use supervisor's native process count instead?
         for i in range(0, handler_count):
             service_name = handler_name.format(instance_number=i)
             config.services.append(
-                service_for_service_type("standalone")(config_type=config.config_type, service_name=service_name, server_pool="job-handlers"))
-
-        return config
+                service_for_service_type("standalone")(config_type=config.config_type, service_name=service_name, server_pool=f"{handler_type}-handlers"))
 
     @staticmethod
     def get_job_config(conf):
