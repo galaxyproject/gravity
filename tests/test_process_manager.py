@@ -27,23 +27,23 @@ JOB_CONF_XML_DYNAMIC_HANDLERS = """
 
 DYNAMIC_HANDLER_CONFIG = """
 gravity:
-    handlers:
-      handler:
-        processes: 2
-        name_template: >
-          {name}{process}
-        pools:
-          - job-handler
-          - workflow-scheduler
-      handler1:
-        processes: 1
-        pools:
-          - job-handler.special
-      handler2:
-        processes: 1
-        pools:
-          - job-handler
-          - job-handler.special
+  handlers:
+    handler:
+      processes: 2
+      name_template: >
+        {name}{process}
+      pools:
+        - job-handler
+        - workflow-scheduler
+    handler1:
+      processes: 1
+      pools:
+        - job-handler.special
+    handler2:
+      processes: 1
+      pools:
+        - job-handler
+        - job-handler.special
 """
 
 
