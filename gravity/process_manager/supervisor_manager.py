@@ -220,9 +220,11 @@ class SupervisorProcessManager(BaseProcessManager):
 
         # used by the "standalone" service type
         attach_to_pool_opt = ""
-        server_pool = service.get("server_pool")
-        if server_pool:
-            attach_to_pool_opt = f" --attach-to-pool={server_pool}"
+        server_pools = service.get("server_pools")
+        if server_pools:
+            _attach_to_pool_opt = " ".join(f"--attach-to-pool={server_pool}" for server_pool in server_pools)
+            # Insert a single leading space
+            attach_to_pool_opt = f" {_attach_to_pool_opt}"
 
         format_vars = {
             "log_dir": attribs["log_dir"],

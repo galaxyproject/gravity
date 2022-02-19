@@ -11,7 +11,6 @@ from os.path import abspath, dirname, exists, expanduser, isabs, join
 
 from yaml import safe_load
 
-
 from gravity import __version__
 from gravity.defaults import (
     CELERY_DEFAULT_CONFIG,
@@ -85,8 +84,7 @@ class ConfigManager(object):
             "app_server": "gunicorn",
             "gunicorn": GUNICORN_DEFAULT_CONFIG,
             "celery": CELERY_DEFAULT_CONFIG,
-            "job_handler": {},
-            "workflow_handler": {},
+            "handlers": {},
         }
         if defaults is not None:
             recursive_update(default_config, defaults)
@@ -108,8 +106,7 @@ class ConfigManager(object):
         config.attribs["log_dir"] = gravity_config["log_dir"]
         config.attribs["gunicorn"] = gravity_config["gunicorn"]
         config.attribs["celery"] = gravity_config["celery"]
-        config.attribs["job_handler"] = gravity_config["job_handler"]
-        config.attribs["workflow_handler"] = gravity_config["workflow_handler"]
+        config.attribs["handlers"] = gravity_config["handlers"]
         # Store gravity version, in case we need to convert old setting
         config.attribs['gravity_version'] = __version__
         webapp_service_names = []
@@ -147,20 +144,35 @@ class ConfigManager(object):
         # web process will be a handler, which is not desirable when dynamic handlers are used. Currently Gravity
         # doesn't parse that part of the job config. See logic in lib/galaxy/web_stack/handlers.py _get_is_handler() to
         # see how this is determined.
-        self.create_handler_services(gravity_config, config, 'job')
-        self.create_handler_services(gravity_config, config, 'workflow')
+        self.create_handler_services(gravity_config, config)
         return config
 
-    @staticmethod
-    def create_handler_services(gravity_config, config, handler_type):
-        handler = gravity_config.get(f"{handler_type}_handler", {})
-        handler_count = handler.get("processes", 0)
-        handler_name = handler.get("name_template", f"{handler_type}-handler-{{instance_number}}")
-        # TODO: should we use supervisor's native process count instead?
-        for i in range(0, handler_count):
-            service_name = handler_name.format(instance_number=i)
+    def create_handler_services(self, gravity_config, config):
+        expanded_handlers = self.expand_handlers(gravity_config, config)
+        for service_name, handler_settings in expanded_handlers.items():
+            pools = handler_settings.get('pools')
             config.services.append(
-                service_for_service_type("standalone")(config_type=config.config_type, service_name=service_name, server_pool=f"{handler_type}-handlers"))
+                service_for_service_type("standalone")(config_type=config.config_type, service_name=service_name, server_pools=pools))
+
+    @staticmethod
+    def expand_handlers(gravity_config, config):
+        handlers = gravity_config.get("handlers", {})
+        expanded_handlers = {}
+        default_name_template = "{name}_{process}"
+        for service_name, handler_config in handlers.items():
+            count = handler_config.get("processes", 1)
+            name_template = handler_config.get("name_template")
+            if name_template is None:
+                if count == 1 and service_name[-1].isdigit():
+                    # Assume we have an explicit handler name, don't apply pattern
+                    expanded_handlers[service_name] = handler_config
+                    continue
+            name_template = (name_template or default_name_template).strip()
+            for index in range(count):
+                expanded_service_name = name_template.format(name=service_name, process=index, instance_name=config.instance_name)
+                if expanded_service_name not in expanded_handlers:
+                    expanded_handlers[expanded_service_name] = handler_config
+        return expanded_handlers
 
     @staticmethod
     def get_job_config(conf):
