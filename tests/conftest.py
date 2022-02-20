@@ -1,6 +1,7 @@
 import os
 import signal
 import shutil
+import socket
 import subprocess
 import tempfile
 from pathlib import Path
@@ -63,6 +64,31 @@ def job_conf(request, galaxy_root_dir):
         jcfh.write(request.param[0])
     yield job_conf_path
     os.unlink(job_conf_path)
+
+
+@pytest.fixture()
+def free_port():
+    # Inspired by https://gist.github.com/bertjwregeer/0be94ced48383a42e70c3d9fff1f4ad0
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    s.bind(("localhost", 0))
+    portnum = s.getsockname()[1]
+    s.close()
+    return portnum
+
+
+@pytest.fixture()
+def startup_config(galaxy_virtualenv, free_port):
+    return {
+        'gravity': {
+            'virtualenv': galaxy_virtualenv,
+            'gunicorn': {
+                'bind': f'localhost:{free_port}'}
+        },
+        'galaxy': {
+            'conda_auto_init': False
+        }
+    }
 
 
 @pytest.fixture(scope="session")
