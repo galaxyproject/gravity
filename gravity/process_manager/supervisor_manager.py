@@ -12,7 +12,7 @@ from gravity.process_manager import BaseProcessManager
 from gravity.state import GracefulMethod
 from gravity.util import which
 
-from supervisor import supervisorctl
+from supervisor import supervisorctl  # type: ignore
 
 
 SUPERVISORD_CONF_TEMPLATE = """;
