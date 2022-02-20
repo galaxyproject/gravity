@@ -305,7 +305,7 @@ class SupervisorProcessManager(BaseProcessManager):
             # deleted services
             if "remove_services" in config:
                 for service in config["remove_services"]:
-                    info("Removing service %s", self.__service_program_name(instance_name, service))
+                    info("Removing service %s", self._service_program_name(instance_name, service))
                     conf = join(instance_conf_dir, f"{service['config_type']}_{service['service_type']}_{service['service_name']}.conf")
                     if exists(conf):
                         os.unlink(conf)
@@ -363,7 +363,7 @@ class SupervisorProcessManager(BaseProcessManager):
         self.update()
         for instance_name in self.get_instance_names(instance_names)[0]:
             for service in self.config_manager.get_instance_services(instance_name):
-                program_name = self.__service_program_name(instance_name, service)
+                program_name = self._service_program_name(instance_name, service)
                 if service.graceful_method == GracefulMethod.SIGHUP:
                     self.supervisorctl("signal", "SIGHUP", program_name)
                 else:
