@@ -56,5 +56,26 @@ def test_register_non_default(galaxy_yml, default_config_manager):
 def test_deregister(galaxy_yml, default_config_manager):
     default_config_manager.add([str(galaxy_yml)])
     assert str(galaxy_yml) in default_config_manager.state['config_files']
+    assert default_config_manager.is_registered(str(galaxy_yml))
     default_config_manager.remove([str(galaxy_yml)])
     assert str(galaxy_yml) not in default_config_manager.state['config_files']
+    assert not default_config_manager.is_registered(str(galaxy_yml))
+
+
+def test_rename(galaxy_root_dir, state_dir, default_config_manager):
+    galaxy_yml_sample = galaxy_root_dir / "config" / "galaxy.yml.sample"
+    default_config_manager.add([str(galaxy_yml_sample)])
+    galaxy_yml = galaxy_root_dir / "config" / "galaxy.yml"
+    galaxy_yml_sample.copy(galaxy_yml)
+    assert default_config_manager.is_registered(str(galaxy_yml_sample.realpath()))
+    assert not default_config_manager.is_registered(str(galaxy_yml))
+    default_config_manager.rename(str(galaxy_yml_sample.realpath()), str(galaxy_yml))
+    assert not default_config_manager.is_registered(str(galaxy_yml_sample.realpath()))
+    assert default_config_manager.is_registered(str(galaxy_yml))
+
+
+def test_auto_register(galaxy_yml, default_config_manager, monkeypatch):
+    monkeypatch.setenv("GALAXY_CONFIG_FILE", str(galaxy_yml))
+    assert not default_config_manager.is_registered(str(galaxy_yml))
+    default_config_manager.auto_register()
+    assert default_config_manager.is_registered(str(galaxy_yml))
