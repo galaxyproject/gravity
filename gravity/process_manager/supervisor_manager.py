@@ -202,7 +202,7 @@ class SupervisorProcessManager(BaseProcessManager):
     def terminate(self):
         if self.foreground:
             # if running in foreground, if terminate is called, then supervisord should've already received a SIGINT
-            self.__supervisord_popen.wait()
+            self.__supervisord_popen and self.__supervisord_popen.wait()
 
     def _service_program_name(self, instance_name, service):
         if self.use_group:
