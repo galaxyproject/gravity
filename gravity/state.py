@@ -39,7 +39,7 @@ class GalaxyGunicornService(Service):
     service_type = "gunicorn"
     service_name = "gunicorn"
     graceful_method = GracefulMethod.SIGHUP
-    command_template = "gunicorn 'galaxy.webapps.galaxy.fast_factory:factory()'" \
+    command_template = "{virtualenv_bin}gunicorn 'galaxy.webapps.galaxy.fast_factory:factory()'" \
                        " --timeout {gunicorn[timeout]}" \
                        " --pythonpath lib" \
                        " -k galaxy.webapps.galaxy.workers.Worker" \
@@ -52,7 +52,7 @@ class GalaxyUnicornHerderService(Service):
     service_type = "unicornherder"
     service_name = "unicornherder"
     graceful_method = GracefulMethod.SIGHUP
-    command_template = "unicornherder --pidfile {supervisor_state_dir}/{program_name}.pid --" \
+    command_template = "{virtualenv_bin}unicornherder --pidfile {supervisor_state_dir}/{program_name}.pid --" \
                        " 'galaxy.webapps.galaxy.fast_factory:factory()'" \
                        " --timeout {gunicorn[timeout]}" \
                        " --pythonpath lib" \
@@ -67,20 +67,25 @@ class GalaxyUnicornHerderService(Service):
 class GalaxyCeleryService(Service):
     service_type = "celery"
     service_name = "celery"
-    command_template = "celery --app galaxy.celery worker --concurrency {celery[concurrency]} --loglevel {celery[loglevel]} {celery[extra_args]}"
+    command_template = "{virtualenv_bin}celery" \
+                       " --app galaxy.celery worker" \
+                       " --concurrency {celery[concurrency]}" \
+                       " --loglevel" \
+                       " {celery[loglevel]}" \
+                       " {celery[extra_args]}"
 
 
 class GalaxyCeleryBeatService(Service):
     service_type = "celery-beat"
     service_name = "celery-beat"
-    command_template = "celery --app galaxy.celery beat --loglevel debug"
+    command_template = "{virtualenv_bin}celery --app galaxy.celery beat --loglevel {celery[loglevel]}"
 
 
 class GalaxyStandaloneService(Service):
     service_type = "standalone"
     service_name = "standalone"
     # FIXME: supervisor-specific
-    command_template = "python ./lib/galaxy/main.py -c {galaxy_conf} --server-name={server_name}{attach_to_pool_opt}" \
+    command_template = "{virtualenv_bin}python ./lib/galaxy/main.py -c {galaxy_conf} --server-name={server_name}{attach_to_pool_opt}" \
                        " --pid-file={supervisor_state_dir}/{program_name}.pid"
 
 

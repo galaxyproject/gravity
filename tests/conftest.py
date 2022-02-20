@@ -63,3 +63,17 @@ def job_conf(request, galaxy_root_dir):
         jcfh.write(request.param[0])
     yield job_conf_path
     os.unlink(job_conf_path)
+
+
+@pytest.fixture(scope="session")
+def galaxy_virtualenv(galaxy_root_dir):
+    virtual_env_dir = str(TEST_DIR / "galaxy_venv")
+    os.environ['GALAXY_VIRTUAL_ENV'] = virtual_env_dir
+    subprocess.run(
+        str(galaxy_root_dir / "scripts/common_startup.sh"),
+        env={
+            "GALAXY_SKIP_CLIENT_BUILD": "1",
+            "GALAXY_VIRTUAL_ENV": virtual_env_dir},
+        cwd=str(galaxy_root_dir)
+    )
+    return virtual_env_dir

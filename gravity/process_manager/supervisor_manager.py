@@ -226,6 +226,9 @@ class SupervisorProcessManager(BaseProcessManager):
             # Insert a single leading space
             attach_to_pool_opt = f" {_attach_to_pool_opt}"
 
+        virtualenv_dir = attribs.get("virtualenv")
+        virtualenv_bin = f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}' if virtualenv_dir else ""
+
         format_vars = {
             "log_dir": attribs["log_dir"],
             "log_file": self._service_log_file(attribs["log_dir"], program_name),
@@ -239,6 +242,7 @@ class SupervisorProcessManager(BaseProcessManager):
             "process_name_opt": process_name_opt,
             "galaxy_conf": config_file,
             "galaxy_root": attribs["galaxy_root"],
+            "virtualenv_bin": virtualenv_bin,
             "supervisor_state_dir": self.supervisor_state_dir,
         }
         format_vars["command"] = service.command_template.format(**format_vars)

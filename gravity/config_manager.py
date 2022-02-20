@@ -80,6 +80,7 @@ class ConfigManager(object):
         default_config = {
             "galaxy_root": None,
             "log_dir": join(expanduser(self.state_dir), "log"),
+            "virtualenv": None,
             "instance_name": DEFAULT_INSTANCE_NAME,
             "app_server": "gunicorn",
             "gunicorn": GUNICORN_DEFAULT_CONFIG,
@@ -104,6 +105,7 @@ class ConfigManager(object):
         config.config_type = server_section
         config.attribs["app_server"] = gravity_config["app_server"]
         config.attribs["log_dir"] = gravity_config["log_dir"]
+        config.attribs["virtualenv"] = gravity_config["virtualenv"]
         config.attribs["gunicorn"] = gravity_config["gunicorn"]
         config.attribs["celery"] = gravity_config["celery"]
         config.attribs["handlers"] = gravity_config["handlers"]
