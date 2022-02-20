@@ -3,6 +3,8 @@ state data.
 """
 import enum
 import errno
+import os
+from collections import defaultdict
 
 import yaml
 
@@ -123,11 +125,15 @@ class GravityState(AttributeDict):
 
     def __init__(self, *args, **kwargs):
         super(GravityState, self).__init__(*args, **kwargs)
+        normalized_state = defaultdict(dict)
         for key in ("config_files",):
             if key not in self:
                 self[key] = {}
             for config_file, config_dict in self[key].items():
-                self[key][config_file] = ConfigFile(config_dict)
+                # resolve path, so we always deal with absolute and symlink-resolved paths
+                config_file = os.path.realpath(config_file)
+                normalized_state[key][config_file] = ConfigFile(config_dict)
+        self.update(normalized_state)
 
     def __enter__(self):
         return self
