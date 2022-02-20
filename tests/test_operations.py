@@ -1,7 +1,9 @@
 import json
 import re
 from time import time
+
 from click.testing import CliRunner
+from yaml import safe_load
 
 from gravity.cli import galaxyctl
 
@@ -49,3 +51,13 @@ def test_cmd_start(state_dir, galaxy_yml, galaxy_virtualenv):
     assert startup_done is True, f"Startup failed. Application startup logs:\n {startup_done}"
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'stop'])
     assert result.exit_code == 0
+    assert "All processes stopped, supervisord will exit" in result.output
+
+
+def test_cmd_show(state_dir, galaxy_yml):
+    test_cmd_register(state_dir, galaxy_yml)
+    runner = CliRunner()
+    result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'show', str(galaxy_yml)])
+    assert result.exit_code == 0
+    details = safe_load(result.output)
+    assert details['config_type'] == 'galaxy'
