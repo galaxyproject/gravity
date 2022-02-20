@@ -119,7 +119,7 @@ class ConfigManager(object):
             elif exists(join(dirname(conf), pardir, "lib", "galaxy")):
                 config.attribs["galaxy_root"] = abspath(join(dirname(conf), pardir))
             else:
-                raise Exception(f"Cannot locate Galaxy root directory: set $GALAXY_ROOT_DIR or `root' in the `galaxy' section of {conf}")
+                exception(f"Cannot locate Galaxy root directory: set $GALAXY_ROOT_DIR or `root' in the `galaxy' section of {conf}")
 
         config.services.append(service_for_service_type(config.attribs["app_server"])(config_type=config.config_type))
         config.services.append(service_for_service_type("celery")(config_type=config.config_type))
@@ -385,7 +385,7 @@ class ConfigManager(object):
                 defaults = {"galaxy_root": galaxy_root}
             conf = self.get_config(config_file, defaults=defaults)
             if conf is None:
-                raise Exception(f"Cannot add {config_file}: File is unknown type")
+                exception(f"Cannot add {config_file}: File is unknown type")
             if conf["instance_name"] is None:
                 conf["instance_name"] = conf["config_type"] + "-" + hashlib.md5(os.urandom(32)).hexdigest()[:12]
             conf_data = {
@@ -403,7 +403,7 @@ class ConfigManager(object):
             return
         conf = self.get_config(new)
         if conf is None:
-            raise Exception(f"Cannot add {new}: File is unknown type")
+            exception(f"Cannot add {new}: File is unknown type")
         with self.state as state:
             state.config_files[new] = state.config_files.pop(old)
         info("Reregistered config %s as %s", old, new)
