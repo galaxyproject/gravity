@@ -3,6 +3,7 @@
 import contextlib
 import errno
 import hashlib
+import logging
 import os
 import xml.etree.ElementTree as elementtree
 from os import pardir
@@ -10,15 +11,23 @@ from os.path import abspath, dirname, exists, expanduser, isabs, join
 
 from yaml import safe_load
 
-from gravity.io import debug, error, info, warn
+from gravity import __version__
+from gravity.defaults import (
+    CELERY_DEFAULT_CONFIG,
+    DEFAULT_INSTANCE_NAME,
+    GUNICORN_DEFAULT_CONFIG,
+)
+from gravity.io import debug, error, exception, info, warn
 from gravity.state import (
     ConfigFile,
     GravityState,
     service_for_service_type,
 )
+from gravity.util import recursive_update
 
+log = logging.getLogger(__name__)
 
-DEFAULT_INSTANCE_NAME = "_default_"
+DEFAULT_JOB_CONFIG_FILE = "config/job_conf.xml"
 DEFAULT_STATE_DIR = join("~", ".config", "galaxy-gravity")
 if "XDG_CONFIG_HOME" in os.environ:
     DEFAULT_STATE_DIR = join(os.environ["XDG_CONFIG_HOME"], "galaxy-gravity")
@@ -31,6 +40,7 @@ def config_manager(state_dir=None, python_exe=None):
 
 class ConfigManager(object):
     galaxy_server_config_section = "galaxy"
+    gravity_config_section = "gravity"
 
     def __init__(self, state_dir=None, python_exe=None):
         if state_dir is None:
@@ -63,52 +73,55 @@ class ConfigManager(object):
             os.unlink(config_state_json)
 
     def get_config(self, conf, defaults=None):
-        # delete this ?
         server_section = self.galaxy_server_config_section
         with open(conf) as config_fh:
             config_dict = safe_load(config_fh)
 
-        app_config = {
+        default_config = {
             "galaxy_root": None,
             "log_dir": join(expanduser(self.state_dir), "log"),
+            "virtualenv": None,
             "instance_name": DEFAULT_INSTANCE_NAME,
             "app_server": "gunicorn",
-            "bind_address": "localhost",
-            "bind_port": 8080,
-            # FIXME: relative to config_dir
-            "job_config_file": "config/job_conf.xml",
+            "gunicorn": GUNICORN_DEFAULT_CONFIG,
+            "celery": CELERY_DEFAULT_CONFIG,
+            "handlers": {},
         }
         if defaults is not None:
-            app_config.update(defaults)
+            recursive_update(default_config, defaults)
 
-        if server_section not in config_dict:
+        if server_section not in config_dict and self.gravity_config_section not in config_dict:
             error(f"Config file {conf} does not look like valid Galaxy, Reports or Tool Shed configuration file")
             return None
 
-        _app_config = config_dict.get(server_section) or {}
-        app_config.update(_app_config)
+        app_config = config_dict.get(server_section) or {}
+        _gravity_config = config_dict.get(self.gravity_config_section) or {}
+        gravity_config = recursive_update(default_config, _gravity_config)
 
-        # This is the core that needs to be implemented
         config = ConfigFile()
         config.attribs = {}
         config.services = []
-        config.instance_name = app_config["instance_name"]
+        config.instance_name = gravity_config["instance_name"]
         config.config_type = server_section
-        config.attribs["app_server"] = app_config["app_server"]
-        config.attribs["log_dir"] = app_config["log_dir"]
-        config.attribs["bind_address"] = app_config["bind_address"]
-        config.attribs["bind_port"] = app_config["bind_port"]
+        config.attribs["app_server"] = gravity_config["app_server"]
+        config.attribs["log_dir"] = gravity_config["log_dir"]
+        config.attribs["virtualenv"] = gravity_config["virtualenv"]
+        config.attribs["gunicorn"] = gravity_config["gunicorn"]
+        config.attribs["celery"] = gravity_config["celery"]
+        config.attribs["handlers"] = gravity_config["handlers"]
+        # Store gravity version, in case we need to convert old setting
+        config.attribs['gravity_version'] = __version__
         webapp_service_names = []
 
         # shortcut for galaxy configs in the standard locations -- explicit arg ?
-        config.attribs["galaxy_root"] = app_config.get("root")
+        config.attribs["galaxy_root"] = app_config.get("root") or gravity_config.get("galaxy_root")
         if config.attribs["galaxy_root"] is None:
             if os.environ.get("GALAXY_ROOT_DIR"):
                 config.attribs["galaxy_root"] = abspath(os.environ["GALAXY_ROOT_DIR"])
             elif exists(join(dirname(conf), pardir, "lib", "galaxy")):
                 config.attribs["galaxy_root"] = abspath(join(dirname(conf), pardir))
             else:
-                raise Exception(f"Cannot locate Galaxy root directory: set $GALAXY_ROOT_DIR or `root' in the `galaxy' section of {conf}")
+                exception(f"Cannot locate Galaxy root directory: set $GALAXY_ROOT_DIR or `root' in the `galaxy' section of {conf}")
 
         config.services.append(service_for_service_type(config.attribs["app_server"])(config_type=config.config_type))
         config.services.append(service_for_service_type("celery")(config_type=config.config_type))
@@ -117,11 +130,13 @@ class ConfigManager(object):
         # Marius: Don't think that's gonna work if job config file not defined!
         # TODO: use galaxy config parsing ?
         # TODO: if not, need yaml job config parsing
-        job_conf_xml = app_config["job_config_file"]
+        job_conf_xml = app_config.get("job_config_file", DEFAULT_JOB_CONFIG_FILE)
         if not isabs(job_conf_xml):
             # FIXME: relative to root
             job_conf_xml = abspath(join(config.attribs["galaxy_root"], job_conf_xml))
         if config.config_type == "galaxy" and exists(job_conf_xml):
+            if not job_conf_xml.endswith('.xml'):
+                log.warning(f"Cannot read job configuration from non-xml file: '{job_conf_xml}'")
             for service_name in [x["service_name"] for x in ConfigManager.get_job_config(job_conf_xml) if x["service_name"] not in webapp_service_names]:
                 config.services.append(service_for_service_type("standalone")(config_type=config.config_type, service_name=service_name))
 
@@ -131,15 +146,35 @@ class ConfigManager(object):
         # web process will be a handler, which is not desirable when dynamic handlers are used. Currently Gravity
         # doesn't parse that part of the job config. See logic in lib/galaxy/web_stack/handlers.py _get_is_handler() to
         # see how this is determined.
-        handler_count = app_config.get("job_handler_count", 0)
-        handler_name = app_config.get("job_handler_name_template", "job-handler-{instance_number}")
-        # TODO: should we use supervisor's native process count instead?
-        for i in range(0, handler_count):
-            service_name = handler_name.format(instance_number=i)
-            config.services.append(
-                service_for_service_type("standalone")(config_type=config.config_type, service_name=service_name, server_pool="job-handlers"))
-
+        self.create_handler_services(gravity_config, config)
         return config
+
+    def create_handler_services(self, gravity_config, config):
+        expanded_handlers = self.expand_handlers(gravity_config, config)
+        for service_name, handler_settings in expanded_handlers.items():
+            pools = handler_settings.get('pools')
+            config.services.append(
+                service_for_service_type("standalone")(config_type=config.config_type, service_name=service_name, server_pools=pools))
+
+    @staticmethod
+    def expand_handlers(gravity_config, config):
+        handlers = gravity_config.get("handlers", {})
+        expanded_handlers = {}
+        default_name_template = "{name}_{process}"
+        for service_name, handler_config in handlers.items():
+            count = handler_config.get("processes", 1)
+            name_template = handler_config.get("name_template")
+            if name_template is None:
+                if count == 1 and service_name[-1].isdigit():
+                    # Assume we have an explicit handler name, don't apply pattern
+                    expanded_handlers[service_name] = handler_config
+                    continue
+            name_template = (name_template or default_name_template).strip()
+            for index in range(count):
+                expanded_service_name = name_template.format(name=service_name, process=index, instance_name=config.instance_name)
+                if expanded_service_name not in expanded_handlers:
+                    expanded_handlers[expanded_service_name] = handler_config
+        return expanded_handlers
 
     @staticmethod
     def get_job_config(conf):
@@ -303,10 +338,13 @@ class ConfigManager(object):
         return rval
 
     def get_instance_config(self, instance_name):
-        for config in self.state.config_files.values():
+        for config in list(self.state.config_files.values()):
             if config["instance_name"] == instance_name:
                 return config
-        return None
+        exception(f'Instance "{instance_name}" unknown, known instance(s) are {", ".join(self.get_registered_instance_names())}.')
+
+    def get_registered_instance_names(self):
+        return [c['instance_name'] for c in self.state.config_files.values()]
 
     def get_instance_services(self, instance_name):
         return self.get_instance_config(instance_name)["services"]
@@ -349,7 +387,7 @@ class ConfigManager(object):
                 defaults = {"galaxy_root": galaxy_root}
             conf = self.get_config(config_file, defaults=defaults)
             if conf is None:
-                raise Exception(f"Cannot add {config_file}: File is unknown type")
+                exception(f"Cannot add {config_file}: File is unknown type")
             if conf["instance_name"] is None:
                 conf["instance_name"] = conf["config_type"] + "-" + hashlib.md5(os.urandom(32)).hexdigest()[:12]
             conf_data = {
@@ -367,7 +405,7 @@ class ConfigManager(object):
             return
         conf = self.get_config(new)
         if conf is None:
-            raise Exception(f"Cannot add {new}: File is unknown type")
+            exception(f"Cannot add {new}: File is unknown type")
         with self.state as state:
             state.config_files[new] = state.config_files.pop(old)
         info("Reregistered config %s as %s", old, new)

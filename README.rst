@@ -106,11 +106,8 @@ unset are shown)::
     # Application server, either gunicorn (default) or unicornherder
     app_server: gunicorn
 
-    # Application/web server bind address (default: localhost), use 0.0.0.0 for all interfaces on host
-    bind_address: localhost
-
-    # Application/web server bind port (default: 8080)
-    bind_port: 8080
+    # Application/web server bind (default: localhost:8080), use 0.0.0.0:8080 for all interfaces on host
+    bind: 'localhost:8080'
 
     # Path to Galaxy source if not running from the source directory
     galaxy_root:
@@ -143,8 +140,8 @@ run standalone Galaxy job handler processes if you:
    handling jobs. This is the preferred method for specifying job handlers.
 2. Define static ``<handler id="..."/>`` handlers in the XML-format job configuration file.
 
-Configuration Precendence
--------------------------
+Configuration Precedence
+------------------------
 
 Gravity's configuration is defined in Galaxy's configuration file to be easy and familiar for Galaxy administrators, but
 Gravity maintains its own state in ``$GRAVITY_STATE_DIR/configstate.yaml``.  **If set**, the options in ``galaxy.yml``
@@ -274,8 +271,7 @@ A ``configstate.yaml`` file for a Galaxy service might look like::
         attribs:
           app_server: gunicorn
           log_dir: /home/nate/work/galaxy/database/gravity/log
-          bind_address: localhost
-          bind_port: 8080
+          bind: 'localhost:8080'
           galaxy_root: /home/nate/work/galaxy
         services:
         - config_type: galaxy

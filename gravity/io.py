@@ -32,3 +32,7 @@ def warn(message, *args):
     if args:
         message = message % args
     click.echo(click.style(message, fg="red"), err=True)
+
+
+def exception(message):
+    raise click.ClickException(click.style(message, bold=True, fg="red"))

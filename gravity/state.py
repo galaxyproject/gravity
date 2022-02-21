@@ -3,6 +3,8 @@ state data.
 """
 import enum
 import errno
+import os
+from collections import defaultdict
 
 import yaml
 
@@ -37,38 +39,53 @@ class GalaxyGunicornService(Service):
     service_type = "gunicorn"
     service_name = "gunicorn"
     graceful_method = GracefulMethod.SIGHUP
-    command_template = "gunicorn 'galaxy.webapps.galaxy.fast_factory:factory()' --timeout 300" \
-                       " --pythonpath lib -k galaxy.webapps.galaxy.workers.Worker -b {bind_address}:{bind_port}"
+    command_template = "{virtualenv_bin}gunicorn 'galaxy.webapps.galaxy.fast_factory:factory()'" \
+                       " --timeout {gunicorn[timeout]}" \
+                       " --pythonpath lib" \
+                       " -k galaxy.webapps.galaxy.workers.Worker" \
+                       " -b {gunicorn[bind]}" \
+                       " --workers={gunicorn[workers]}" \
+                       " {gunicorn[extra_args]}"
 
 
 class GalaxyUnicornHerderService(Service):
     service_type = "unicornherder"
     service_name = "unicornherder"
     graceful_method = GracefulMethod.SIGHUP
-    command_template = "unicornherder --pidfile {supervisor_state_dir}/{program_name}.pid --" \
-                       " 'galaxy.webapps.galaxy.fast_factory:factory()' --timeout 300" \
-                       " --pythonpath lib -k galaxy.webapps.galaxy.workers.Worker -b {bind_address}:{bind_port}" \
+    command_template = "{virtualenv_bin}unicornherder --pidfile {supervisor_state_dir}/{program_name}.pid --" \
+                       " 'galaxy.webapps.galaxy.fast_factory:factory()'" \
+                       " --timeout {gunicorn[timeout]}" \
+                       " --pythonpath lib" \
+                       " -k galaxy.webapps.galaxy.workers.Worker" \
+                       " -b {gunicorn[bind]}" \
+                       " --workers={gunicorn[workers]}" \
                        " --access-logfile {log_dir}/gunicorn.access.log" \
-                       " --error-logfile {log_dir}/gunicorn.error.log --capture-output"
+                       " --error-logfile {log_dir}/gunicorn.error.log --capture-output" \
+                       " {gunicorn[extra_args]}"
 
 
 class GalaxyCeleryService(Service):
     service_type = "celery"
     service_name = "celery"
-    command_template = "celery --app galaxy.celery worker --concurrency 2 -l debug"
+    command_template = "{virtualenv_bin}celery" \
+                       " --app galaxy.celery worker" \
+                       " --concurrency {celery[concurrency]}" \
+                       " --loglevel" \
+                       " {celery[loglevel]}" \
+                       " {celery[extra_args]}"
 
 
 class GalaxyCeleryBeatService(Service):
     service_type = "celery-beat"
     service_name = "celery-beat"
-    command_template = "celery --app galaxy.celery beat -l debug"
+    command_template = "{virtualenv_bin}celery --app galaxy.celery beat --loglevel {celery[loglevel]}"
 
 
 class GalaxyStandaloneService(Service):
     service_type = "standalone"
     service_name = "standalone"
     # FIXME: supervisor-specific
-    command_template = "python ./lib/galaxy/main.py -c {galaxy_conf} --server-name={server_name}{attach_to_pool_opt}" \
+    command_template = "{virtualenv_bin}python ./lib/galaxy/main.py -c {galaxy_conf} --server-name={server_name}{attach_to_pool_opt}" \
                        " --pid-file={supervisor_state_dir}/{program_name}.pid"
 
 
@@ -87,9 +104,16 @@ class ConfigFile(AttributeDict):
             "instance_name": self["instance_name"],
             "galaxy_root": self["attribs"]["galaxy_root"],
             "log_dir": self["attribs"]["log_dir"],
-            "bind_address": self["attribs"]["bind_address"],
-            "bind_port": self["attribs"]["bind_port"],
+            "gunicorn":  self.gunicorn_config,
         }
+
+    @property
+    def gunicorn_config(self):
+        # We used to store bind_address and bind_port instead of a gunicorn config key, so restore from here
+        gunicorn = self["attribs"].get("gunicorn")
+        if not gunicorn and 'bind_address' in self["attribs"]:
+            return {'bind': f'{self["attribs"]["bind_address"]}:{self["attribs"]["bind_port"]}'}
+        return gunicorn
 
 
 class GravityState(AttributeDict):
@@ -106,11 +130,15 @@ class GravityState(AttributeDict):
 
     def __init__(self, *args, **kwargs):
         super(GravityState, self).__init__(*args, **kwargs)
+        normalized_state = defaultdict(dict)
         for key in ("config_files",):
             if key not in self:
                 self[key] = {}
             for config_file, config_dict in self[key].items():
-                self[key][config_file] = ConfigFile(config_dict)
+                # resolve path, so we always deal with absolute and symlink-resolved paths
+                config_file = os.path.realpath(config_file)
+                normalized_state[key][config_file] = ConfigFile(config_dict)
+        self.update(normalized_state)
 
     def __enter__(self):
         return self

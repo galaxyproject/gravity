@@ -12,7 +12,7 @@ from gravity.process_manager import BaseProcessManager
 from gravity.state import GracefulMethod
 from gravity.util import which
 
-from supervisor import supervisorctl
+from supervisor import supervisorctl  # type: ignore
 
 
 SUPERVISORD_CONF_TEMPLATE = """;
@@ -202,7 +202,7 @@ class SupervisorProcessManager(BaseProcessManager):
     def terminate(self):
         if self.foreground:
             # if running in foreground, if terminate is called, then supervisord should've already received a SIGINT
-            self.__supervisord_popen.wait()
+            self.__supervisord_popen and self.__supervisord_popen.wait()
 
     def _service_program_name(self, instance_name, service):
         if self.use_group:
@@ -220,9 +220,14 @@ class SupervisorProcessManager(BaseProcessManager):
 
         # used by the "standalone" service type
         attach_to_pool_opt = ""
-        server_pool = service.get("server_pool")
-        if server_pool:
-            attach_to_pool_opt = f" --attach-to-pool={server_pool}"
+        server_pools = service.get("server_pools")
+        if server_pools:
+            _attach_to_pool_opt = " ".join(f"--attach-to-pool={server_pool}" for server_pool in server_pools)
+            # Insert a single leading space
+            attach_to_pool_opt = f" {_attach_to_pool_opt}"
+
+        virtualenv_dir = attribs.get("virtualenv")
+        virtualenv_bin = f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}' if virtualenv_dir else ""
 
         format_vars = {
             "log_dir": attribs["log_dir"],
@@ -230,13 +235,14 @@ class SupervisorProcessManager(BaseProcessManager):
             "config_type": service["config_type"],
             "server_name": service["service_name"],
             "attach_to_pool_opt": attach_to_pool_opt,
-            "bind_address": attribs["bind_address"],
-            "bind_port": attribs["bind_port"],
+            "gunicorn": attribs["gunicorn"],
+            "celery": attribs["celery"],
             "galaxy_umask": service.get("umask", "022"),
             "program_name": program_name,
             "process_name_opt": process_name_opt,
             "galaxy_conf": config_file,
             "galaxy_root": attribs["galaxy_root"],
+            "virtualenv_bin": virtualenv_bin,
             "supervisor_state_dir": self.supervisor_state_dir,
         }
         format_vars["command"] = service.command_template.format(**format_vars)
@@ -303,7 +309,7 @@ class SupervisorProcessManager(BaseProcessManager):
             # deleted services
             if "remove_services" in config:
                 for service in config["remove_services"]:
-                    info("Removing service %s", self.__service_program_name(instance_name, service))
+                    info("Removing service %s", self._service_program_name(instance_name, service))
                     conf = join(instance_conf_dir, f"{service['config_type']}_{service['service_type']}_{service['service_name']}.conf")
                     if exists(conf):
                         os.unlink(conf)
@@ -361,7 +367,7 @@ class SupervisorProcessManager(BaseProcessManager):
         self.update()
         for instance_name in self.get_instance_names(instance_names)[0]:
             for service in self.config_manager.get_instance_services(instance_name):
-                program_name = self.__service_program_name(instance_name, service)
+                program_name = self._service_program_name(instance_name, service)
                 if service.graceful_method == GracefulMethod.SIGHUP:
                     self.supervisorctl("signal", "SIGHUP", program_name)
                 else:

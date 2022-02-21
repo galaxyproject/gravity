@@ -1,6 +1,8 @@
 *~
 *.*.swp
 *.pyc
+.coverage
+coverage.xml
 .tox/
 /build/
 /dist/
