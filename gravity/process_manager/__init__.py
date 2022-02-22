@@ -6,11 +6,10 @@ import importlib
 import inspect
 import os
 import subprocess
-import sys
 from abc import ABCMeta, abstractmethod
 
 from gravity.config_manager import ConfigManager
-from gravity.io import error
+from gravity.io import exception
 from gravity.util import which
 
 
@@ -74,8 +73,7 @@ class BaseProcessManager(object, metaclass=ABCMeta):
         # supervisor has a built-in tail command but it only works on a single log file. `galaxyctl supervisorctl tail
         # ...` can be used if desired, though
         if not self.tail:
-            error("`tail` not found on $PATH, please install it")
-            return
+            exception("`tail` not found on $PATH, please install it")
         if not instance_names:
             instance_names = self.get_instance_names(instance_names)[0]
         log_files = []
@@ -112,6 +110,5 @@ class BaseProcessManager(object, metaclass=ABCMeta):
         elif registered_instance_names:
             instance_names = registered_instance_names
         else:
-            error("No instances registered (hint: `galaxyctl register /path/to/galaxy.yml`)")
-            sys.exit(1)
+            exception("No instances registered (hint: `galaxyctl register /path/to/galaxy.yml`)")
         return instance_names, unknown_instance_names

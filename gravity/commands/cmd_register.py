@@ -2,7 +2,7 @@ import click
 
 from gravity import config_manager
 from gravity import options
-from gravity.io import error
+from gravity.io import exception
 
 
 @click.command("register")
@@ -17,4 +17,4 @@ def cli(ctx, config):
         try:
             cm.add(config)
         except Exception as exc:
-            error("Caught exception: %s", exc)
+            exception("Caught exception: %s", exc)

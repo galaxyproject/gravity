@@ -4,7 +4,7 @@ import click
 
 from gravity import config_manager, options
 from gravity import process_manager
-from gravity.io import info, error
+from gravity.io import info, exception
 
 
 @click.command("start")
@@ -18,8 +18,9 @@ def cli(ctx, foreground, instance):
             # If there are no configs registered, we will attempt to auto-register one
             cm.auto_register()
         if not cm.instance_count:
-            error("Nothing to start: no Galaxy instances configured and no Galaxy configuration files cound be found, "
-                  "see `galaxyctl register --help`")
+            exception(
+                "Nothing to start: no Galaxy instances configured and no Galaxy configuration files found, "
+                "see `galaxyctl register --help`")
             sys.exit(1)
     with process_manager.process_manager(state_dir=ctx.parent.state_dir, foreground=foreground) as pm:
         pm.start(instance)
