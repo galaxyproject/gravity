@@ -120,6 +120,8 @@ class ConfigManager(object):
                 config.attribs["galaxy_root"] = abspath(os.environ["GALAXY_ROOT_DIR"])
             elif exists(join(dirname(conf), pardir, "lib", "galaxy")):
                 config.attribs["galaxy_root"] = abspath(join(dirname(conf), pardir))
+            elif conf.endswith(join('galaxy', 'config', 'sample', 'galaxy.yml.sample')):
+                config.attribs["galaxy_root"] = abspath(join(dirname(conf), pardir, pardir, pardir, pardir))
             else:
                 exception(f"Cannot locate Galaxy root directory: set $GALAXY_ROOT_DIR or `root' in the `galaxy' section of {conf}")
 

@@ -87,6 +87,35 @@ def test_cmd_show(state_dir, galaxy_yml):
     assert details['config_type'] == 'galaxy'
 
 
+def test_cmd_show_config_does_not_exist(state_dir, galaxy_yml):
+    runner = CliRunner()
+    result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'show', str(galaxy_yml)])
+    assert result.exit_code == 1
+    assert f"{str(galaxy_yml)} is not a registered config file." in result.output
+    assert "No config files have been registered." in result.output
+    assert "Registered config files are:" not in result.output
+    assert f'To register this config file run "galaxyctl register {str(galaxy_yml)}"' in result.output
+    # register the sample file, but ask for galaxy.yml
+    result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'register', str(galaxy_yml + '.sample')])
+    assert result.exit_code == 0
+    result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'show', str(galaxy_yml)])
+    assert result.exit_code == 1
+    assert f"{str(galaxy_yml)} is not a registered config file." in result.output
+    assert "Registered config files are:" in result.output
+    assert f'To register this config file run "galaxyctl register {str(galaxy_yml)}"'
+
+
+def test_cmd_instances(state_dir, galaxy_yml):
+    runner = CliRunner()
+    result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'instances'])
+    assert result.exit_code == 0
+    assert not result.output
+    test_cmd_register(state_dir, galaxy_yml)
+    result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'instances'])
+    assert result.exit_code == 0
+    assert "_default_" in result.output
+
+
 def test_cmd_configs(state_dir, galaxy_yml):
     runner = CliRunner()
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'configs'])
