@@ -16,6 +16,9 @@ from gravity.defaults import (
     CELERY_DEFAULT_CONFIG,
     DEFAULT_INSTANCE_NAME,
     GUNICORN_DEFAULT_CONFIG,
+    GXIT_DEFAULT_IP,
+    GXIT_DEFAULT_PORT,
+    GXIT_DEFAULT_SESSIONS,
 )
 from gravity.io import debug, error, exception, info, warn
 from gravity.state import (
@@ -85,6 +88,7 @@ class ConfigManager(object):
             "app_server": "gunicorn",
             "gunicorn": GUNICORN_DEFAULT_CONFIG,
             "celery": CELERY_DEFAULT_CONFIG,
+            "gx_it_proxy": {},
             "handlers": {},
         }
         if defaults is not None:
@@ -109,6 +113,7 @@ class ConfigManager(object):
         config.attribs["gunicorn"] = gravity_config["gunicorn"]
         config.attribs["celery"] = gravity_config["celery"]
         config.attribs["handlers"] = gravity_config["handlers"]
+        config.attribs["gx_it_proxy"] = gravity_config["gx_it_proxy"]
         # Store gravity version, in case we need to convert old setting
         config.attribs['gravity_version'] = __version__
         webapp_service_names = []
@@ -129,7 +134,6 @@ class ConfigManager(object):
         config.services.append(service_for_service_type("celery")(config_type=config.config_type))
         config.services.append(service_for_service_type("celery-beat")(config_type=config.config_type))
         # If this is a Galaxy config, parse job_conf.xml for any *static* standalone handlers
-        # Marius: Don't think that's gonna work if job config file not defined!
         # TODO: use galaxy config parsing ?
         # TODO: if not, need yaml job config parsing
         job_conf_xml = app_config.get("job_config_file", DEFAULT_JOB_CONFIG_FILE)
@@ -149,6 +153,7 @@ class ConfigManager(object):
         # doesn't parse that part of the job config. See logic in lib/galaxy/web_stack/handlers.py _get_is_handler() to
         # see how this is determined.
         self.create_handler_services(gravity_config, config)
+        self.create_gxit_services(gravity_config, app_config, config)
         return config
 
     def create_handler_services(self, gravity_config, config):
@@ -157,6 +162,17 @@ class ConfigManager(object):
             pools = handler_settings.get('pools')
             config.services.append(
                 service_for_service_type("standalone")(config_type=config.config_type, service_name=service_name, server_pools=pools))
+
+    def create_gxit_services(self, gravity_config, app_config, config):
+        if app_config.get("interactivetools_enable") and gravity_config["gx_it_proxy"].get("enable"):
+            # TODO: resolve against data_dir, or bring in galaxy-config ?
+            # CWD in supervisor template is galaxy_root, so this should work for simple cases as is
+            gxit_config = gravity_config['gx_it_proxy']
+            gxit_config["sessions"] = app_config.get("interactivetools_map", GXIT_DEFAULT_SESSIONS)
+            gxit_config["ip"] = gxit_config.get("ip", GXIT_DEFAULT_IP)
+            gxit_config["port"] = gxit_config.get("port", GXIT_DEFAULT_PORT)
+            gxit_config["verbose"] = '--verbose' if gxit_config.get("verbose") else ''
+            config.services.append(service_for_service_type("gx-it-proxy")(config_type=config.config_type, gxit=gxit_config))
 
     @staticmethod
     def expand_handlers(gravity_config, config):

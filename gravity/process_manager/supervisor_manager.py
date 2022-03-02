@@ -116,6 +116,26 @@ redirect_stderr = true
 {process_name_opt}
 """
 
+
+SUPERVISORD_SERVICE_TEMPLATES["gx-it-proxy"] = """;
+; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
+;
+
+[program:{program_name}]
+command         = {command}
+directory       = {galaxy_root}
+umask           = {galaxy_umask}
+autostart       = true
+autorestart     = true
+startsecs       = 10
+stopwaitsecs    = 10
+numprocs        = 1
+stdout_logfile  = {log_file}
+redirect_stderr = true
+{process_name_opt}
+"""
+
+
 SUPERVISORD_SERVICE_TEMPLATES["standalone"] = """;
 ; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
 ;
@@ -237,6 +257,7 @@ class SupervisorProcessManager(BaseProcessManager):
             "attach_to_pool_opt": attach_to_pool_opt,
             "gunicorn": attribs["gunicorn"],
             "celery": attribs["celery"],
+            "gx_it_proxy": attribs["gx_it_proxy"],
             "galaxy_umask": service.get("umask", "022"),
             "program_name": program_name,
             "process_name_opt": process_name_opt,

@@ -81,6 +81,13 @@ class GalaxyCeleryBeatService(Service):
     command_template = "{virtualenv_bin}celery --app galaxy.celery beat --loglevel {celery[loglevel]}"
 
 
+class GalaxyGxItProxyService(Service):
+    service_type = "gx-it-proxy"
+    service_name = "gx-it-proxy"
+    command_template = "{virtualenv_bin}npx gx-it-proxy --ip {gx_it_proxy[ip]} --port {gx_it_proxy[port]}" \
+                       " --sessions {gx_it_proxy[sessions]} {gx_it_proxy[verbose]}"
+
+
 class GalaxyStandaloneService(Service):
     service_type = "standalone"
     service_name = "standalone"
@@ -164,5 +171,6 @@ SERVICE_CLASS_MAP = {
     "unicornherder": GalaxyUnicornHerderService,
     "celery": GalaxyCeleryService,
     "celery-beat": GalaxyCeleryBeatService,
+    "gx-it-proxy": GalaxyGxItProxyService,
     "standalone": GalaxyStandaloneService,
 }

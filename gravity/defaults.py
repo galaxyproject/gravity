@@ -14,3 +14,6 @@ CELERY_DEFAULT_CONFIG = {
     "concurrency": 2,
     "extra_args": ""
 }
+GXIT_DEFAULT_IP = "localhost"
+GXIT_DEFAULT_PORT = 4002
+GXIT_DEFAULT_SESSIONS = "database/interactivetools_map.sqlite"
