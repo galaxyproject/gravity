@@ -55,6 +55,20 @@ def test_update(galaxy_yml, default_config_manager):
         pm.update()
 
 
+def test_update_force(galaxy_yml, default_config_manager):
+    test_update(galaxy_yml, default_config_manager)
+    instance_conf_dir = Path(default_config_manager.state_dir) / 'supervisor' / 'supervisord.conf.d' / '_default_.d'
+    gunicorn_conf_path = instance_conf_dir / "galaxy_gunicorn_gunicorn.conf"
+    assert gunicorn_conf_path.exists()
+    update_time = gunicorn_conf_path.stat().st_mtime
+    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
+        pm.update()
+    assert gunicorn_conf_path.stat().st_mtime == update_time
+    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
+        pm.update(force=True)
+    assert gunicorn_conf_path.stat().st_mtime != update_time
+
+
 @pytest.mark.parametrize('job_conf', [[JOB_CONF_XML_DYNAMIC_HANDLERS]], indirect=True)
 def test_dynamic_handlers(default_config_manager, galaxy_yml, job_conf):
     galaxy_yml.write(DYNAMIC_HANDLER_CONFIG)

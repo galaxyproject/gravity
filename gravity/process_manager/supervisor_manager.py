@@ -279,7 +279,7 @@ class SupervisorProcessManager(BaseProcessManager):
         with open(conf, "w") as out:
             out.write(template.format(**format_vars))
 
-    def _process_config_changes(self, configs, meta_changes):
+    def _process_config_changes(self, configs, meta_changes, force=False):
         # remove the services of any configs which have been removed
         for config in meta_changes["remove_configs"].values():
             instance_name = config["instance_name"]
@@ -294,7 +294,7 @@ class SupervisorProcessManager(BaseProcessManager):
         for config_file, config in configs.items():
             instance_name = config["instance_name"]
             attribs = config["attribs"]
-            update_all_configs = False
+            update_all_configs = False or force
 
             # config attribs have changed (galaxy_root, virtualenv, etc.)
             if "update_attribs" in config:
@@ -431,10 +431,10 @@ class SupervisorProcessManager(BaseProcessManager):
             time.sleep(0.5)
         info("supervisord has terminated")
 
-    def update(self):
+    def update(self, force=False):
         """Add newly defined servers, remove any that are no longer present"""
         configs, meta_changes = self.config_manager.determine_config_changes()
-        self._process_config_changes(configs, meta_changes)
+        self._process_config_changes(configs, meta_changes, force)
         # only need to update if supervisord is running, otherwise changes will be picked up at next start
         if self.__supervisord_is_running():
             self.supervisorctl("update")
