@@ -38,6 +38,17 @@ def wait_for_startup(state_dir, free_port, prefix="/"):
     return startup_logs
 
 
+def wait_for_gxit_proxy(state_dir):
+    startup_logs = ""
+    with open(state_dir / "log" / 'gx-it-proxy.log') as fh:
+        for _ in range(STARTUP_TIMEOUT * 4):
+            startup_logs = fh.read()
+            if 'Listening' in startup_logs:
+                return True
+            time.sleep(0.25)
+    return startup_logs
+
+
 def start_instance(state_dir, free_port):
     runner = CliRunner()
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'start'])
@@ -58,6 +69,20 @@ def test_cmd_start(state_dir, galaxy_yml, startup_config, free_port):
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'stop'])
     assert result.exit_code == 0
     assert "All processes stopped, supervisord will exit" in result.output
+
+
+def test_cmd_start_with_gxit(state_dir, galaxy_yml, gxit_startup_config, free_port):
+    galaxy_yml.write(json.dumps(gxit_startup_config))
+    runner = CliRunner()
+    result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'register', str(galaxy_yml)])
+    assert result.exit_code == 0
+    result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'update'])
+    assert result.exit_code == 0
+    start_instance(state_dir, free_port)
+    result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'status'])
+    assert result.exit_code == 0
+    startup_done = wait_for_gxit_proxy(state_dir)
+    assert startup_done is True, f"gx-it-proxy startup failed. gx-it-proxy startup logs:\n {startup_done}"
 
 
 def test_cmd_restart_with_update(state_dir, galaxy_yml, startup_config, free_port):

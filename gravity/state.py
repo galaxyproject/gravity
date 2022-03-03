@@ -84,7 +84,7 @@ class GalaxyCeleryBeatService(Service):
 class GalaxyGxItProxyService(Service):
     service_type = "gx-it-proxy"
     service_name = "gx-it-proxy"
-    command_template = "{virtualenv_bin}npx gx-it-proxy --ip {gx_it_proxy[ip]} --port {gx_it_proxy[port]}" \
+    command_template = "npm_config_yes=true {virtualenv_bin}npx github:galaxyproject/gx-it-proxy --ip {gx_it_proxy[ip]} --port {gx_it_proxy[port]}" \
                        " --sessions {gx_it_proxy[sessions]} {gx_it_proxy[verbose]}"
 
 

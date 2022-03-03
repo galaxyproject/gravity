@@ -46,19 +46,6 @@ gravity:
         - job-handler.special
 """
 
-GXIT_CONFIG = """
-gravity:
-  gx_it_proxy:
-    enable: true
-    proxy_port: 4002
-galaxy:
-  interactivetools_enable: true
-  interactivetools_map: database/interactivetools_map.sqlite
-  galaxy_infrastructure_url: http://localhost:8080
-  interactivetools_upstream_proxy: false
-  interactivetools_proxy_host: localhost:4002
-"""
-
 
 def test_update(galaxy_yml, default_config_manager):
     default_config_manager.add([str(galaxy_yml)])
@@ -112,12 +99,14 @@ def test_static_handlers(default_config_manager, galaxy_yml, job_conf):
         assert 'galaxy.yml --server-name=handler1 --pid-file=' in handler1_config_path.open().read()
 
 
-def test_gxit_handler(default_config_manager, galaxy_yml):
-    galaxy_yml.write(GXIT_CONFIG)
+def test_gxit_handler(default_config_manager, galaxy_yml, gxit_config):
+    galaxy_yml.write(json.dumps(gxit_config))
     default_config_manager.add([str(galaxy_yml)])
     with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
         pm.update()
         instance_conf_dir = Path(default_config_manager.state_dir) / 'supervisor' / 'supervisord.conf.d' / '_default_.d'
         gxit_config_path = instance_conf_dir / 'galaxy_gx-it-proxy_gx-it-proxy.conf'
         assert gxit_config_path.exists()
-        assert 'npx gx-it-proxy --ip localhost --port 4002 --sessions database/interactivetools_map.sqlite' in gxit_config_path.read_text()
+        gxit_port = gxit_config["gravity"]["gx_it_proxy"]["port"]
+        sessions = "database/interactivetools_map.sqlite"
+        assert f'npx github:galaxyproject/gx-it-proxy --ip localhost --port {gxit_port} --sessions {sessions}' in gxit_config_path.read_text()
