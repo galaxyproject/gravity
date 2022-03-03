@@ -129,6 +129,7 @@ autostart       = true
 autorestart     = true
 startsecs       = 10
 stopwaitsecs    = 10
+environment     = npm_config_yes=true
 numprocs        = 1
 stdout_logfile  = {log_file}
 redirect_stderr = true
