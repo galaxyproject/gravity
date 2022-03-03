@@ -14,7 +14,7 @@ STARTUP_TIMEOUT = 20
 def test_cmd_register(state_dir, galaxy_yml):
     runner = CliRunner()
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'register', str(galaxy_yml)])
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     assert 'Registered galaxy config:' in result.output
 
 
@@ -22,7 +22,7 @@ def test_cmd_deregister(state_dir, galaxy_yml):
     test_cmd_register(state_dir, galaxy_yml)
     runner = CliRunner()
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'deregister', str(galaxy_yml)])
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     assert 'Deregistered config:' in result.output
 
 
@@ -53,7 +53,7 @@ def start_instance(state_dir, free_port):
     runner = CliRunner()
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'start'])
     assert re.search(r"gunicorn\s*STARTING", result.output)
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     startup_done = wait_for_startup(state_dir, free_port)
     assert startup_done is True, f"Startup failed. Application startup logs:\n {startup_done}"
 
@@ -62,12 +62,12 @@ def test_cmd_start(state_dir, galaxy_yml, startup_config, free_port):
     galaxy_yml.write(json.dumps(startup_config))
     runner = CliRunner()
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'register', str(galaxy_yml)])
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'update'])
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     start_instance(state_dir, free_port)
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'stop'])
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     assert "All processes stopped, supervisord will exit" in result.output
 
 
@@ -75,12 +75,12 @@ def test_cmd_start_with_gxit(state_dir, galaxy_yml, gxit_startup_config, free_po
     galaxy_yml.write(json.dumps(gxit_startup_config))
     runner = CliRunner()
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'register', str(galaxy_yml)])
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'update'])
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     start_instance(state_dir, free_port)
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'status'])
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     startup_done = wait_for_gxit_proxy(state_dir)
     assert startup_done is True, f"gx-it-proxy startup failed. gx-it-proxy startup logs:\n {startup_done}"
 
@@ -89,16 +89,16 @@ def test_cmd_restart_with_update(state_dir, galaxy_yml, startup_config, free_por
     galaxy_yml.write(json.dumps(startup_config))
     runner = CliRunner()
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'register', str(galaxy_yml)])
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'update'])
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     start_instance(state_dir, free_port)
     # change prefix
     prefix = '/galaxypf/'
     startup_config['galaxy']['galaxy_url_prefix'] = prefix
     galaxy_yml.write(json.dumps(startup_config))
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'restart'])
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     startup_done = wait_for_startup(state_dir=state_dir, free_port=free_port, prefix=prefix)
     assert startup_done is True, f"Startup failed. Application startup logs:\n {startup_done}"
 
@@ -107,7 +107,7 @@ def test_cmd_show(state_dir, galaxy_yml):
     test_cmd_register(state_dir, galaxy_yml)
     runner = CliRunner()
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'show', str(galaxy_yml)])
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     details = safe_load(result.output)
     assert details['config_type'] == 'galaxy'
 
@@ -122,7 +122,7 @@ def test_cmd_show_config_does_not_exist(state_dir, galaxy_yml):
     assert f'To register this config file run "galaxyctl register {str(galaxy_yml)}"' in result.output
     # register the sample file, but ask for galaxy.yml
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'register', str(galaxy_yml + '.sample')])
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'show', str(galaxy_yml)])
     assert result.exit_code == 1
     assert f"{str(galaxy_yml)} is not a registered config file." in result.output
@@ -133,21 +133,21 @@ def test_cmd_show_config_does_not_exist(state_dir, galaxy_yml):
 def test_cmd_instances(state_dir, galaxy_yml):
     runner = CliRunner()
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'instances'])
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     assert not result.output
     test_cmd_register(state_dir, galaxy_yml)
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'instances'])
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     assert "_default_" in result.output
 
 
 def test_cmd_configs(state_dir, galaxy_yml):
     runner = CliRunner()
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'configs'])
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     assert 'No config files registered' in result.output
     test_cmd_register(state_dir, galaxy_yml)
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'configs'])
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     assert result.output.startswith("TYPE")
     assert str(galaxy_yml) in result.output
