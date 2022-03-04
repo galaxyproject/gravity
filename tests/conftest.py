@@ -7,9 +7,26 @@ import tempfile
 from pathlib import Path
 
 import pytest
+import yaml
 from gravity import config_manager
 
 TEST_DIR = Path(os.path.dirname(__file__))
+GXIT_CONFIG = """
+gravity:
+  gunicorn:
+    bind: 'localhost:{gx_port}'
+  gx_it_proxy:
+    enable: true
+    port: {gxit_port}
+    verbose: true
+galaxy:
+  conda_auto_init: false
+  interactivetools_enable: true
+  interactivetools_map: database/interactivetools_map.sqlite
+  galaxy_infrastructure_url: http://localhost:{gx_port}
+  interactivetools_upstream_proxy: false
+  interactivetools_proxy_host: localhost:{gxit_port}
+"""
 
 
 @pytest.fixture(scope='session')
@@ -77,6 +94,9 @@ def free_port():
     return portnum
 
 
+another_free_port = free_port
+
+
 @pytest.fixture()
 def startup_config(galaxy_virtualenv, free_port):
     return {
@@ -89,6 +109,18 @@ def startup_config(galaxy_virtualenv, free_port):
             'conda_auto_init': False
         }
     }
+
+
+@pytest.fixture
+def gxit_config(free_port, another_free_port):
+    config_yaml = GXIT_CONFIG.format(gxit_port=another_free_port, gx_port=free_port)
+    return yaml.safe_load(config_yaml)
+
+
+@pytest.fixture
+def gxit_startup_config(galaxy_virtualenv, gxit_config):
+    gxit_config['gravity']['virtualenv'] = galaxy_virtualenv
+    return gxit_config
 
 
 @pytest.fixture(scope="session")
