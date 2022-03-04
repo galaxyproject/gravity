@@ -123,4 +123,4 @@ def test_gxit_handler(default_config_manager, galaxy_yml, gxit_config):
         assert gxit_config_path.exists()
         gxit_port = gxit_config["gravity"]["gx_it_proxy"]["port"]
         sessions = "database/interactivetools_map.sqlite"
-        assert f'npx github:galaxyproject/gx-it-proxy --ip localhost --port {gxit_port} --sessions {sessions}' in gxit_config_path.read_text()
+        assert f'npx gx-it-proxy --ip localhost --port {gxit_port} --sessions {sessions}' in gxit_config_path.read_text()
