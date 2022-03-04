@@ -2,9 +2,27 @@
  History
 =========
 
+0.10.0
+======
+
+- Fix for the case where a job_conf.xml exists but no handlers are defined by @natefoo in https://github.com/galaxyproject/gravity/pull/24
+- Do not raise error if config file section is empty by @nsoranzo in https://github.com/galaxyproject/gravity/pull/25
+- Add tests for static handlers and a defined job_conf.xml with no handlers by @natefoo in https://github.com/galaxyproject/gravity/pull/26
+- Fix minor typos in readme by @ic4f in https://github.com/galaxyproject/gravity/pull/27
+- Move configuration to gravity key of galaxy.yml file by @mvdbeek in https://github.com/galaxyproject/gravity/pull/28
+- Fix for resolved galaxy.yml.sample symlink by @mvdbeek in https://github.com/galaxyproject/gravity/pull/31
+- Support managing gx-it-proxy via gravity by @mvdbeek in https://github.com/galaxyproject/gravity/pull/32
+
 0.9
 ===
 
+- Gunicorn/fastAPI support, click support, tests by @mvdbeek in https://github.com/galaxyproject/gravity/pull/14
+- Don't test on Python 3.6, which is unsupported by @natefoo in https://github.com/galaxyproject/gravity/pull/17
+- Update README. Also some various small bugfixes and fixes for other stuff mentioned in the README by @natefoo in https://github.com/galaxyproject/gravity/pull/18
+- Add unicornherder support by @natefoo in https://github.com/galaxyproject/gravity/pull/15
+- Expose the log following used by `start -f` as its own subcommand. by @natefoo in https://github.com/galaxyproject/gravity/pull/16
+- Better integration with Galaxy's run.sh by @natefoo in https://github.com/galaxyproject/gravity/pull/19
+- Use relative paths in supervisord by @natefoo in https://github.com/galaxyproject/gravity/pull/21
 - Converted CLI from `argparse`_ to `click`_.
 - Stole ideas and code from `planemo`_ in general.
 - Improve the AttributeDict so that it can have "hidden" items (anything that
