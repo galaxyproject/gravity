@@ -14,13 +14,14 @@ from gravity.util import which
 
 from supervisor import supervisorctl  # type: ignore
 
+DEFAULT_SUPERVISOR_SOCKET_PATH = os.environ.get("SUPERVISORD_SOCKET", '%(here)s/supervisor.sock')
 
-SUPERVISORD_CONF_TEMPLATE = """;
+SUPERVISORD_CONF_TEMPLATE = f""";
 ; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
 ;
 
 [unix_http_server]
-file = %(here)s/supervisor.sock
+file = {DEFAULT_SUPERVISOR_SOCKET_PATH}
 
 [supervisord]
 logfile = %(here)s/supervisord.log
@@ -32,7 +33,7 @@ nodaemon = false
 supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
 
 [supervisorctl]
-serverurl = unix://%(here)s/supervisor.sock
+serverurl = unix://{DEFAULT_SUPERVISOR_SOCKET_PATH}
 
 [include]
 files = supervisord.conf.d/*.d/*.conf supervisord.conf.d/*.conf
@@ -171,7 +172,7 @@ class SupervisorProcessManager(BaseProcessManager):
         self.supervisord_conf_path = join(self.supervisor_state_dir, "supervisord.conf")
         self.supervisord_conf_dir = join(self.supervisor_state_dir, "supervisord.conf.d")
         self.supervisord_pid_path = join(self.supervisor_state_dir, "supervisord.pid")
-        self.supervisord_sock_path = join(self.supervisor_state_dir, "supervisor.sock")
+        self.supervisord_sock_path = os.environ.get("SUPERVISORD_SOCKET", join(self.supervisor_state_dir, "supervisor.sock"))
         self.__supervisord_popen = None
         self.foreground = foreground
 
