@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 from gravity import process_manager
+from yaml import safe_load
 
 
 JOB_CONF_XML_STATIC_HANDLERS = """
@@ -118,6 +119,24 @@ def test_no_static_handlers(default_config_manager, galaxy_yml, job_conf):
 def test_static_handlers_yaml(default_config_manager, galaxy_yml, job_conf):
     with open(galaxy_yml, 'w') as config_fh:
         config_fh.write(json.dumps({'galaxy': {'job_config_file': str(job_conf)}}))
+    default_config_manager.add([str(galaxy_yml)])
+    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
+        pm.update()
+        instance_conf_dir = Path(default_config_manager.state_dir) / 'supervisor' / 'supervisord.conf.d' / '_default_.d'
+        handler0_config_path = instance_conf_dir / 'galaxy_standalone_handler0.conf'
+        assert handler0_config_path.exists()
+        assert 'galaxy.yml --server-name=handler0 --pid-file=' in handler0_config_path.open().read()
+        handler1_config_path = instance_conf_dir / 'galaxy_standalone_handler1.conf'
+        assert handler1_config_path.exists()
+        assert 'galaxy.yml --server-name=handler1 --pid-file=' in handler1_config_path.open().read()
+        assert (instance_conf_dir / 'galaxy_standalone_sge_handler.conf').exists()
+        assert (instance_conf_dir / 'galaxy_standalone_special_handler0.conf').exists()
+        assert (instance_conf_dir / 'galaxy_standalone_special_handler1.conf').exists()
+
+
+def test_static_handlers_embedded_in_galaxy_yml(default_config_manager, galaxy_yml):
+    with open(galaxy_yml, 'w') as config_fh:
+        config_fh.write(json.dumps({'galaxy': {'job_config': safe_load(JOB_CONF_YAML_STATIC_HANDLERS)}}))
     default_config_manager.add([str(galaxy_yml)])
     with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
         pm.update()
