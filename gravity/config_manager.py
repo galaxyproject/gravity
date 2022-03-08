@@ -135,14 +135,11 @@ class ConfigManager(object):
         config.services.append(service_for_service_type("celery-beat")(config_type=config.config_type))
         # If this is a Galaxy config, parse job_conf.xml for any *static* standalone handlers
         # TODO: use galaxy config parsing ?
-        # TODO: if not, need yaml job config parsing
         job_conf_xml = app_config.get("job_config_file", DEFAULT_JOB_CONFIG_FILE)
         if not isabs(job_conf_xml):
             # FIXME: relative to root
             job_conf_xml = abspath(join(config.attribs["galaxy_root"], job_conf_xml))
         if config.config_type == "galaxy" and exists(job_conf_xml):
-            if not job_conf_xml.endswith('.xml'):
-                log.warning(f"Cannot read job configuration from non-xml file: '{job_conf_xml}'")
             for service_name in [x["service_name"] for x in ConfigManager.get_job_config(job_conf_xml) if x["service_name"] not in webapp_service_names]:
                 config.services.append(service_for_service_type("standalone")(config_type=config.config_type, service_name=service_name))
 
@@ -199,9 +196,17 @@ class ConfigManager(object):
         """Extract handler names from job_conf.xml"""
         # FIXME: use galaxy job conf parsing I guess, if it's not a mess of slow loading deps
         rval = []
-        root = elementtree.parse(conf).getroot()
-        for handler in (root.find("handlers") or []):
-            rval.append({"service_name": handler.attrib["id"]})
+        if conf.endswith('.xml'):
+            root = elementtree.parse(conf).getroot()
+            for handler in (root.find("handlers") or []):
+                rval.append({"service_name": handler.attrib["id"]})
+        elif conf.endswith(('.yml', '.yaml')):
+            with open(conf) as job_conf_fh:
+                job_conf_dict = safe_load(job_conf_fh.read())
+            handling = job_conf_dict.get('handling') or {}
+            processes = handling.get('processes') or []
+            for handler in processes:
+                rval.append({"service_name": handler})
         return rval
 
     def _register_config_file(self, key, val):

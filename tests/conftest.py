@@ -76,7 +76,9 @@ def default_config_manager(state_dir):
 
 @pytest.fixture()
 def job_conf(request, galaxy_root_dir):
-    job_conf_path = galaxy_root_dir / 'config' / 'job_conf.xml'
+    conf = yaml.safe_load(request.param[0])
+    ext = "xml" if isinstance(conf, str) else "yml"
+    job_conf_path = galaxy_root_dir / 'config' / f'job_conf.{ext}'
     with open(job_conf_path, 'w') as jcfh:
         jcfh.write(request.param[0])
     yield job_conf_path
