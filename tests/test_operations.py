@@ -1,6 +1,7 @@
 import json
 import re
 import time
+from pathlib import Path
 
 import requests
 from click.testing import CliRunner
@@ -121,7 +122,8 @@ def test_cmd_show_config_does_not_exist(state_dir, galaxy_yml):
     assert "Registered config files are:" not in result.output
     assert f'To register this config file run "galaxyctl register {str(galaxy_yml)}"' in result.output
     # register the sample file, but ask for galaxy.yml
-    result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'register', str(galaxy_yml + '.sample')])
+    sample_file = Path(galaxy_yml).parent / 'galaxy.yml.sample'
+    result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'register', str(sample_file)])
     assert result.exit_code == 0, result.output
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'show', str(galaxy_yml)])
     assert result.exit_code == 1

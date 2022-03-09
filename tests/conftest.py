@@ -46,7 +46,7 @@ def galaxy_root_dir(galaxy_git_dir, tmpdir_factory):
 
 @pytest.fixture()
 def galaxy_yml(galaxy_root_dir):
-    config = galaxy_root_dir / 'config' / 'galaxy.yml'
+    config = galaxy_root_dir / 'config' / 'galaxy123.yml'
     sample_config = galaxy_root_dir / 'config' / 'galaxy.yml.sample'
     sample_config.copy(config)
     try:
