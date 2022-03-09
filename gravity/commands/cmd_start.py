@@ -1,5 +1,3 @@
-import sys
-
 import click
 
 from gravity import config_manager, options
@@ -22,7 +20,6 @@ def cli(ctx, foreground, instance, quiet=False):
             exception(
                 "Nothing to start: no Galaxy instances configured and no Galaxy configuration files found, "
                 "see `galaxyctl register --help`")
-            sys.exit(1)
     with process_manager.process_manager(state_dir=ctx.parent.state_dir, foreground=foreground) as pm:
         pm.start(instance)
         if foreground:
