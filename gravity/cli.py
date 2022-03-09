@@ -67,13 +67,14 @@ class GravityCLI(click.MultiCommand):
 @click.command(context_settings=CONTEXT_SETTINGS)
 @options.debug_option()
 @options.state_dir_option()
+@options.no_log_option()
 @click.pass_context
-def galaxy(ctx, debug, state_dir):
+def galaxy(ctx, debug, state_dir, quiet):
     """Run Galaxy server in the foreground"""
     set_debug(debug)
     ctx.state_dir = state_dir
     mod = __import__("gravity.commands.cmd_start", None, None, ["cli"])
-    return ctx.invoke(mod.cli, foreground=True)
+    return ctx.invoke(mod.cli, foreground=True, quiet=quiet)
 
 
 @click.command(cls=GravityCLI, context_settings=CONTEXT_SETTINGS)

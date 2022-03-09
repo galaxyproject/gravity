@@ -10,8 +10,9 @@ from gravity.io import info, exception
 @click.command("start")
 @options.required_instance_arg()
 @click.option("-f", "--foreground", is_flag=True, default=False, help="Run in foreground")
+@options.no_log_option()
 @click.pass_context
-def cli(ctx, foreground, instance):
+def cli(ctx, foreground, instance, quiet=False):
     """Start configured services."""
     if not instance:
         with config_manager.config_manager(state_dir=ctx.parent.state_dir) as cm:
@@ -25,7 +26,7 @@ def cli(ctx, foreground, instance):
     with process_manager.process_manager(state_dir=ctx.parent.state_dir, foreground=foreground) as pm:
         pm.start(instance)
         if foreground:
-            pm.follow(instance)
+            pm.follow(instance, quiet=quiet)
         elif pm.config_manager.single_instance == 1:
             config = list(pm.config_manager.get_registered_configs().values())[0]
             info(f"Log files are in {config.attribs['log_dir']}")
