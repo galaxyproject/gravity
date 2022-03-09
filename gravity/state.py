@@ -11,6 +11,9 @@ import yaml
 from gravity.util import AttributeDict
 
 
+GALAXY_YML_SAMPLE_PATH = "lib/galaxy/config/sample/galaxy.yml.sample"
+
+
 class GracefulMethod(enum.Enum):
     DEFAULT = 0
     SIGHUP = 1
@@ -144,6 +147,11 @@ class GravityState(AttributeDict):
             for config_file, config_dict in self[key].items():
                 # resolve path, so we always deal with absolute and symlink-resolved paths
                 config_file = os.path.realpath(config_file)
+                if config_file.endswith(GALAXY_YML_SAMPLE_PATH):
+                    root_dir = config_dict['attribs']['galaxy_root']
+                    non_sample_path = os.path.join(root_dir, 'config', 'galaxy.yml')
+                    if os.path.exists(non_sample_path):
+                        config_file = non_sample_path
                 normalized_state[key][config_file] = ConfigFile(config_dict)
         self.update(normalized_state)
 
