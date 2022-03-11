@@ -1,33 +1,27 @@
 import json
 from pathlib import Path
 
-from gravity.defaults import (
-    DEFAULT_GUNICORN_BIND,
-    DEFAULT_GUNICORN_TIMEOUT,
-    DEFAULT_GUNICORN_WORKERS,
-    DEFAULT_INSTANCE_NAME,
-    CELERY_DEFAULT_CONFIG
-
-)
+from gravity.settings import Settings
 
 
 def test_register_defaults(galaxy_yml, galaxy_root_dir, state_dir, default_config_manager):
     default_config_manager.add([str(galaxy_yml)])
     assert str(galaxy_yml) in default_config_manager.state['config_files']
     state = default_config_manager.state['config_files'][str(galaxy_yml)]
+    default_settings = Settings()
     assert state['config_type'] == 'galaxy'
-    assert state['instance_name'] == DEFAULT_INSTANCE_NAME
+    assert state['instance_name'] == default_settings.instance_name
     assert state['services'] == []
     attributes = state['attribs']
     assert attributes['app_server'] == 'gunicorn'
     assert Path(attributes['log_dir']) == Path(state_dir) / 'log'
     assert Path(attributes['galaxy_root']) == galaxy_root_dir
     gunicorn_attributes = attributes['gunicorn']
-    assert gunicorn_attributes['bind'] == DEFAULT_GUNICORN_BIND
-    assert gunicorn_attributes['workers'] == DEFAULT_GUNICORN_WORKERS
-    assert gunicorn_attributes['timeout'] == DEFAULT_GUNICORN_TIMEOUT
-    assert gunicorn_attributes['extra_args'] == ""
-    assert attributes['celery'] == CELERY_DEFAULT_CONFIG
+    assert gunicorn_attributes['bind'] == default_settings.gunicorn.bind
+    assert gunicorn_attributes['workers'] == default_settings.gunicorn.workers
+    assert gunicorn_attributes['timeout'] == default_settings.gunicorn.timeout
+    assert gunicorn_attributes['extra_args'] == default_settings.gunicorn.extra_args
+    assert attributes['celery'] == default_settings.celery.dict()
 
 
 def test_register_non_default(galaxy_yml, default_config_manager):
@@ -48,7 +42,8 @@ def test_register_non_default(galaxy_yml, default_config_manager):
     state = default_config_manager.state['config_files'][str(galaxy_yml)]
     gunicorn_attributes = state['attribs']['gunicorn']
     assert gunicorn_attributes['bind'] == new_bind
-    assert gunicorn_attributes['workers'] == DEFAULT_GUNICORN_WORKERS
+    default_settings = Settings()
+    assert gunicorn_attributes['workers'] == default_settings.gunicorn.workers
     celery_attributes = state['attribs']['celery']
     assert celery_attributes['concurrency'] == concurrency
 
