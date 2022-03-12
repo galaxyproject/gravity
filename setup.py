@@ -36,7 +36,7 @@ setup(
     license="MIT",
     keywords="gravity galaxy",
     python_requires=">=3.6",
-    install_requires=["Click", "supervisor", "pyyaml", "ruamel.yaml", "pydantic"],
+    install_requires=["Click", "supervisor", "pyyaml", "ruamel.yaml", "pydantic", "jsonref"],
     entry_points={"console_scripts": [
         "galaxy = gravity.cli:galaxy",
         "galaxyctl = gravity.cli:galaxyctl",

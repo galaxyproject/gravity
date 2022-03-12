@@ -5,12 +5,14 @@ import copy
 import os
 import sys
 
+import jsonref
 import ruamel.yaml
 import yaml
+from gravity.settings import Settings
 
 
 class AttributeDict(dict):
-    yaml_tag = u'tag:yaml.org,2002:map'
+    yaml_tag = "tag:yaml.org,2002:map"
 
     @classmethod
     def loads(cls, s, *args, **kwargs):
@@ -68,3 +70,43 @@ def which(file):
         if os.path.exists(path + "/" + file):
             return path + "/" + file
     return None
+
+
+def settings_to_sample():
+    schema = Settings.schema_json()
+    # expand schema for easier processing
+    data = jsonref.loads(schema)
+    strings = [process_property("gravity", data)]
+    for key, value in data["properties"].items():
+        strings.append(process_property(key, value, 1))
+    concat = "\n".join(strings)
+    return concat
+
+
+def process_property(key, value, depth=0):
+    extra_white_space = "  " * depth
+    default = value.get("default", "")
+    if default != "":
+        # make values more yaml-like.
+        default = yaml.dump(default)
+        if default.endswith("\n...\n"):
+            default = default[: -(len("\n...\n"))]
+        default = default.strip()
+    description = "\n".join(f"{extra_white_space}# {desc}" for desc in value["description"].strip().split("\n"))
+    allOff = value.get("allOf", [])
+    if allOff and allOff[0].get("properties"):
+        # we've got a nested map, add key once
+        description = f"{description}\n{extra_white_space}{key}:\n"
+    for item in allOff:
+        if "enum" in item:
+            description = f'{description}\n{extra_white_space}# Valid options are: {", ".join(item["enum"])}'
+        if "properties" in item:
+            for _key, _value in item["properties"].items():
+                description = f"{description}\n{process_property(_key, _value, depth=depth+1)}"
+    if not default == "{}" or key == "handlers":
+        comment = "# "
+        if key == "gravity":
+            # gravity section should not be commented
+            comment = ""
+        description = f"{description}\n{extra_white_space}{comment}{key}: {default}\n"
+    return description
