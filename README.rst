@@ -102,19 +102,19 @@ unset are shown)::
 
   # Configuration for Gravity process manager.
   # ``uwsgi:`` section will be ignored if Galaxy is started via Gravity commands (e.g ``./run.sh``, ``galaxy`` or ``galaxyctl``).
-  gravity: 
+  gravity:
 
     # Specify Galaxy's root directory.
     # Gravity will attempt to find the root directory, but you can set the directory explicitly with this option.
-    # galaxy_root: 
+    # galaxy_root:
 
     # Set to a directory that should contain log files for the processes controlled by Gravity.
     # If not specified defaults to ``<state_dir>/logs``.
-    # log_dir: 
+    # log_dir:
 
     # Set to Galaxy's virtualenv directory.
     # If not specified, Gravity assumes all processes are on PATH.
-    # virtualenv: 
+    # virtualenv:
 
     # Select the application server.
     # ``gunicorn`` is the default application server.
@@ -145,7 +145,7 @@ unset are shown)::
       # timeout: 300
 
       # Extra arguments to pass to Gunicorn command line.
-      # extra_args: 
+      # extra_args:
 
       # Use Gunicorn's --preload option to fork workers after loading the Galaxy Application.
       # Consumes less memory when multiple processes are configured.
@@ -162,7 +162,7 @@ unset are shown)::
       # loglevel: DEBUG
 
       # Extra arguments to pass to Celery command line.
-      # extra_args: 
+      # extra_args:
 
     # Configuration for gx-it-proxy.
     gx_it_proxy:
@@ -185,11 +185,11 @@ unset are shown)::
 
       # Forward all requests to IP.
       # This is an advanced option that is only needed when proxying to remote interactive tool container that cannot be reached through the local network.
-      # forward_ip: 
+      # forward_ip:
 
       # Forward all requests to port.
       # This is an advanced option that is only needed when proxying to remote interactive tool container that cannot be reached through the local network.
-      # forward_port: 
+      # forward_port:
 
       # Rewrite location blocks with proxy port.
       # This is an advanced option that is only needed when proxying to remote interactive tool container that cannot be reached through the local network.

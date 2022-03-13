@@ -108,5 +108,9 @@ def process_property(key, value, depth=0):
         if key == "gravity":
             # gravity section should not be commented
             comment = ""
-        description = f"{description}\n{extra_white_space}{comment}{key}: {default}\n"
+        if default == "":
+            value_sep = ""
+        else:
+            value_sep = " "
+        description = f"{description}\n{extra_white_space}{comment}{key}:{value_sep}{default}\n"
     return description
