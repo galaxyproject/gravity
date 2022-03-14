@@ -48,6 +48,8 @@ class GalaxyGunicornService(Service):
                        " -k galaxy.webapps.galaxy.workers.Worker" \
                        " -b {gunicorn[bind]}" \
                        " --workers={gunicorn[workers]}" \
+                       " --config python:galaxy.web_stack.gunicorn_config" \
+                       " {gunicorn[preload]}" \
                        " {gunicorn[extra_args]}"
 
 
@@ -64,6 +66,8 @@ class GalaxyUnicornHerderService(Service):
                        " --workers={gunicorn[workers]}" \
                        " --access-logfile {log_dir}/gunicorn.access.log" \
                        " --error-logfile {log_dir}/gunicorn.error.log --capture-output" \
+                       " --config python:galaxy.web_stack.gunicorn_config" \
+                       " {gunicorn[preload]}" \
                        " {gunicorn[extra_args]}"
 
 

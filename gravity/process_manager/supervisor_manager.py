@@ -4,6 +4,7 @@ import errno
 import os
 import shutil
 import subprocess
+import sys
 import time
 from os.path import exists, join
 
@@ -15,6 +16,8 @@ from gravity.util import which
 from supervisor import supervisorctl  # type: ignore
 
 DEFAULT_SUPERVISOR_SOCKET_PATH = os.environ.get("SUPERVISORD_SOCKET", '%(here)s/supervisor.sock')
+# Works around https://github.com/galaxyproject/galaxy/issues/11821
+OSX_DISABLE_FORK_SAFETY = ",OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES" if sys.platform == 'darwin' else ""
 
 SUPERVISORD_CONF_TEMPLATE = f""";
 ; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
@@ -53,12 +56,12 @@ autostart       = true
 autorestart     = true
 startsecs       = 15
 stopwaitsecs    = 65
-environment     = GALAXY_CONFIG_FILE="{galaxy_conf}"
+environment     = PYTHONPATH=lib,GALAXY_CONFIG_FILE="{galaxy_conf}"%s
 numprocs        = 1
 stdout_logfile  = {log_file}
 redirect_stderr = true
 {process_name_opt}
-"""  # noqa: E501
+""" % OSX_DISABLE_FORK_SAFETY  # noqa: E501
 
 SUPERVISORD_SERVICE_TEMPLATES["gunicorn"] = """;
 ; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
@@ -72,12 +75,12 @@ autostart       = true
 autorestart     = true
 startsecs       = 15
 stopwaitsecs    = 65
-environment     = GALAXY_CONFIG_FILE="{galaxy_conf}"
+environment     = PYTHONPATH=lib,GALAXY_CONFIG_FILE="{galaxy_conf}"%s
 numprocs        = 1
 stdout_logfile  = {log_file}
 redirect_stderr = true
 {process_name_opt}
-"""  # noqa: E501
+""" % OSX_DISABLE_FORK_SAFETY  # noqa: E501
 
 SUPERVISORD_SERVICE_TEMPLATES["celery"] = """;
 ; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
@@ -254,6 +257,8 @@ class SupervisorProcessManager(BaseProcessManager):
 
         virtualenv_dir = attribs.get("virtualenv")
         virtualenv_bin = f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}' if virtualenv_dir else ""
+        gunicorn_options = attribs["gunicorn"].copy()
+        gunicorn_options["preload"] = "--preload" if gunicorn_options["preload"] else ""
 
         format_vars = {
             "log_dir": attribs["log_dir"],
@@ -261,7 +266,7 @@ class SupervisorProcessManager(BaseProcessManager):
             "config_type": service["config_type"],
             "server_name": service["service_name"],
             "attach_to_pool_opt": attach_to_pool_opt,
-            "gunicorn": attribs["gunicorn"],
+            "gunicorn": gunicorn_options,
             "celery": attribs["celery"],
             "gx_it_proxy": attribs["gx_it_proxy"],
             "galaxy_umask": service.get("umask", "022"),
