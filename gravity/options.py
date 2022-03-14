@@ -13,6 +13,12 @@ def state_dir_option():
     )
 
 
+def no_log_option():
+    return click.option(
+        '--quiet', is_flag=True, default=False, help="Only output supervisor logs, do not include process logs"
+    )
+
+
 def required_config_arg(name="config", exists=False, nargs=None):
     arg_type = click.Path(
         exists=exists,

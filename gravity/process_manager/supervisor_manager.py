@@ -186,6 +186,10 @@ class SupervisorProcessManager(BaseProcessManager):
     def use_group(self):
         return not self.config_manager.single_instance
 
+    @property
+    def log_file(self):
+        return join(self.supervisor_state_dir, "supervisord.log")
+
     def __supervisord_is_running(self):
         try:
             assert exists(self.supervisord_pid_path)

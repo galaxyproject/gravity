@@ -69,7 +69,7 @@ class BaseProcessManager(object, metaclass=ABCMeta):
     def reload(self, instance_names):
         """ """
 
-    def follow(self, instance_names):
+    def follow(self, instance_names, quiet=False):
         # supervisor has a built-in tail command but it only works on a single log file. `galaxyctl supervisorctl tail
         # ...` can be used if desired, though
         if not self.tail:
@@ -77,16 +77,21 @@ class BaseProcessManager(object, metaclass=ABCMeta):
         if not instance_names:
             instance_names = self.get_instance_names(instance_names)[0]
         log_files = []
-        for instance_name in instance_names:
-            services = self.config_manager.get_instance_services(instance_name)
-            config = self.config_manager.get_instance_config(instance_name)
-            log_dir = config["attribs"]["log_dir"]
-            for service in services:
-                program_name = self._service_program_name(instance_name, service)
-                log_files.append(self._service_log_file(log_dir, program_name))
-            cmd = [self.tail, "-f"] + log_files
+        if quiet:
+            cmd = [self.tail, "-f", self.log_file]
             tail_popen = subprocess.Popen(cmd)
             tail_popen.wait()
+        else:
+            for instance_name in instance_names:
+                services = self.config_manager.get_instance_services(instance_name)
+                config = self.config_manager.get_instance_config(instance_name)
+                log_dir = config["attribs"]["log_dir"]
+                for service in services:
+                    program_name = self._service_program_name(instance_name, service)
+                    log_files.append(self._service_log_file(log_dir, program_name))
+                cmd = [self.tail, "-f"] + log_files
+                tail_popen = subprocess.Popen(cmd)
+                tail_popen.wait()
 
     @abstractmethod
     def graceful(self, instance_names):
