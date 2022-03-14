@@ -65,7 +65,7 @@ def test_deregister(galaxy_yml, default_config_manager):
 def test_rename(galaxy_root_dir, state_dir, default_config_manager):
     galaxy_yml_sample = galaxy_root_dir / "config" / "galaxy.yml.sample"
     default_config_manager.add([str(galaxy_yml_sample)])
-    galaxy_yml = galaxy_root_dir / "config" / "galaxy.yml"
+    galaxy_yml = galaxy_root_dir / "config" / "galaxy123.yml"
     galaxy_yml_sample.copy(galaxy_yml)
     assert default_config_manager.is_registered(str(galaxy_yml_sample.realpath()))
     assert not default_config_manager.is_registered(str(galaxy_yml))
@@ -79,3 +79,12 @@ def test_auto_register(galaxy_yml, default_config_manager, monkeypatch):
     assert not default_config_manager.is_registered(str(galaxy_yml))
     default_config_manager.auto_register()
     assert default_config_manager.is_registered(str(galaxy_yml))
+
+
+def test_register_sample_update_to_non_sample(galaxy_root_dir, state_dir, default_config_manager):
+    galaxy_yml_sample = galaxy_root_dir / "config" / "galaxy.yml.sample"
+    default_config_manager.add([str(galaxy_yml_sample)])
+    galaxy_yml = galaxy_root_dir / "config" / "galaxy.yml"
+    galaxy_yml_sample.copy(galaxy_yml)
+    default_config_manager.instance_count == 1
+    assert default_config_manager.get_registered_config(str(galaxy_yml))
