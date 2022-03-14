@@ -56,7 +56,7 @@ autostart       = true
 autorestart     = true
 startsecs       = 15
 stopwaitsecs    = 65
-environment     = PYTHONPATH=lib,GALAXY_CONFIG_FILE="{galaxy_conf}%s"
+environment     = PYTHONPATH=lib,GALAXY_CONFIG_FILE="{galaxy_conf}"%s
 numprocs        = 1
 stdout_logfile  = {log_file}
 redirect_stderr = true
@@ -75,7 +75,7 @@ autostart       = true
 autorestart     = true
 startsecs       = 15
 stopwaitsecs    = 65
-environment     = PYTHONPATH=lib,GALAXY_CONFIG_FILE="{galaxy_conf}%s"
+environment     = PYTHONPATH=lib,GALAXY_CONFIG_FILE="{galaxy_conf}"%s
 numprocs        = 1
 stdout_logfile  = {log_file}
 redirect_stderr = true
@@ -257,6 +257,8 @@ class SupervisorProcessManager(BaseProcessManager):
 
         virtualenv_dir = attribs.get("virtualenv")
         virtualenv_bin = f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}' if virtualenv_dir else ""
+        gunicorn_options = attribs["gunicorn"].copy()
+        gunicorn_options["preload"] = "--preload" if gunicorn_options["preload"] else ""
 
         format_vars = {
             "log_dir": attribs["log_dir"],
@@ -264,7 +266,7 @@ class SupervisorProcessManager(BaseProcessManager):
             "config_type": service["config_type"],
             "server_name": service["service_name"],
             "attach_to_pool_opt": attach_to_pool_opt,
-            "gunicorn": attribs["gunicorn"],
+            "gunicorn": gunicorn_options,
             "celery": attribs["celery"],
             "gx_it_proxy": attribs["gx_it_proxy"],
             "galaxy_umask": service.get("umask", "022"),
