@@ -12,14 +12,7 @@ from os.path import abspath, dirname, exists, expanduser, isabs, join
 from yaml import safe_load
 
 from gravity import __version__
-from gravity.defaults import (
-    CELERY_DEFAULT_CONFIG,
-    DEFAULT_INSTANCE_NAME,
-    GUNICORN_DEFAULT_CONFIG,
-    GXIT_DEFAULT_IP,
-    GXIT_DEFAULT_PORT,
-    GXIT_DEFAULT_SESSIONS,
-)
+from gravity.settings import Settings
 from gravity.io import debug, error, exception, info, warn
 from gravity.state import (
     ConfigFile,
@@ -76,50 +69,38 @@ class ConfigManager(object):
             os.unlink(config_state_json)
 
     def get_config(self, conf, defaults=None):
+        defaults = defaults or {}
         server_section = self.galaxy_server_config_section
         with open(conf) as config_fh:
             config_dict = safe_load(config_fh)
-
-        default_config = {
-            "galaxy_root": None,
-            "log_dir": join(expanduser(self.state_dir), "log"),
-            "virtualenv": None,
-            "instance_name": DEFAULT_INSTANCE_NAME,
-            "app_server": "gunicorn",
-            "gunicorn": GUNICORN_DEFAULT_CONFIG,
-            "celery": CELERY_DEFAULT_CONFIG,
-            "gx_it_proxy": {},
-            "handlers": {},
-        }
-        if defaults is not None:
-            recursive_update(default_config, defaults)
+        _gravity_config = config_dict.get(self.gravity_config_section) or {}
+        gravity_config = Settings(**recursive_update(defaults, _gravity_config))
+        if gravity_config.log_dir is None:
+            gravity_config.log_dir = join(expanduser(self.state_dir), "log")
 
         if server_section not in config_dict and self.gravity_config_section not in config_dict:
             error(f"Config file {conf} does not look like valid Galaxy, Reports or Tool Shed configuration file")
             return None
 
         app_config = config_dict.get(server_section) or {}
-        _gravity_config = config_dict.get(self.gravity_config_section) or {}
-        gravity_config = recursive_update(default_config, _gravity_config)
 
         config = ConfigFile()
         config.attribs = {}
         config.services = []
-        config.instance_name = gravity_config["instance_name"]
+        config.instance_name = gravity_config.instance_name
         config.config_type = server_section
-        config.attribs["app_server"] = gravity_config["app_server"]
-        config.attribs["log_dir"] = gravity_config["log_dir"]
-        config.attribs["virtualenv"] = gravity_config["virtualenv"]
-        config.attribs["gunicorn"] = gravity_config["gunicorn"]
-        config.attribs["celery"] = gravity_config["celery"]
-        config.attribs["handlers"] = gravity_config["handlers"]
-        config.attribs["gx_it_proxy"] = gravity_config["gx_it_proxy"]
+        config.attribs["app_server"] = gravity_config.app_server
+        config.attribs["log_dir"] = gravity_config.log_dir
+        config.attribs["virtualenv"] = gravity_config.virtualenv
+        config.attribs["gunicorn"] = gravity_config.gunicorn.dict()
+        config.attribs["celery"] = gravity_config.celery.dict()
+        config.attribs["handlers"] = gravity_config.handlers
         # Store gravity version, in case we need to convert old setting
         config.attribs['gravity_version'] = __version__
         webapp_service_names = []
 
         # shortcut for galaxy configs in the standard locations -- explicit arg ?
-        config.attribs["galaxy_root"] = app_config.get("root") or gravity_config.get("galaxy_root")
+        config.attribs["galaxy_root"] = app_config.get("root") or gravity_config.galaxy_root
         if config.attribs["galaxy_root"] is None:
             if os.environ.get("GALAXY_ROOT_DIR"):
                 config.attribs["galaxy_root"] = abspath(os.environ["GALAXY_ROOT_DIR"])
@@ -156,27 +137,26 @@ class ConfigManager(object):
         self.create_gxit_services(gravity_config, app_config, config)
         return config
 
-    def create_handler_services(self, gravity_config, config):
+    def create_handler_services(self, gravity_config: Settings, config):
         expanded_handlers = self.expand_handlers(gravity_config, config)
         for service_name, handler_settings in expanded_handlers.items():
             pools = handler_settings.get('pools')
             config.services.append(
                 service_for_service_type("standalone")(config_type=config.config_type, service_name=service_name, server_pools=pools))
 
-    def create_gxit_services(self, gravity_config, app_config, config):
-        if app_config.get("interactivetools_enable") and gravity_config["gx_it_proxy"].get("enable"):
+    def create_gxit_services(self, gravity_config: Settings, app_config, config):
+        if app_config.get("interactivetools_enable") and gravity_config.gx_it_proxy.enable:
             # TODO: resolve against data_dir, or bring in galaxy-config ?
             # CWD in supervisor template is galaxy_root, so this should work for simple cases as is
-            gxit_config = gravity_config['gx_it_proxy']
-            gxit_config["sessions"] = app_config.get("interactivetools_map", GXIT_DEFAULT_SESSIONS)
-            gxit_config["ip"] = gxit_config.get("ip", GXIT_DEFAULT_IP)
-            gxit_config["port"] = gxit_config.get("port", GXIT_DEFAULT_PORT)
-            gxit_config["verbose"] = '--verbose' if gxit_config.get("verbose") else ''
-            config.services.append(service_for_service_type("gx-it-proxy")(config_type=config.config_type, gxit=gxit_config))
+            gxit_config = gravity_config.gx_it_proxy
+            gxit_config.sessions = app_config.get("interactivetools_map", gxit_config.sessions)
+            gxit_config.verbose = '--verbose' if gxit_config.verbose else ''
+            config.services.append(service_for_service_type("gx-it-proxy")(config_type=config.config_type))
+        config.attribs["gx_it_proxy"] = gravity_config.gx_it_proxy.dict()
 
     @staticmethod
-    def expand_handlers(gravity_config, config):
-        handlers = gravity_config.get("handlers", {})
+    def expand_handlers(gravity_config: Settings, config):
+        handlers = gravity_config.handlers or {}
         expanded_handlers = {}
         default_name_template = "{name}_{process}"
         for service_name, handler_config in handlers.items():

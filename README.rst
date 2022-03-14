@@ -100,32 +100,105 @@ Configuration
 The following options in the ``gravity`` section of ``galaxy.yml`` can be used to control Gravity::
 unset are shown)::
 
-    # Override the default instance name, this is mostly hidden from you when running a single instance # of Galaxy
-    instance_name: _default_
+  # Configuration for Gravity process manager.
+  # ``uwsgi:`` section will be ignored if Galaxy is started via Gravity commands (e.g ``./run.sh``, ``galaxy`` or ``galaxyctl``).
+  gravity:
 
-    # Application server, either gunicorn (default) or unicornherder
-    app_server: gunicorn
+    # Specify Galaxy's root directory.
+    # Gravity will attempt to find the root directory, but you can set the directory explicitly with this option.
+    # galaxy_root:
 
-    # Application/web server bind (default: localhost:8080), use 0.0.0.0:8080 for all interfaces on host
-    bind: 'localhost:8080'
+    # Set to a directory that should contain log files for the processes controlled by Gravity.
+    # If not specified defaults to ``<state_dir>/logs``.
+    # log_dir:
 
-    # Path to Galaxy source if not running from the source directory
-    galaxy_root:
+    # Set to Galaxy's virtualenv directory.
+    # If not specified, Gravity assumes all processes are on PATH.
+    # virtualenv:
 
-    # Path to directory where log files will be written (default: $GRAVITY_STATE_DIR/log)
-    log_dir:
+    # Select the application server.
+    # ``gunicorn`` is the default application server.
+    # ``unicornherder`` is a production-oriented manager for (G)unicorn servers that automates zero-downtime Galaxy server restarts,
+    # similar to uWSGI Zerg Mode used in the past.
+    # Valid options are: gunicorn, unicornherder
+    # app_server: gunicorn
 
-    # Number of dynamic job handler processes to start (default: web server handles jobs)
-    job_handler_count:
+    # Override the default instance name.
+    # this is hidden from you when running a single instance.
+    # instance_name: _default_
 
-    # Template for dynamic job handler server naming (default: job-handler-{instance_number})
-    job_handler_name_template:
+    # Configuration for Gunicorn.
+    gunicorn:
 
-Regarding choices for the ``app_server`` option:
+      # The socket to bind. A string of the form: ``HOST``, ``HOST:PORT``, ``unix:PATH``, ``fd://FD``. An IP is a valid HOST.
+      # bind: localhost:8080
 
-- `gunicorn`_ (default): The Gunicorn Python WSGI server
-- `unicornherder`_: Production-oriented manager for (G)unicorn servers that allows for zero-downtime Galaxy server
-  restarts, similar to uWSGI Zerg Mode used in the past.
+      # Controls the number of Galaxy application processes Gunicorn will spawn.
+      # Increased web performance can be attained by increasing this value.
+      # If Gunicorn is the only application on the server, a good starting value is the number of CPUs * 2 + 1.
+      # 4-12 workers should be able to handle hundreds if not thousands of requests per second.
+      # workers: 1
+
+      # Gunicorn workers silent for more than this many seconds are killed and restarted.
+      # Value is a positive number or 0. Setting it to 0 has the effect of infinite timeouts by disabling timeouts for all workers entirely.
+      # If you disable the ``preload`` option workers need to have finished booting within the timeout.
+      # timeout: 300
+
+      # Extra arguments to pass to Gunicorn command line.
+      # extra_args:
+
+      # Use Gunicorn's --preload option to fork workers after loading the Galaxy Application.
+      # Consumes less memory when multiple processes are configured.
+      # preload: true
+
+    # Configuration for Celery Processes.
+    celery:
+
+      # Number of Celery Workers to start.
+      # concurrency: 2
+
+      # Log Level to use for Celery Worker.
+      # Valid options are: DEBUG, INFO, WARNING, ERROR
+      # loglevel: DEBUG
+
+      # Extra arguments to pass to Celery command line.
+      # extra_args:
+
+    # Configuration for gx-it-proxy.
+    gx_it_proxy:
+
+      # Set to true to start gx-it-proxy
+      # enable: false
+
+      # Public-facing IP of the proxy
+      # ip: localhost
+
+      # Public-facing port of the proxy
+      # port: 4002
+
+      # Routes file to monitor.
+      # Should be set to the same path as ``interactivetools_map`` in the ``galaxy:`` section.
+      # sessions: database/interactivetools_map.sqlite
+
+      # Include verbose messages in gx-it-proxy
+      # verbose: true
+
+      # Forward all requests to IP.
+      # This is an advanced option that is only needed when proxying to remote interactive tool container that cannot be reached through the local network.
+      # forward_ip:
+
+      # Forward all requests to port.
+      # This is an advanced option that is only needed when proxying to remote interactive tool container that cannot be reached through the local network.
+      # forward_port:
+
+      # Rewrite location blocks with proxy port.
+      # This is an advanced option that is only needed when proxying to remote interactive tool container that cannot be reached through the local network.
+      # reverse_proxy: false
+
+    # Configure dynamic handlers in this section.
+    # See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defined-handlers for details.
+    # handlers: {}
+
 
 Galaxy Job Handlers
 -------------------

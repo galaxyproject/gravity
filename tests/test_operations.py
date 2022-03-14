@@ -43,8 +43,8 @@ def wait_for_gxit_proxy(state_dir):
     startup_logs = ""
     with open(state_dir / "log" / 'gx-it-proxy.log') as fh:
         for _ in range(STARTUP_TIMEOUT * 4):
-            startup_logs = fh.read()
-            if 'Listening' in startup_logs:
+            startup_logs = f"{startup_logs}{fh.read()}"
+            if 'Watching path' in startup_logs:
                 return True
             time.sleep(0.25)
     return startup_logs
