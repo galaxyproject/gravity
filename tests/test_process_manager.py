@@ -125,10 +125,10 @@ def test_static_handlers_yaml(default_config_manager, galaxy_yml, job_conf):
         instance_conf_dir = Path(default_config_manager.state_dir) / 'supervisor' / 'supervisord.conf.d' / '_default_.d'
         handler0_config_path = instance_conf_dir / 'galaxy_standalone_handler0.conf'
         assert handler0_config_path.exists()
-        assert 'galaxy.yml --server-name=handler0 --pid-file=' in handler0_config_path.open().read()
+        assert '.yml --server-name=handler0 --pid-file=' in handler0_config_path.open().read()
         handler1_config_path = instance_conf_dir / 'galaxy_standalone_handler1.conf'
         assert handler1_config_path.exists()
-        assert 'galaxy.yml --server-name=handler1 --pid-file=' in handler1_config_path.open().read()
+        assert '.yml --server-name=handler1 --pid-file=' in handler1_config_path.open().read()
         assert (instance_conf_dir / 'galaxy_standalone_sge_handler.conf').exists()
         assert (instance_conf_dir / 'galaxy_standalone_special_handler0.conf').exists()
         assert (instance_conf_dir / 'galaxy_standalone_special_handler1.conf').exists()
@@ -143,10 +143,10 @@ def test_static_handlers_embedded_in_galaxy_yml(default_config_manager, galaxy_y
         instance_conf_dir = Path(default_config_manager.state_dir) / 'supervisor' / 'supervisord.conf.d' / '_default_.d'
         handler0_config_path = instance_conf_dir / 'galaxy_standalone_handler0.conf'
         assert handler0_config_path.exists()
-        assert 'galaxy.yml --server-name=handler0 --pid-file=' in handler0_config_path.open().read()
+        assert '.yml --server-name=handler0 --pid-file=' in handler0_config_path.open().read()
         handler1_config_path = instance_conf_dir / 'galaxy_standalone_handler1.conf'
         assert handler1_config_path.exists()
-        assert 'galaxy.yml --server-name=handler1 --pid-file=' in handler1_config_path.open().read()
+        assert '.yml --server-name=handler1 --pid-file=' in handler1_config_path.open().read()
         assert (instance_conf_dir / 'galaxy_standalone_sge_handler.conf').exists()
         assert (instance_conf_dir / 'galaxy_standalone_special_handler0.conf').exists()
         assert (instance_conf_dir / 'galaxy_standalone_special_handler1.conf').exists()
