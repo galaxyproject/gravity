@@ -8,6 +8,7 @@ import os
 import xml.etree.ElementTree as elementtree
 from os import pardir
 from os.path import abspath, dirname, exists, expanduser, isabs, join
+from typing import Union
 
 from yaml import safe_load
 
@@ -114,17 +115,21 @@ class ConfigManager(object):
         config.services.append(service_for_service_type(config.attribs["app_server"])(config_type=config.config_type))
         config.services.append(service_for_service_type("celery")(config_type=config.config_type))
         config.services.append(service_for_service_type("celery-beat")(config_type=config.config_type))
-        # If this is a Galaxy config, parse job_conf.xml for any *static* standalone handlers
-        # TODO: use galaxy config parsing ?
-        # TODO: if not, need yaml job config parsing
-        job_conf_xml = app_config.get("job_config_file", DEFAULT_JOB_CONFIG_FILE)
-        if not isabs(job_conf_xml):
-            # FIXME: relative to root
-            job_conf_xml = abspath(join(config.attribs["galaxy_root"], job_conf_xml))
-        if config.config_type == "galaxy" and exists(job_conf_xml):
-            if not job_conf_xml.endswith('.xml'):
-                log.warning(f"Cannot read job configuration from non-xml file: '{job_conf_xml}'")
-            for service_name in [x["service_name"] for x in ConfigManager.get_job_config(job_conf_xml) if x["service_name"] not in webapp_service_names]:
+
+        if not app_config.get("job_config_file") and app_config.get("job_config"):
+            # config embedded directly in Galaxy config
+            job_config = app_config["job_config"]
+        else:
+            # If this is a Galaxy config, parse job_conf.xml for any *static* standalone handlers
+            # TODO: use galaxy config parsing ?
+            job_config = app_config.get("job_config_file", DEFAULT_JOB_CONFIG_FILE)
+            if not isabs(job_config):
+                # FIXME: relative to root
+                job_config = abspath(join(config.attribs["galaxy_root"], job_config))
+                if not exists(job_config):
+                    job_config = None
+        if config.config_type == "galaxy" and job_config:
+            for service_name in [x["service_name"] for x in ConfigManager.get_job_config(job_config) if x["service_name"] not in webapp_service_names]:
                 config.services.append(service_for_service_type("standalone")(config_type=config.config_type, service_name=service_name))
 
         # Dynamic job handlers are configured using `job_handler_count` in galaxy.yml.
@@ -175,13 +180,26 @@ class ConfigManager(object):
         return expanded_handlers
 
     @staticmethod
-    def get_job_config(conf):
+    def get_job_config(conf: Union[str, dict]):
         """Extract handler names from job_conf.xml"""
-        # FIXME: use galaxy job conf parsing I guess, if it's not a mess of slow loading deps
+        # TODO: use galaxy job conf parsing
         rval = []
-        root = elementtree.parse(conf).getroot()
-        for handler in (root.find("handlers") or []):
-            rval.append({"service_name": handler.attrib["id"]})
+        if isinstance(conf, str):
+            if conf.endswith('.xml'):
+                root = elementtree.parse(conf).getroot()
+                for handler in (root.find("handlers") or []):
+                    rval.append({"service_name": handler.attrib["id"]})
+                return rval
+            elif conf.endswith(('.yml', '.yaml')):
+                with open(conf) as job_conf_fh:
+                    conf = safe_load(job_conf_fh.read())
+            else:
+                exception(f"Unknown job config file type: {conf}")
+        if isinstance(conf, dict):
+            handling = conf.get('handling') or {}
+            processes = handling.get('processes') or []
+            for handler in processes:
+                rval.append({"service_name": handler})
         return rval
 
     def _register_config_file(self, key, val):
