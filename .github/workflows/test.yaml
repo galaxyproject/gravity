@@ -10,6 +10,7 @@ jobs:
     strategy:
       matrix:
         python-version: ['3.7', '3.10']
+        galaxy-branch: ['release_22.01', 'dev']
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v2
@@ -21,5 +22,7 @@ jobs:
         run: pip install tox
       - name: Run tests
         run: tox -e test
+        env:
+          GRAVITY_TEST_GALAXY_BRANCH: ${{ matrix.galaxy-branch }}
       - name: "Upload coverage to Codecov"
         uses: codecov/codecov-action@v2

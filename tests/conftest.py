@@ -10,6 +10,7 @@ import pytest
 import yaml
 from gravity import config_manager
 
+GALAXY_BRANCH = os.environ.get("GRAVITY_TEST_GALAXY_BRANCH", "dev")
 TEST_DIR = Path(os.path.dirname(__file__))
 GXIT_CONFIG = """
 gravity:
@@ -33,7 +34,7 @@ galaxy:
 def galaxy_git_dir():
     galaxy_dir = TEST_DIR / 'galaxy.git'
     if not galaxy_dir.exists():
-        subprocess.run(['git', 'clone', '--bare', '--depth=1', 'https://github.com/galaxyproject/galaxy'], cwd=TEST_DIR)
+        subprocess.run(['git', 'clone', '--bare', '--depth=1', '--branch', GALAXY_BRANCH, 'https://github.com/galaxyproject/galaxy'], cwd=TEST_DIR)
     yield galaxy_dir
 
 
