@@ -95,6 +95,14 @@ class GalaxyGxItProxyService(Service):
                        " --sessions {gx_it_proxy[sessions]} {gx_it_proxy[verbose]}"
 
 
+class GalaxyTUSDService(Service):
+    service_type = "tusd"
+    service_name = "tusd"
+    command_template = "tusd -host={tusd[host]} -port={tusd[port]} -upload-dir={tusd[upload_dir]}" \
+                       " -hooks-http={galaxy_infrastructure_url}/api/upload/hooks" \
+                       " -hooks-http-forward-headers=X-Api-Key,Cookie {tusd[extra_args]}"
+
+
 class GalaxyStandaloneService(Service):
     service_type = "standalone"
     service_name = "standalone"
@@ -184,5 +192,6 @@ SERVICE_CLASS_MAP = {
     "celery": GalaxyCeleryService,
     "celery-beat": GalaxyCeleryBeatService,
     "gx-it-proxy": GalaxyGxItProxyService,
+    "tusd": GalaxyTUSDService,
     "standalone": GalaxyStandaloneService,
 }

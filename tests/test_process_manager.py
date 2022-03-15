@@ -177,3 +177,14 @@ def test_gxit_handler(default_config_manager, galaxy_yml, gxit_config):
         gxit_port = gxit_config["gravity"]["gx_it_proxy"]["port"]
         sessions = "database/interactivetools_map.sqlite"
         assert f'npx gx-it-proxy --ip localhost --port {gxit_port} --sessions {sessions}' in gxit_config_path.read_text()
+
+
+def test_tusd_process(default_config_manager, galaxy_yml, tusd_config):
+    galaxy_yml.write(json.dumps(tusd_config))
+    default_config_manager.add([str(galaxy_yml)])
+    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
+        pm.update()
+        instance_conf_dir = Path(default_config_manager.state_dir) / 'supervisor' / 'supervisord.conf.d' / '_default_.d'
+        tusd_config_path = instance_conf_dir / 'galaxy_tusd_tusd.conf'
+        assert tusd_config_path.exists()
+        assert "tusd -host" in tusd_config_path.read_text()

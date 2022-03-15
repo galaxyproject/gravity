@@ -86,6 +86,9 @@ def settings_to_sample():
 def process_property(key, value, depth=0):
     extra_white_space = "  " * depth
     default = value.get("default", "")
+    if isinstance(default, dict):
+        # Little hack that prevents listing the default value for tusd in the sample config
+        default = {}
     if default != "":
         # make values more yaml-like.
         default = yaml.dump(default)

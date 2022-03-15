@@ -22,6 +22,7 @@ def test_register_defaults(galaxy_yml, galaxy_root_dir, state_dir, default_confi
     assert gunicorn_attributes['timeout'] == default_settings.gunicorn.timeout
     assert gunicorn_attributes['extra_args'] == default_settings.gunicorn.extra_args
     assert attributes['celery'] == default_settings.celery.dict()
+    assert attributes["tusd"] == default_settings.tusd.dict()
 
 
 def test_register_non_default(galaxy_yml, default_config_manager):

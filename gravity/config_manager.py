@@ -90,10 +90,14 @@ class ConfigManager(object):
         config.services = []
         config.instance_name = gravity_config.instance_name
         config.config_type = server_section
+        config.attribs["galaxy_infrastructure_url"] = app_config.get("galaxy_infrastructure_url", "").rstrip("/")
+        if gravity_config.tusd.enable and not config.attribs["galaxy_infrastructure_url"]:
+            exception("To run the tusd server you need to set galaxy_infrastructure_url in the galaxy section of galaxy.yml")
         config.attribs["app_server"] = gravity_config.app_server
         config.attribs["log_dir"] = gravity_config.log_dir
         config.attribs["virtualenv"] = gravity_config.virtualenv
         config.attribs["gunicorn"] = gravity_config.gunicorn.dict()
+        config.attribs["tusd"] = gravity_config.tusd.dict()
         config.attribs["celery"] = gravity_config.celery.dict()
         config.attribs["handlers"] = gravity_config.handlers
         # Store gravity version, in case we need to convert old setting
@@ -115,6 +119,8 @@ class ConfigManager(object):
         config.services.append(service_for_service_type(config.attribs["app_server"])(config_type=config.config_type))
         config.services.append(service_for_service_type("celery")(config_type=config.config_type))
         config.services.append(service_for_service_type("celery-beat")(config_type=config.config_type))
+        if gravity_config.tusd.enable:
+            config.services.append(service_for_service_type("tusd")(config_type=config.config_type))
 
         if not app_config.get("job_config_file") and app_config.get("job_config"):
             # config embedded directly in Galaxy config

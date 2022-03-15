@@ -4,7 +4,20 @@ from typing import (
     Dict,
     Optional,
 )
-from pydantic import BaseModel, BaseSettings, Field, validator
+from pydantic import BaseModel, BaseSettings, Extra, Field, validator
+
+
+def none_to_default(cls, v, field):
+    if all(
+        (
+            # Cater for the occasion where field.default in (0, False)
+            getattr(field, "default", None) is not None,
+            v is None,
+        )
+    ):
+        return field.default
+    else:
+        return v
 
 
 class LogLevel(str, Enum):
@@ -19,8 +32,21 @@ class AppServer(str, Enum):
     unicornherder = "unicornherder"
 
 
-class CelerySettings(BaseModel):
+class TusdSettings(BaseModel):
+    enable: bool = Field(False, description="""
+Enable tusd server.
+If enabled, you also need to set up your proxy as outlined in https://docs.galaxyproject.org/en/latest/admin/nginx.html#receiving-files-via-the-tus-protocol.
+""")
+    host: str = Field("localhost", description="Host to bind the tusd server to")
+    port: int = Field(1080, description="Port to bind the tusd server to")
+    upload_dir: str = Field(description="""
+Directory to store uploads in.
+Must match ``tus_upload_store`` setting in ``galaxy:`` section.
+""")
+    extra_args: str = Field(default="", description="Extra arguments to pass to tusd command line.")
 
+
+class CelerySettings(BaseModel):
     concurrency: int = Field(2, ge=0, description="Number of Celery Workers to start.")
     loglevel: LogLevel = Field(LogLevel.debug, description="Log Level to use for Celery Worker.")
     extra_args: str = Field(default="", description="Extra arguments to pass to Celery command line.")
@@ -125,6 +151,12 @@ this is hidden from you when running a single instance.""")
     gunicorn: GunicornSettings = Field(default={}, description="Configuration for Gunicorn.")
     celery: CelerySettings = Field(default={}, description="Configuration for Celery Processes.")
     gx_it_proxy: GxItProxySettings = Field(default={}, description="Configuration for gx-it-proxy.")
+    # The default value for tusd is a little awkward, but is a convenient way to ensure that if
+    # a user enables tusd that they most also set upload_dir, and yet have the default be valid.
+    tusd: TusdSettings = Field(default={'upload_dir': ''}, description="""
+Configuration for tusd server (https://github.com/tus/tusd).
+The ``tusd`` binary must be installed manually and made available on PATH (e.g in galaxy's .venv/bin directory).
+""")
     handlers: Dict[str, Dict[str, Any]] = Field(
         default={},
         description="""
@@ -132,25 +164,17 @@ Configure dynamic handlers in this section.
 See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defined-handlers for details.
 """)
 
-    def none_to_default(cls, v, field):
-        if all(
-            (
-                # Cater for the occasion where field.default in (0, False)
-                getattr(field, "default", None) is not None,
-                v is None,
-            )
-        ):
-            return field.default
-        else:
-            return v
-
     # Use validators to turn None to default value
     _normalize_gunicorn = validator("gunicorn", allow_reuse=True, pre=True)(none_to_default)
     _normalize_gx_it_proxy = validator("gx_it_proxy", allow_reuse=True, pre=True)(none_to_default)
     _normalize_celery = validator("celery", allow_reuse=True, pre=True)(none_to_default)
+    _normalize_tusd = validator("tusd", allow_reuse=True, pre=True)(none_to_default)
 
     class Config:
         env_prefix = "gravity_"
         env_nested_delimiter = "."
         case_sensitive = False
         use_enum_values = True
+        # Ignore extra fields so you can switch from gravity versions that recognize new fields
+        # to an older version that does not specify the fields, without having to comment them out.
+        extra = Extra.ignore
