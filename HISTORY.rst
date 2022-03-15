@@ -2,6 +2,17 @@
  History
 =========
 
+0.11.0
+======
+
+- Allow setting supervisor socket path via environment variable by @mvdbeek in https://github.com/galaxyproject/gravity/pull/36
+- Automatically switch to non-sample galaxy.yml if it exists by @mvdbeek in https://github.com/galaxyproject/gravity/pull/39
+- Add pydantic config schema by @mvdbeek in https://github.com/galaxyproject/gravity/pull/42
+- Add --quiet option to galaxy and galaxyctl start by @mvdbeek in https://github.com/galaxyproject/gravity/pull/40
+- Add support for yaml job config by @mvdbeek in https://github.com/galaxyproject/gravity/pull/37
+- Add --preload support for gunicorn by @mvdbeek in https://github.com/galaxyproject/gravity/pull/41
+- Support running tusd by @natefoo in https://github.com/galaxyproject/gravity/pull/23
+
 0.10.0
 ======
 
