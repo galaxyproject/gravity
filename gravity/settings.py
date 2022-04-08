@@ -132,7 +132,7 @@ Gravity will attempt to find the root directory, but you can set the directory e
         None,
         description="""
 Set to a directory that should contain log files for the processes controlled by Gravity.
-If not specified defaults to ``<state_dir>/logs``.
+If not specified defaults to ``<state_dir>/log``.
 """)
     virtualenv: Optional[str] = Field(None, description="""
 Set to Galaxy's virtualenv directory.
