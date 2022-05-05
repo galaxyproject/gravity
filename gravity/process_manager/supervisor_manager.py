@@ -8,7 +8,7 @@ import sys
 import time
 from os.path import exists, join
 
-from gravity.io import debug, error, info, warn
+from gravity.io import debug, error, exception, info, warn
 from gravity.process_manager import BaseProcessManager
 from gravity.state import GracefulMethod
 from gravity.util import which
@@ -401,7 +401,7 @@ class SupervisorProcessManager(BaseProcessManager):
 
     def __start_stop(self, op, instance_names):
         self.update()
-        instance_names, unknown_instance_names = self.get_instance_names(instance_names)
+        instance_names, service_names, registered_instance_names = self.get_instance_names(instance_names)
         for instance_name in instance_names:
             target = f"{instance_name}:*" if self.use_group else "all"
             self.supervisorctl(op, target)
@@ -409,18 +409,31 @@ class SupervisorProcessManager(BaseProcessManager):
                 if service["service_type"] == "uwsgi":
                     self.supervisorctl(op, f"{instance_name}_{service['config_type']}_{service['service_name']}")
         # shortcut for just passing service names directly
-        for name in unknown_instance_names:
+        for name in service_names:
             self.supervisorctl(op, name)
 
     def __reload_graceful(self, op, instance_names):
         self.update()
-        for instance_name in self.get_instance_names(instance_names)[0]:
+        instance_names, service_names, registered_instance_names = self.get_instance_names(instance_names)
+        if not instance_names:
+            instance_names = registered_instance_names
+        known_services = []
+        unknown_services = list(service_names)
+        for instance_name in instance_names:
             for service in self.config_manager.get_instance_services(instance_name):
                 program_name = self._service_program_name(instance_name, service)
+                known_services.append(program_name)
+                if service_names:
+                    if program_name not in service_names:
+                        continue
+                    else:
+                        unknown_services.remove(program_name)
                 if service.graceful_method == GracefulMethod.SIGHUP:
                     self.supervisorctl("signal", "SIGHUP", program_name)
                 else:
                     self.supervisorctl("restart", program_name)
+        if unknown_services:
+            exception(f'Invalid service(s): {", ".join(unknown_services)}. Known service(s) are {", ".join(known_services)}')
 
     def start(self, instance_names):
         self.__start_stop("start", instance_names)

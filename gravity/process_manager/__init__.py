@@ -74,7 +74,7 @@ class BaseProcessManager(object, metaclass=ABCMeta):
         # ...` can be used if desired, though
         if not self.tail:
             exception("`tail` not found on $PATH, please install it")
-        instance_names, service_names = self.get_instance_names(instance_names)
+        instance_names, service_names, registered_instance_names = self.get_instance_names(instance_names)
         log_files = []
         if quiet:
             cmd = [self.tail, "-f", self.log_file]
@@ -82,7 +82,7 @@ class BaseProcessManager(object, metaclass=ABCMeta):
             tail_popen.wait()
         else:
             if not instance_names:
-                instance_names = self.get_instance_names([])[0]
+                instance_names = registered_instance_names
             for instance_name in instance_names:
                 config = self.config_manager.get_instance_config(instance_name)
                 log_dir = config["attribs"]["log_dir"]
@@ -124,4 +124,4 @@ class BaseProcessManager(object, metaclass=ABCMeta):
             instance_names = registered_instance_names
         else:
             exception("No instances registered (hint: `galaxyctl register /path/to/galaxy.yml`)")
-        return instance_names, unknown_instance_names
+        return instance_names, unknown_instance_names, registered_instance_names
