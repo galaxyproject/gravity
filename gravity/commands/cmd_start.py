@@ -24,7 +24,7 @@ def cli(ctx, foreground, instance, quiet=False):
         pm.start(instance)
         if foreground:
             pm.follow(instance, quiet=quiet)
-        elif pm.config_manager.single_instance == 1:
+        elif pm.config_manager.single_instance:
             config = list(pm.config_manager.get_registered_configs().values())[0]
             info(f"Log files are in {config.attribs['log_dir']}")
         else:
