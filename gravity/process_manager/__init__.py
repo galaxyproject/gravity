@@ -74,21 +74,25 @@ class BaseProcessManager(object, metaclass=ABCMeta):
         # ...` can be used if desired, though
         if not self.tail:
             exception("`tail` not found on $PATH, please install it")
-        if not instance_names:
-            instance_names = self.get_instance_names(instance_names)[0]
+        instance_names, service_names = self.get_instance_names(instance_names)
         log_files = []
         if quiet:
             cmd = [self.tail, "-f", self.log_file]
             tail_popen = subprocess.Popen(cmd)
             tail_popen.wait()
         else:
+            if not instance_names:
+                instance_names = self.get_instance_names([])[0]
             for instance_name in instance_names:
-                services = self.config_manager.get_instance_services(instance_name)
                 config = self.config_manager.get_instance_config(instance_name)
                 log_dir = config["attribs"]["log_dir"]
-                for service in services:
-                    program_name = self._service_program_name(instance_name, service)
-                    log_files.append(self._service_log_file(log_dir, program_name))
+                if not service_names:
+                    services = self.config_manager.get_instance_services(instance_name)
+                    for service in services:
+                        program_name = self._service_program_name(instance_name, service)
+                        log_files.append(self._service_log_file(log_dir, program_name))
+                else:
+                    log_files.extend([self._service_log_file(log_dir, s) for s in service_names])
                 cmd = [self.tail, "-f"] + log_files
                 tail_popen = subprocess.Popen(cmd)
                 tail_popen.wait()
