@@ -161,6 +161,13 @@ unset are shown)::
       # Valid options are: DEBUG, INFO, WARNING, ERROR
       # loglevel: DEBUG
 
+      # Queues to join
+      # queues: celery,galaxy.internal,galaxy.external
+
+      # Pool implementation
+      # Valid options are: prefork, eventlet, gevent, solo, processes, threads
+      # pool: threads
+
       # Extra arguments to pass to Celery command line.
       # extra_args:
 
