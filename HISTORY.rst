@@ -2,6 +2,13 @@
  History
 =========
 
+0.12.0
+======
+
+- Fix typo in ``log_dir`` description by @nsoranzo in https://github.com/galaxyproject/gravity/pull/44
+- Shortcut individual services fix by @natefoo in https://github.com/galaxyproject/gravity/pull/45
+- Add additional options to celery beat / celery workers by @mvdbeek in https://github.com/galaxyproject/gravity/pull/46
+
 0.11.0
 ======
 
