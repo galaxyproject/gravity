@@ -293,6 +293,7 @@ class SupervisorProcessManager(BaseProcessManager):
             "galaxy_root": attribs["galaxy_root"],
             "virtualenv_bin": virtualenv_bin,
             "supervisor_state_dir": self.supervisor_state_dir,
+            "state_dir": self.state_dir,
         }
         format_vars["command"] = service.command_template.format(**format_vars)
         conf = join(instance_conf_dir, f"{service['config_type']}_{service['service_type']}_{service['service_name']}.conf")

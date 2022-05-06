@@ -32,6 +32,15 @@ class AppServer(str, Enum):
     unicornherder = "unicornherder"
 
 
+class Pool(str, Enum):
+    prefork = "prefork"
+    eventlet = "eventlet"
+    gevent = "gevent"
+    solo = "solo"
+    processes = "processes"
+    threads = "threads"
+
+
 class TusdSettings(BaseModel):
     enable: bool = Field(False, description="""
 Enable tusd server.
@@ -49,6 +58,8 @@ Must match ``tus_upload_store`` setting in ``galaxy:`` section.
 class CelerySettings(BaseModel):
     concurrency: int = Field(2, ge=0, description="Number of Celery Workers to start.")
     loglevel: LogLevel = Field(LogLevel.debug, description="Log Level to use for Celery Worker.")
+    queues: str = Field("celery,galaxy.internal,galaxy.external", description="Queues to join")
+    pool: Pool = Field(Pool.threads, description="Pool implementation")
     extra_args: str = Field(default="", description="Extra arguments to pass to Celery command line.")
 
     class Config:
