@@ -67,6 +67,10 @@ def test_cmd_start(state_dir, galaxy_yml, startup_config, free_port):
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'update'])
     assert result.exit_code == 0, result.output
     start_instance(state_dir, free_port)
+    result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'status'])
+    for process in result.stdout.splitlines():
+        assert "RUNNING" in process or "STARTING" in process, process
+    assert (state_dir / "celery-beat-schedule").exists()
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'stop'])
     assert result.exit_code == 0, result.output
     assert "All processes stopped, supervisord will exit" in result.output

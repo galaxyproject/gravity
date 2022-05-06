@@ -77,15 +77,20 @@ class GalaxyCeleryService(Service):
     command_template = "{virtualenv_bin}celery" \
                        " --app galaxy.celery worker" \
                        " --concurrency {celery[concurrency]}" \
-                       " --loglevel" \
-                       " {celery[loglevel]}" \
+                       " --loglevel {celery[loglevel]}" \
+                       " --pool {celery[pool]}" \
+                       " --queues {celery[queues]}" \
                        " {celery[extra_args]}"
 
 
 class GalaxyCeleryBeatService(Service):
     service_type = "celery-beat"
     service_name = "celery-beat"
-    command_template = "{virtualenv_bin}celery --app galaxy.celery beat --loglevel {celery[loglevel]}"
+    command_template = "{virtualenv_bin}celery" \
+                       " --app galaxy.celery" \
+                       " beat" \
+                       " --loglevel {celery[loglevel]}" \
+                       " --schedule {state_dir}/celery-beat-schedule"
 
 
 class GalaxyGxItProxyService(Service):
