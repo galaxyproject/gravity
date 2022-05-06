@@ -11,7 +11,12 @@ from gravity.io import info, exception
 @options.no_log_option()
 @click.pass_context
 def cli(ctx, foreground, instance, quiet=False):
-    """Start configured services."""
+    """Start configured services.
+
+    If INSTANCE matches an instance name, all services configured for the instance are started.
+
+    If INSTANCE does not match an instance name, it is assumed to be a service and only the listed service(s) are
+    started."""
     if not instance:
         with config_manager.config_manager(state_dir=ctx.parent.state_dir) as cm:
             # If there are no configs registered, we will attempt to auto-register one
@@ -24,7 +29,7 @@ def cli(ctx, foreground, instance, quiet=False):
         pm.start(instance)
         if foreground:
             pm.follow(instance, quiet=quiet)
-        elif pm.config_manager.single_instance == 1:
+        elif pm.config_manager.single_instance:
             config = list(pm.config_manager.get_registered_configs().values())[0]
             info(f"Log files are in {config.attribs['log_dir']}")
         else:
