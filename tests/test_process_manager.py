@@ -49,17 +49,17 @@ gravity:
       name_template: >
         {name}{process}
       pools:
-        - job-handler
-        - workflow-scheduler
+        - job-handlers
+        - workflow-schedulers
     handler1:
       processes: 1
       pools:
-        - job-handler.special
+        - job-handlers.special
     handler2:
       processes: 1
       pools:
-        - job-handler
-        - job-handler.special
+        - job-handlers
+        - job-handlers.special
 """
 
 
@@ -97,13 +97,13 @@ def test_dynamic_handlers(default_config_manager, galaxy_yml, job_conf):
             assert config_path.exists()
         handler0_config = handler_config_paths[0].open().read()
         assert " --server-name=handler0" in handler0_config
-        assert " --attach-to-pool=job-handler --attach-to-pool=workflow-scheduler" in handler0_config
+        assert " --attach-to-pool=job-handlers --attach-to-pool=workflow-schedulers" in handler0_config
         handler1_config = handler_config_paths[1].open().read()
         assert " --server-name=handler1" in handler1_config
-        assert " --attach-to-pool=job-handler.special" in handler1_config
+        assert " --attach-to-pool=job-handlers.special" in handler1_config
         handler2_config = handler_config_paths[2].open().read()
         assert " --server-name=handler2" in handler2_config
-        assert " --attach-to-pool=job-handler --attach-to-pool=job-handler.special" in handler2_config
+        assert " --attach-to-pool=job-handlers --attach-to-pool=job-handlers.special" in handler2_config
 
 
 @pytest.mark.parametrize('job_conf', [[JOB_CONF_XML_NO_HANDLERS]], indirect=True)
