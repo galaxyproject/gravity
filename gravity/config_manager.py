@@ -116,9 +116,12 @@ class ConfigManager(object):
             else:
                 exception(f"Cannot locate Galaxy root directory: set $GALAXY_ROOT_DIR or `root' in the `galaxy' section of {conf}")
 
-        config.services.append(service_for_service_type(config.attribs["app_server"])(config_type=config.config_type))
-        config.services.append(service_for_service_type("celery")(config_type=config.config_type))
-        config.services.append(service_for_service_type("celery-beat")(config_type=config.config_type))
+        if gravity_config.gunicorn.enable:
+            config.services.append(service_for_service_type(config.attribs["app_server"])(config_type=config.config_type))
+        if gravity_config.celery.enable:
+            config.services.append(service_for_service_type("celery")(config_type=config.config_type))
+        if gravity_config.celery.enable_beat:
+            config.services.append(service_for_service_type("celery-beat")(config_type=config.config_type))
         if gravity_config.tusd.enable:
             config.services.append(service_for_service_type("tusd")(config_type=config.config_type))
 
