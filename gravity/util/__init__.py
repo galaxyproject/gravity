@@ -11,6 +11,24 @@ import yaml
 from gravity.settings import Settings
 
 
+class SafeLoaderWithInclude(yaml.SafeLoader):
+    def __init__(self, stream):
+        self.__config_dir = os.path.dirname(stream.name)
+        super().__init__(stream)
+
+    def include(self, node):
+        included = os.path.join(self.__config_dir, self.construct_scalar(node))
+        with open(included) as fh:
+            return yaml.load(fh, SafeLoaderWithInclude)
+
+
+SafeLoaderWithInclude.add_constructor('!include', SafeLoaderWithInclude.include)
+
+
+def yaml_safe_load_with_include(stream):
+    return yaml.load(stream, SafeLoaderWithInclude)
+
+
 class AttributeDict(dict):
     yaml_tag = "tag:yaml.org,2002:map"
 
