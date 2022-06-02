@@ -49,17 +49,17 @@ gravity:
       name_template: >
         {name}{process}
       pools:
-        - job-handler
-        - workflow-scheduler
+        - job-handlers
+        - workflow-schedulers
     handler1:
       processes: 1
       pools:
-        - job-handler.special
+        - job-handlers.special
     handler2:
       processes: 1
       pools:
-        - job-handler
-        - job-handler.special
+        - job-handlers
+        - job-handlers.special
 """
 
 
@@ -85,6 +85,24 @@ def test_update_force(galaxy_yml, default_config_manager):
     assert gunicorn_conf_path.stat().st_mtime != update_time
 
 
+def test_disable_services(galaxy_yml, default_config_manager):
+    default_config_manager.add([str(galaxy_yml)])
+    galaxy_yml.write(json.dumps(
+        {'galaxy': None, 'gravity': {
+            'gunicorn': {'enable': False},
+            'celery': {'enable': False, 'enable_beat': False}}}
+    ))
+    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
+        pm.update()
+    instance_conf_dir = Path(default_config_manager.state_dir) / 'supervisor' / 'supervisord.conf.d' / '_default_.d'
+    gunicorn_conf_path = instance_conf_dir / "galaxy_gunicorn_gunicorn.conf"
+    assert not gunicorn_conf_path.exists()
+    celery_conf_path = instance_conf_dir / "galaxy_celery_celery.conf"
+    assert not celery_conf_path.exists()
+    celery_beat_conf_path = instance_conf_dir / "galaxy_celery-beat_celery-beat.conf"
+    assert not celery_beat_conf_path.exists()
+
+
 @pytest.mark.parametrize('job_conf', [[JOB_CONF_XML_DYNAMIC_HANDLERS]], indirect=True)
 def test_dynamic_handlers(default_config_manager, galaxy_yml, job_conf):
     galaxy_yml.write(DYNAMIC_HANDLER_CONFIG)
@@ -97,13 +115,13 @@ def test_dynamic_handlers(default_config_manager, galaxy_yml, job_conf):
             assert config_path.exists()
         handler0_config = handler_config_paths[0].open().read()
         assert " --server-name=handler0" in handler0_config
-        assert " --attach-to-pool=job-handler --attach-to-pool=workflow-scheduler" in handler0_config
+        assert " --attach-to-pool=job-handlers --attach-to-pool=workflow-schedulers" in handler0_config
         handler1_config = handler_config_paths[1].open().read()
         assert " --server-name=handler1" in handler1_config
-        assert " --attach-to-pool=job-handler.special" in handler1_config
+        assert " --attach-to-pool=job-handlers.special" in handler1_config
         handler2_config = handler_config_paths[2].open().read()
         assert " --server-name=handler2" in handler2_config
-        assert " --attach-to-pool=job-handler --attach-to-pool=job-handler.special" in handler2_config
+        assert " --attach-to-pool=job-handlers --attach-to-pool=job-handlers.special" in handler2_config
 
 
 @pytest.mark.parametrize('job_conf', [[JOB_CONF_XML_NO_HANDLERS]], indirect=True)

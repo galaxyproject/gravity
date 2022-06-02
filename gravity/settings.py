@@ -56,6 +56,8 @@ Must match ``tus_upload_store`` setting in ``galaxy:`` section.
 
 
 class CelerySettings(BaseModel):
+    enable: bool = Field(True, description="Enable Celery distributed task queue.")
+    enable_beat: bool = Field(True, description="Enable Celery Beat periodic task runner.")
     concurrency: int = Field(2, ge=0, description="Number of Celery Workers to start.")
     loglevel: LogLevel = Field(LogLevel.debug, description="Log Level to use for Celery Worker.")
     queues: str = Field("celery,galaxy.internal,galaxy.external", description="Queues to join")
@@ -67,6 +69,7 @@ class CelerySettings(BaseModel):
 
 
 class GunicornSettings(BaseModel):
+    enable: bool = Field(True, description="Enable Galaxy gunicorn server.")
     bind: str = Field(
         default="localhost:8080",
         description="The socket to bind. A string of the form: ``HOST``, ``HOST:PORT``, ``unix:PATH``, ``fd://FD``. An IP is a valid HOST.",
