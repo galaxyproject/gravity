@@ -130,6 +130,9 @@ unset are shown)::
     # Configuration for Gunicorn.
     gunicorn:
 
+      # Enable Galaxy gunicorn server.
+      # enable: true
+
       # The socket to bind. A string of the form: ``HOST``, ``HOST:PORT``, ``unix:PATH``, ``fd://FD``. An IP is a valid HOST.
       # bind: localhost:8080
 
@@ -153,6 +156,12 @@ unset are shown)::
 
     # Configuration for Celery Processes.
     celery:
+
+      # Enable Celery distributed task queue.
+      # enable: true
+
+      # Enable Celery Beat periodic task runner.
+      # enable_beat: true
 
       # Number of Celery Workers to start.
       # concurrency: 2
@@ -227,6 +236,39 @@ unset are shown)::
     # See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defined-handlers for details.
     # handlers: {}
 
+
+As a convenience for cases where you may want to have different Gravity configurations but a single Galaxy
+configuration (e.g. your Galaxy server is split across multiple hosts), the Gravity configuration can be stored in a
+separate file and included into the Galaxy configuration. For example, on a deployment where the web (gunicorn) and job
+handler processes run on different hosts, one might have:
+
+In ``galaxy.yml``::
+
+    gravity: !include gravity.yml
+    galaxy:
+      database_connection: postgresql://...
+      ...
+
+In ``gravity.yml`` on the web host::
+
+    log_dir: /var/log/galaxy
+    gunicorn:
+      bind: localhost:8888
+    celery:
+      enable: false
+      enable_beat: false
+
+In ``gravity.yml`` on the job handler host::
+
+    log_dir: /var/log/galaxy
+    gunicorn:
+      enable: false
+    celery:
+      enable: true
+      enable_beat: true
+    handlers:
+      handler:
+        processes: 2
 
 Galaxy Job Handlers
 -------------------

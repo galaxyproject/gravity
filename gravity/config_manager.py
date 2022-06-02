@@ -20,7 +20,7 @@ from gravity.state import (
     GravityState,
     service_for_service_type,
 )
-from gravity.util import recursive_update
+from gravity.util import recursive_update, yaml_safe_load_with_include
 
 log = logging.getLogger(__name__)
 
@@ -73,7 +73,7 @@ class ConfigManager(object):
         defaults = defaults or {}
         server_section = self.galaxy_server_config_section
         with open(conf) as config_fh:
-            config_dict = safe_load(config_fh)
+            config_dict = yaml_safe_load_with_include(config_fh)
         _gravity_config = config_dict.get(self.gravity_config_section) or {}
         gravity_config = Settings(**recursive_update(defaults, _gravity_config))
         if gravity_config.log_dir is None:
