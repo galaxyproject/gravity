@@ -21,8 +21,23 @@ def test_register_defaults(galaxy_yml, galaxy_root_dir, state_dir, default_confi
     assert gunicorn_attributes['workers'] == default_settings.gunicorn.workers
     assert gunicorn_attributes['timeout'] == default_settings.gunicorn.timeout
     assert gunicorn_attributes['extra_args'] == default_settings.gunicorn.extra_args
+    assert gunicorn_attributes['preload'] is True
     assert attributes['celery'] == default_settings.celery.dict()
     assert attributes["tusd"] == default_settings.tusd.dict()
+
+
+def test_preload_default(galaxy_yml, default_config_manager):
+    app_server = 'unicornherder'
+    galaxy_yml.write(json.dumps({
+        'galaxy': None,
+        'gravity': {
+            'app_server': app_server
+        }
+    }))
+    default_config_manager.add([str(galaxy_yml)])
+    state = default_config_manager.state['config_files'][str(galaxy_yml)]
+    gunicorn_attributes = state['attribs']['gunicorn']
+    assert gunicorn_attributes['preload'] is False
 
 
 def test_register_non_default(galaxy_yml, default_config_manager):
