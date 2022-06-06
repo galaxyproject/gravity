@@ -92,11 +92,11 @@ Value is a positive number or 0. Setting it to 0 has the effect of infinite time
 If you disable the ``preload`` option workers need to have finished booting within the timeout.
 """)
     extra_args: str = Field(default="", description="Extra arguments to pass to Gunicorn command line.")
-    preload: bool = Field(
-        default=True,
+    preload: Optional[bool] = Field(
+        default=None,
         description="""
 Use Gunicorn's --preload option to fork workers after loading the Galaxy Application.
-Consumes less memory when multiple processes are configured.
+Consumes less memory when multiple processes are configured. Default is ``false`` if using unicornherder, else ``true``.
 """)
 
 
