@@ -117,6 +117,8 @@ class ConfigManager(object):
                 exception(f"Cannot locate Galaxy root directory: set $GALAXY_ROOT_DIR or `root' in the `galaxy' section of {conf}")
 
         if gravity_config.gunicorn.enable:
+            if config.attribs["gunicorn"]["preload"] is None:
+                config.attribs["gunicorn"]["preload"] = config.attribs["app_server"] != "unicornherder"
             config.services.append(service_for_service_type(config.attribs["app_server"])(config_type=config.config_type))
         if gravity_config.celery.enable:
             config.services.append(service_for_service_type("celery")(config_type=config.config_type))
