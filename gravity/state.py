@@ -103,7 +103,7 @@ class GalaxyGxItProxyService(Service):
 class GalaxyTUSDService(Service):
     service_type = "tusd"
     service_name = "tusd"
-    command_template = "tusd -host={tusd[host]} -port={tusd[port]} -upload-dir={tusd[upload_dir]}" \
+    command_template = "{tusd[tusd_path]} -host={tusd[host]} -port={tusd[port]} -upload-dir={tusd[upload_dir]}" \
                        " -hooks-http={galaxy_infrastructure_url}/api/upload/hooks" \
                        " -hooks-http-forward-headers=X-Api-Key,Cookie {tusd[extra_args]}"
 

@@ -46,6 +46,7 @@ class TusdSettings(BaseModel):
 Enable tusd server.
 If enabled, you also need to set up your proxy as outlined in https://docs.galaxyproject.org/en/latest/admin/nginx.html#receiving-files-via-the-tus-protocol.
 """)
+    tusd_path: str = Field(default="tusd", description="""Path to tusd binary""")
     host: str = Field("localhost", description="Host to bind the tusd server to")
     port: int = Field(1080, description="Port to bind the tusd server to")
     upload_dir: str = Field(description="""
