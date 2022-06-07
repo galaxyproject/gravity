@@ -2,9 +2,9 @@
 """
 import errno
 import os
+import shlex
 import shutil
 import subprocess
-import sys
 import time
 from os.path import exists, join
 
@@ -16,8 +16,6 @@ from gravity.util import which
 from supervisor import supervisorctl  # type: ignore
 
 DEFAULT_SUPERVISOR_SOCKET_PATH = os.environ.get("SUPERVISORD_SOCKET", '%(here)s/supervisor.sock')
-# Works around https://github.com/galaxyproject/galaxy/issues/11821
-OSX_DISABLE_FORK_SAFETY = ",OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES" if sys.platform == 'darwin' else ""
 
 SUPERVISORD_CONF_TEMPLATE = f""";
 ; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
@@ -56,12 +54,12 @@ autostart       = true
 autorestart     = true
 startsecs       = 15
 stopwaitsecs    = 65
-environment     = PYTHONPATH=lib,GALAXY_CONFIG_FILE="{galaxy_conf}"%s
+environment     = {environment}
 numprocs        = 1
 stdout_logfile  = {log_file}
 redirect_stderr = true
 {process_name_opt}
-""" % OSX_DISABLE_FORK_SAFETY  # noqa: E501
+"""
 
 SUPERVISORD_SERVICE_TEMPLATES["gunicorn"] = """;
 ; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
@@ -75,12 +73,12 @@ autostart       = true
 autorestart     = true
 startsecs       = 15
 stopwaitsecs    = 65
-environment     = PYTHONPATH=lib,GALAXY_CONFIG_FILE="{galaxy_conf}"%s
+environment     = {environment}
 numprocs        = 1
 stdout_logfile  = {log_file}
 redirect_stderr = true
 {process_name_opt}
-""" % OSX_DISABLE_FORK_SAFETY  # noqa: E501
+"""
 
 SUPERVISORD_SERVICE_TEMPLATES["celery"] = """;
 ; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
@@ -94,7 +92,7 @@ autostart       = true
 autorestart     = true
 startsecs       = 10
 stopwaitsecs    = 10
-environment     = PYTHONPATH=lib,GALAXY_CONFIG_FILE="{galaxy_conf}"
+environment     = {environment}
 numprocs        = 1
 stdout_logfile  = {log_file}
 redirect_stderr = true
@@ -113,7 +111,7 @@ autostart       = true
 autorestart     = true
 startsecs       = 10
 stopwaitsecs    = 10
-environment     = PYTHONPATH=lib,GALAXY_CONFIG_FILE="{galaxy_conf}"
+environment     = {environment}
 numprocs        = 1
 stdout_logfile  = {log_file}
 redirect_stderr = true
@@ -131,6 +129,7 @@ autostart       = true
 autorestart     = true
 startsecs       = 10
 stopwaitsecs    = 10
+environment     = {environment}
 numprocs        = 1
 stdout_logfile  = {log_file}
 redirect_stderr = true
@@ -149,7 +148,7 @@ autostart       = true
 autorestart     = true
 startsecs       = 10
 stopwaitsecs    = 10
-environment     = npm_config_yes=true
+environment     = {environment}
 numprocs        = 1
 stdout_logfile  = {log_file}
 redirect_stderr = true
@@ -167,6 +166,7 @@ autostart       = true
 autorestart     = true
 startsecs       = 20
 stopwaitsecs    = 65
+environment     = {environment}
 numprocs        = 1
 stdout_logfile  = {log_file}
 redirect_stderr = true
@@ -304,6 +304,9 @@ class SupervisorProcessManager(BaseProcessManager):
         template = SUPERVISORD_SERVICE_TEMPLATES.get(service["service_type"])
         if not template:
             raise Exception(f"Unknown service type: {service['service_type']}")
+
+        environment = self._service_environment(service, attribs)
+        format_vars["environment"] = ",".join("{}={}".format(k, shlex.quote(v.format(**format_vars))) for k, v in environment.items())
 
         with open(conf, "w") as out:
             out.write(template.format(**format_vars))

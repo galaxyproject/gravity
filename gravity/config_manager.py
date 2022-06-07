@@ -208,7 +208,10 @@ class ConfigManager(object):
             handling = conf.get('handling') or {}
             processes = handling.get('processes') or []
             for handler in processes:
-                rval.append({"service_name": handler})
+                rval.append({
+                    "service_name": handler,
+                    "environment": processes[handler].get("environment", None)
+                })
         return rval
 
     def _register_config_file(self, key, val):

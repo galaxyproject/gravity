@@ -45,6 +45,14 @@ class BaseProcessManager(object, metaclass=ABCMeta):
     def _service_program_name(self, instance_name, service):
         return f"{instance_name}_{service['config_type']}_{service['service_type']}_{service['service_name']}"
 
+    def _service_environment(self, service, attribs):
+        environment = service.get_environment()
+        environment_from = service.environment_from
+        if not environment_from:
+            environment_from = service.service_type
+        environment.update(attribs.get(environment_from, {}).get("environment", {}))
+        return environment
+
     @abstractmethod
     def start(self, instance_names):
         """ """
