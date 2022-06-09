@@ -225,7 +225,13 @@ class SupervisorProcessManager(BaseProcessManager):
         if not self.__supervisord_is_running():
             # any time that supervisord is not running, let's rewrite supervisord.conf
             open(self.supervisord_conf_path, "w").write(SUPERVISORD_CONF_TEMPLATE.format(**format_vars))
-            self.__supervisord_popen = subprocess.Popen(supervisord_cmd, env=os.environ)
+            self.__supervisord_popen = subprocess.Popen(supervisord_cmd, env=os.environ, stderr=subprocess.PIPE)
+
+            output = self.__supervisord_popen.communicate()
+            socket_error_msg = "socket.error reported AF_UNIX path too long"
+            if socket_error_msg in str(output[1]):
+                self._handle_socket_path_error()
+
             rc = self.__supervisord_popen.poll()
             if rc:
                 error("supervisord exited with code %d" % rc)
@@ -242,6 +248,17 @@ class SupervisorProcessManager(BaseProcessManager):
         options = supervisorctl.ClientOptions()
         options.realize(args=["-c", self.supervisord_conf_path])
         return supervisorctl.Controller(options).get_supervisor()
+
+    def _handle_socket_path_error(self):
+        msg = f"""
+        The path to your gravity state directory is too long: "{self.supervisord_conf_dir}".
+        This path becomes part of a socket address. However, in Unix systems there is a limit to the
+        length of a socket file path (usually 103-108 bytes). You can choose another path with the
+        --state-dir option to the Gravity command, or by setting $GRAVITY_STATE_DIR in your
+        environment:
+        `galaxy --state-dir /home/shorter-path` or `$GRAVITY_STATE_DIR=/home/shorter-path ./run.sh`
+        """
+        error(msg)
 
     def terminate(self):
         if self.foreground:
