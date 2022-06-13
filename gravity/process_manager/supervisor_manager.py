@@ -3,6 +3,7 @@
 import errno
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -194,6 +195,8 @@ class SupervisorProcessManager(BaseProcessManager):
         self.__supervisord_popen = None
         self.foreground = foreground
 
+        self._check_path_length()
+
         if not exists(self.supervisord_conf_dir):
             os.makedirs(self.supervisord_conf_dir)
 
@@ -227,11 +230,6 @@ class SupervisorProcessManager(BaseProcessManager):
             open(self.supervisord_conf_path, "w").write(SUPERVISORD_CONF_TEMPLATE.format(**format_vars))
             self.__supervisord_popen = subprocess.Popen(supervisord_cmd, env=os.environ, stderr=subprocess.PIPE)
 
-            output = self.__supervisord_popen.communicate()
-            socket_error_msg = "socket.error reported AF_UNIX path too long"
-            if socket_error_msg in str(output[1]):
-                self._handle_socket_path_error()
-
             rc = self.__supervisord_popen.poll()
             if rc:
                 error("supervisord exited with code %d" % rc)
@@ -248,6 +246,18 @@ class SupervisorProcessManager(BaseProcessManager):
         options = supervisorctl.ClientOptions()
         options.realize(args=["-c", self.supervisord_conf_path])
         return supervisorctl.Controller(options).get_supervisor()
+
+    def _check_path_length(self):
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        bind_path = self.supervisord_conf_path
+        try:
+            sock.bind(bind_path)
+        except OSError as e:
+            if "AF_UNIX path too long" in str(e):
+                self._handle_socket_path_error()
+        finally:
+            sock.close()
+            os.unlink(bind_path)
 
     def _handle_socket_path_error(self):
         msg = f"""
