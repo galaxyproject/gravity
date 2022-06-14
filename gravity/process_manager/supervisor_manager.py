@@ -228,7 +228,7 @@ class SupervisorProcessManager(BaseProcessManager):
         if not self.__supervisord_is_running():
             # any time that supervisord is not running, let's rewrite supervisord.conf
             open(self.supervisord_conf_path, "w").write(SUPERVISORD_CONF_TEMPLATE.format(**format_vars))
-            self.__supervisord_popen = subprocess.Popen(supervisord_cmd, env=os.environ, stderr=subprocess.PIPE)
+            self.__supervisord_popen = subprocess.Popen(supervisord_cmd, env=os.environ)
 
             rc = self.__supervisord_popen.poll()
             if rc:
@@ -257,7 +257,10 @@ class SupervisorProcessManager(BaseProcessManager):
                 self._handle_socket_path_error()
         finally:
             sock.close()
-            os.unlink(bind_path)
+            try:
+                os.unlink(bind_path)
+            except FileNotFoundError:
+                pass  # There's nothing to unlink. File may not exists during testing.
 
     def _handle_socket_path_error(self):
         msg = f"""
