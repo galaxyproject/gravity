@@ -251,6 +251,7 @@ class SupervisorProcessManager(BaseProcessManager):
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         bind_path = self.supervisord_sock_path
         try:
+            os.unlink(bind_path)
             sock.bind(bind_path)
         except OSError as e:
             if "AF_UNIX path too long" in str(e):
