@@ -195,10 +195,10 @@ class SupervisorProcessManager(BaseProcessManager):
         self.__supervisord_popen = None
         self.foreground = foreground
 
-        self._check_path_length()
-
         if not exists(self.supervisord_conf_dir):
             os.makedirs(self.supervisord_conf_dir)
+
+        self._check_path_length()
 
         if start_daemon:
             self.__supervisord()
@@ -255,12 +255,11 @@ class SupervisorProcessManager(BaseProcessManager):
         except OSError as e:
             if "AF_UNIX path too long" in str(e):
                 self._handle_socket_path_error()
+            else:
+                raise e
         finally:
             sock.close()
-            try:
-                os.unlink(bind_path)
-            except FileNotFoundError:
-                pass  # There's nothing to unlink. File may not exists during testing.
+            os.unlink(bind_path)
 
     def _handle_socket_path_error(self):
         msg = f"""
