@@ -249,7 +249,7 @@ class SupervisorProcessManager(BaseProcessManager):
 
     def _check_path_length(self):
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        bind_path = self.supervisord_conf_path
+        bind_path = self.supervisord_sock_path
         try:
             sock.bind(bind_path)
         except OSError as e:
