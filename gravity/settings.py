@@ -55,7 +55,7 @@ Must match ``tus_upload_store`` setting in ``galaxy:`` section.
 """)
     extra_args: str = Field(default="", description="Extra arguments to pass to tusd command line.")
     environment: Dict[str, str] = Field(
-        default=[],
+        default={},
         description="""
 Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
 names.
@@ -71,7 +71,7 @@ class CelerySettings(BaseModel):
     pool: Pool = Field(Pool.threads, description="Pool implementation")
     extra_args: str = Field(default="", description="Extra arguments to pass to Celery command line.")
     environment: Dict[str, str] = Field(
-        default=[],
+        default={},
         description="""
 Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
 names.
@@ -112,7 +112,7 @@ Use Gunicorn's --preload option to fork workers after loading the Galaxy Applica
 Consumes less memory when multiple processes are configured. Default is ``false`` if using unicornherder, else ``true``.
 """)
     environment: Dict[str, str] = Field(
-        default=[],
+        default={},
         description="""
 Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
 names.
@@ -148,7 +148,7 @@ Rewrite location blocks with proxy port.
 This is an advanced option that is only needed when proxying to remote interactive tool container that cannot be reached through the local network.
 """)
     environment: Dict[str, str] = Field(
-        default=[],
+        default={},
         description="""
 Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
 names.

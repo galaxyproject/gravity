@@ -156,7 +156,7 @@ unset are shown)::
 
       # Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
       # names.
-      # environment: []
+      # environment: {}
 
     # Configuration for Celery Processes.
     celery:
@@ -186,7 +186,7 @@ unset are shown)::
 
       # Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
       # names.
-      # environment: []
+      # environment: {}
 
     # Configuration for gx-it-proxy.
     gx_it_proxy:
@@ -221,7 +221,7 @@ unset are shown)::
 
       # Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
       # names.
-      # environment: []
+      # environment: {}
 
     # Configuration for tusd server (https://github.com/tus/tusd).
     # The ``tusd`` binary must be installed manually and made available on PATH (e.g in galaxy's .venv/bin directory).
@@ -249,7 +249,7 @@ unset are shown)::
 
       # Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
       # names.
-      # environment: []
+      # environment: {}
 
     # Configure dynamic handlers in this section.
     # See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defined-handlers for details.
