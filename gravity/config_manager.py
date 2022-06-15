@@ -209,8 +209,11 @@ class ConfigManager(object):
         if isinstance(conf, dict):
             handling = conf.get('handling') or {}
             processes = handling.get('processes') or []
-            for handler in processes:
-                rval.append({"service_name": handler})
+            for handler_name, handler_options in processes.items():
+                rval.append({
+                    "service_name": handler_name,
+                    "environment": (handler_options or {}).get("environment", None)
+                })
         return rval
 
     def _register_config_file(self, key, val):

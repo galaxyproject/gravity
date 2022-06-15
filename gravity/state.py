@@ -4,6 +4,7 @@ state data.
 import enum
 import errno
 import os
+import sys
 from collections import defaultdict
 
 import yaml
@@ -12,6 +13,10 @@ from gravity.util import AttributeDict
 
 
 GALAXY_YML_SAMPLE_PATH = "lib/galaxy/config/sample/galaxy.yml.sample"
+DEFAULT_GALAXY_ENVIRONMENT = {
+    "PYTHONPATH": "lib",
+    "GALAXY_CONFIG_FILE": "{galaxy_conf}",
+}
 
 
 class GracefulMethod(enum.Enum):
@@ -22,6 +27,8 @@ class GracefulMethod(enum.Enum):
 class Service(AttributeDict):
     service_type = "service"
     service_name = "_default_"
+    environment_from = None
+    default_environment = {}
     graceful_method = GracefulMethod.DEFAULT
 
     def __init__(self, *args, **kwargs):
@@ -37,10 +44,14 @@ class Service(AttributeDict):
     def full_match(self, other):
         return set(self.keys()) == set(other.keys()) and all([self[k] == other[k] for k in self if not k.startswith("_")])
 
+    def get_environment(self):
+        return self.default_environment.copy()
+
 
 class GalaxyGunicornService(Service):
     service_type = "gunicorn"
     service_name = "gunicorn"
+    default_environment = DEFAULT_GALAXY_ENVIRONMENT
     graceful_method = GracefulMethod.SIGHUP
     command_template = "{virtualenv_bin}gunicorn 'galaxy.webapps.galaxy.fast_factory:factory()'" \
                        " --timeout {gunicorn[timeout]}" \
@@ -52,11 +63,20 @@ class GalaxyGunicornService(Service):
                        " {gunicorn[preload]}" \
                        " {gunicorn[extra_args]}"
 
+    def get_environment(self):
+        # Works around https://github.com/galaxyproject/galaxy/issues/11821
+        environment = self.default_environment.copy()
+        if sys.platform == 'darwin':
+            environment["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
+        return environment
+
 
 class GalaxyUnicornHerderService(Service):
     service_type = "unicornherder"
     service_name = "unicornherder"
+    environment_from = "gunicorn"
     graceful_method = GracefulMethod.SIGHUP
+    default_environment = DEFAULT_GALAXY_ENVIRONMENT
     command_template = "{virtualenv_bin}unicornherder --pidfile {supervisor_state_dir}/{program_name}.pid --" \
                        " 'galaxy.webapps.galaxy.fast_factory:factory()'" \
                        " --timeout {gunicorn[timeout]}" \
@@ -70,10 +90,13 @@ class GalaxyUnicornHerderService(Service):
                        " {gunicorn[preload]}" \
                        " {gunicorn[extra_args]}"
 
+    get_environment = GalaxyGunicornService.get_environment
+
 
 class GalaxyCeleryService(Service):
     service_type = "celery"
     service_name = "celery"
+    default_environment = DEFAULT_GALAXY_ENVIRONMENT
     command_template = "{virtualenv_bin}celery" \
                        " --app galaxy.celery worker" \
                        " --concurrency {celery[concurrency]}" \
@@ -86,6 +109,7 @@ class GalaxyCeleryService(Service):
 class GalaxyCeleryBeatService(Service):
     service_type = "celery-beat"
     service_name = "celery-beat"
+    default_environment = DEFAULT_GALAXY_ENVIRONMENT
     command_template = "{virtualenv_bin}celery" \
                        " --app galaxy.celery" \
                        " beat" \
@@ -96,6 +120,9 @@ class GalaxyCeleryBeatService(Service):
 class GalaxyGxItProxyService(Service):
     service_type = "gx-it-proxy"
     service_name = "gx-it-proxy"
+    default_environment = {
+        "npm_config_yes": "true",
+    }
     command_template = "{virtualenv_bin}npx gx-it-proxy --ip {gx_it_proxy[ip]} --port {gx_it_proxy[port]}" \
                        " --sessions {gx_it_proxy[sessions]} {gx_it_proxy[verbose]}"
 

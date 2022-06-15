@@ -54,6 +54,12 @@ Directory to store uploads in.
 Must match ``tus_upload_store`` setting in ``galaxy:`` section.
 """)
     extra_args: str = Field(default="", description="Extra arguments to pass to tusd command line.")
+    environment: Dict[str, str] = Field(
+        default=[],
+        description="""
+Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
+names.
+""")
 
 
 class CelerySettings(BaseModel):
@@ -64,6 +70,12 @@ class CelerySettings(BaseModel):
     queues: str = Field("celery,galaxy.internal,galaxy.external", description="Queues to join")
     pool: Pool = Field(Pool.threads, description="Pool implementation")
     extra_args: str = Field(default="", description="Extra arguments to pass to Celery command line.")
+    environment: Dict[str, str] = Field(
+        default=[],
+        description="""
+Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
+names.
+""")
 
     class Config:
         use_enum_values = True
@@ -99,6 +111,12 @@ If you disable the ``preload`` option workers need to have finished booting with
 Use Gunicorn's --preload option to fork workers after loading the Galaxy Application.
 Consumes less memory when multiple processes are configured. Default is ``false`` if using unicornherder, else ``true``.
 """)
+    environment: Dict[str, str] = Field(
+        default=[],
+        description="""
+Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
+names.
+""")
 
 
 class GxItProxySettings(BaseModel):
@@ -128,6 +146,12 @@ This is an advanced option that is only needed when proxying to remote interacti
         description="""
 Rewrite location blocks with proxy port.
 This is an advanced option that is only needed when proxying to remote interactive tool container that cannot be reached through the local network.
+""")
+    environment: Dict[str, str] = Field(
+        default=[],
+        description="""
+Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
+names.
 """)
 
 
