@@ -30,6 +30,7 @@ setup(
     packages=find_packages(),
     description="Command-line utilities to assist in managing Galaxy servers",
     long_description=long_description,
+    long_description_content_type="text/x-rst",
     url="https://github.com/galaxyproject/gravity",
     author="The Galaxy Team",
     author_email="team@galaxyproject.org",
