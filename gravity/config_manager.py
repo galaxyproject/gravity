@@ -208,7 +208,7 @@ class ConfigManager(object):
                 exception(f"Unknown job config file type: {conf}")
         if isinstance(conf, dict):
             handling = conf.get('handling') or {}
-            processes = handling.get('processes') or []
+            processes = handling.get('processes') or {}
             for handler_name, handler_options in processes.items():
                 rval.append({
                     "service_name": handler_name,
