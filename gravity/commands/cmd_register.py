@@ -2,7 +2,6 @@ import click
 
 from gravity import config_manager
 from gravity import options
-from gravity.io import exception
 
 
 @click.command("register")
@@ -14,7 +13,4 @@ def cli(ctx, config):
     aliases: add
     """
     with config_manager.config_manager(state_dir=ctx.parent.state_dir) as cm:
-        try:
-            cm.add(config)
-        except Exception as exc:
-            exception("Caught exception: %s", exc)
+        cm.add(config)
