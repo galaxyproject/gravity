@@ -5,11 +5,11 @@
 0.13.0
 ======
 
-- Add options to enable/disable gunicorn, celery, and celery-beat services https://github.com/galaxyproject/gravity/pull/47
-- Add ability to include gravity config from a separate file and document https://github.com/galaxyproject/gravity/pull/48
-- Only default to preload = true for gunicorn if not using unicornherder https://github.com/galaxyproject/gravity/pull/49
-- Add option to specify tusd path https://github.com/galaxyproject/gravity/pull/50
-- Support setting per-service environment variables https://github.com/galaxyproject/gravity/pull/56
+- Add options to enable/disable gunicorn, celery, and celery-beat services by @natefoo in https://github.com/galaxyproject/gravity/pull/47
+- Add ability to include gravity config from a separate file and document by @natefoo in https://github.com/galaxyproject/gravity/pull/48
+- Only default to preload = true for gunicorn if not using unicornherder by @natefoo in https://github.com/galaxyproject/gravity/pull/49
+- Add option to specify tusd path by @natefoo in https://github.com/galaxyproject/gravity/pull/50
+- Support setting per-service environment variables by @natefoo in https://github.com/galaxyproject/gravity/pull/56
 
 0.12.0
 ======
