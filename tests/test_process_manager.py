@@ -30,6 +30,13 @@ handling:
       tags: [special_handlers]
 """
 
+JOB_CONF_YAML_NO_HANDLERS = """
+---
+handling:
+  assign:
+    - db-skip-locked
+"""
+
 JOB_CONF_XML_NO_HANDLERS = """
 <job_conf>
 </job_conf>
@@ -124,8 +131,21 @@ def test_dynamic_handlers(default_config_manager, galaxy_yml, job_conf):
         assert " --attach-to-pool=job-handlers --attach-to-pool=job-handlers.special" in handler2_config
 
 
+@pytest.mark.parametrize('job_conf', [[JOB_CONF_YAML_NO_HANDLERS]], indirect=True)
+def test_no_static_handlers_yaml(default_config_manager, galaxy_yml, job_conf):
+    with open(galaxy_yml, 'w') as config_fh:
+        config_fh.write(json.dumps({'galaxy': {'job_config_file': str(job_conf)}}))
+    default_config_manager.add([str(galaxy_yml)])
+    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
+        pm.update()
+        instance_conf_dir = Path(default_config_manager.state_dir) / 'supervisor' / 'supervisord.conf.d' / '_default_.d'
+        assert not (instance_conf_dir / 'galaxy_standalone_handler0.conf').exists()
+
+
 @pytest.mark.parametrize('job_conf', [[JOB_CONF_XML_NO_HANDLERS]], indirect=True)
-def test_no_static_handlers(default_config_manager, galaxy_yml, job_conf):
+def test_no_static_handlers_xml(default_config_manager, galaxy_yml, job_conf):
+    with open(galaxy_yml, 'w') as config_fh:
+        config_fh.write(json.dumps({'galaxy': {'job_config_file': str(job_conf)}}))
     default_config_manager.add([str(galaxy_yml)])
     with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
         pm.update()
