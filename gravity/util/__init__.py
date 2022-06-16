@@ -118,13 +118,15 @@ def process_property(key, value, depth=0):
     if allOff and allOff[0].get("properties"):
         # we've got a nested map, add key once
         description = f"{description}\n{extra_white_space}{key}:\n"
+    has_child = False
     for item in allOff:
         if "enum" in item:
             description = f'{description}\n{extra_white_space}# Valid options are: {", ".join(item["enum"])}'
         if "properties" in item:
+            has_child = True
             for _key, _value in item["properties"].items():
                 description = f"{description}\n{process_property(_key, _value, depth=depth+1)}"
-    if not default == "{}" or key == "handlers":
+    if not has_child or key == "handlers":
         comment = "# "
         if key == "gravity":
             # gravity section should not be commented
