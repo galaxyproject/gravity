@@ -2,6 +2,13 @@
  History
 =========
 
+0.13.1
+======
+
+- Set correct default for environment settings by @natefoo in https://github.com/galaxyproject/gravity/pull/58
+- Don't catch exceptions in the deregister, register, and rename subcommands by @natefoo in https://github.com/galaxyproject/gravity/pull/59
+- ``processes`` in the ``handling`` dict in the job conf dict is a dict, not a list by @natefoo in https://github.com/galaxyproject/gravity/pull/60
+
 0.13.0
 ======
 
