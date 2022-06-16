@@ -2,7 +2,6 @@ import click
 
 from gravity import config_manager
 from gravity import options
-from gravity.io import error
 
 
 @click.command("reregister")
@@ -15,7 +14,4 @@ def cli(ctx, old_config, new_config):
     aliases: rename
     """
     with config_manager.config_manager(state_dir=ctx.parent.state_dir) as cm:
-        try:
-            cm.rename(old_config, new_config)
-        except Exception as exc:
-            error("Caught exception: %s", exc)
+        cm.rename(old_config, new_config)
