@@ -141,7 +141,9 @@ def galaxy_virtualenv(galaxy_root_dir):
         str(galaxy_root_dir / "scripts/common_startup.sh"),
         env={
             "GALAXY_SKIP_CLIENT_BUILD": "1",
-            "GALAXY_VIRTUAL_ENV": virtual_env_dir},
+            "GALAXY_VIRTUAL_ENV": virtual_env_dir,
+            "PATH": os.getenv("PATH"),
+        },
         cwd=str(galaxy_root_dir)
     )
     return virtual_env_dir
