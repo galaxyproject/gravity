@@ -132,7 +132,8 @@ class GalaxyTUSDService(Service):
     service_name = "tusd"
     command_template = "{tusd[tusd_path]} -host={tusd[host]} -port={tusd[port]} -upload-dir={tusd[upload_dir]}" \
                        " -hooks-http={galaxy_infrastructure_url}/api/upload/hooks" \
-                       " -hooks-http-forward-headers=X-Api-Key,Cookie {tusd[extra_args]}"
+                       " -hooks-http-forward-headers=X-Api-Key,Cookie {tusd[extra_args]}" \
+                       " -hooks-enabled-events {tusd[hooks_enabled_events]}"
 
 
 class GalaxyStandaloneService(Service):
