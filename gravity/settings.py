@@ -53,6 +53,18 @@ If enabled, you also need to set up your proxy as outlined in https://docs.galax
 Directory to store uploads in.
 Must match ``tus_upload_store`` setting in ``galaxy:`` section.
 """)
+    hooks_enabled_events: str = Field(default="pre-create", description="""
+Comma-separated string of enabled tusd hooks.
+
+Leave at the default value to require authorization at upload creation time.
+This means Galaxy's web process does not need to be running after creating the initial
+upload request.
+
+Set to empty string to disable all authorization. This means data can be uploaded (but not processed)
+without the Galaxy web process being available.
+
+You can find a list of available hooks at https://github.com/tus/tusd/blob/master/docs/hooks.md#list-of-available-hooks.
+""")
     extra_args: str = Field(default="", description="Extra arguments to pass to tusd command line.")
     environment: Dict[str, str] = Field(
         default={},
