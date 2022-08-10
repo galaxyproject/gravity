@@ -2,6 +2,12 @@
  History
 =========
 
+0.13.2
+======
+
+- Don't override PATH in subprocess call by @jdavcs in https://github.com/galaxyproject/gravity/pull/62
+- Only send pre create hook by @mvdbeek in https://github.com/galaxyproject/gravity/pull/64
+
 0.13.1
 ======
 
