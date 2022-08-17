@@ -2,6 +2,11 @@
  History
 =========
 
+0.13.3
+======
+
+- Don't use gunicorn logging options with unicornherder by @natefoo in https://github.com/galaxyproject/gravity/pull/65
+
 0.13.2
 ======
 
