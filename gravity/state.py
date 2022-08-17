@@ -84,13 +84,16 @@ class GalaxyUnicornHerderService(Service):
                        " -k galaxy.webapps.galaxy.workers.Worker" \
                        " -b {gunicorn[bind]}" \
                        " --workers={gunicorn[workers]}" \
-                       " --access-logfile {log_dir}/gunicorn.access.log" \
-                       " --error-logfile {log_dir}/gunicorn.error.log --capture-output" \
                        " --config python:galaxy.web_stack.gunicorn_config" \
                        " {gunicorn[preload]}" \
                        " {gunicorn[extra_args]}"
 
-    get_environment = GalaxyGunicornService.get_environment
+    def get_environment(self):
+        environment = self.default_environment.copy()
+        if sys.platform == 'darwin':
+            environment["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
+        environment["GALAXY_CONFIG_LOG_DESTINATION"] = "{log_dir}/gunicorn.log"
+        return environment
 
 
 class GalaxyCeleryService(Service):
