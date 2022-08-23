@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import time
 from pathlib import Path
@@ -9,7 +10,8 @@ from yaml import safe_load
 
 from gravity.cli import galaxyctl
 
-STARTUP_TIMEOUT = 20
+STARTUP_TIMEOUT = 30
+CELERY_BEAT_TIMEOUT = 10
 
 
 def test_cmd_register(state_dir, galaxy_yml):
@@ -50,6 +52,16 @@ def wait_for_gxit_proxy(state_dir):
     return startup_logs
 
 
+def wait_for_path(path, timeout):
+    for _ in range(timeout * 4):
+        try:
+            assert path.exists()
+            return True
+        except AssertionError:
+            time.sleep(0.25)
+    return False
+
+
 def start_instance(state_dir, free_port):
     runner = CliRunner()
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'start'])
@@ -68,9 +80,9 @@ def test_cmd_start(state_dir, galaxy_yml, startup_config, free_port):
     assert result.exit_code == 0, result.output
     start_instance(state_dir, free_port)
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'status'])
-    for process in result.stdout.splitlines():
-        assert "RUNNING" in process or "STARTING" in process, process
-    assert (state_dir / "celery-beat-schedule").exists()
+    celery_beat_db_exists = wait_for_path(state_dir / "celery-beat-schedule", CELERY_BEAT_TIMEOUT)
+    assert celery_beat_db_exists is True, "celery-beat failed to write db. State dir contents:\n" \
+        f"{os.listdir(state_dir)}"
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'stop'])
     assert result.exit_code == 0, result.output
     assert "All processes stopped, supervisord will exit" in result.output
