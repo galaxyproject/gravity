@@ -9,7 +9,7 @@ def cli(ctx):
     """List all known instances."""
     with config_manager.config_manager(state_dir=ctx.parent.state_dir) as cm:
         configs = cm.get_registered_configs()
-        instances = cm.get_registered_instances()
+        instances = cm.get_registered_instance_names()
         if instances:
             click.echo("%-24s  %-10s  %-10s  %s" % ("INSTANCE NAME", "TYPE", "SERVER", "NAME"))
             # not the most efficient...

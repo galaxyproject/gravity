@@ -167,7 +167,7 @@ class ConfigFile(AttributeDict):
     def defaults(self):
         return {
             "instance_name": self["instance_name"],
-            "galaxy_root": self["attribs"]["galaxy_root"],
+            "galaxy_root": self["galaxy_root"],
             "log_dir": self["attribs"]["log_dir"],
             "gunicorn":  self.gunicorn_config,
         }
@@ -203,7 +203,7 @@ class GravityState(AttributeDict):
                 # resolve path, so we always deal with absolute and symlink-resolved paths
                 config_file = os.path.realpath(config_file)
                 if config_file.endswith(GALAXY_YML_SAMPLE_PATH):
-                    root_dir = config_dict['attribs']['galaxy_root']
+                    root_dir = config_dict['galaxy_root']
                     non_sample_path = os.path.join(root_dir, 'config', 'galaxy.yml')
                     if os.path.exists(non_sample_path):
                         config_file = non_sample_path

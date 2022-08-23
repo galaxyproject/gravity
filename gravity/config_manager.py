@@ -44,6 +44,7 @@ class ConfigManager(object):
             state_dir = DEFAULT_STATE_DIR
         self.state_dir = abspath(expanduser(state_dir))
         debug(f"Gravity state dir: {self.state_dir}")
+        self.__configs = {}
         self.config_state_path = join(self.state_dir, "configstate.yaml")
         self.python_exe = python_exe
         try:
@@ -70,6 +71,9 @@ class ConfigManager(object):
             os.unlink(config_state_json)
 
     def get_config(self, conf, defaults=None):
+        if conf in self.__configs:
+            return self.__configs[conf]
+
         defaults = defaults or {}
         server_section = self.galaxy_server_config_section
         with open(conf) as config_fh:
@@ -105,14 +109,14 @@ class ConfigManager(object):
         webapp_service_names = []
 
         # shortcut for galaxy configs in the standard locations -- explicit arg ?
-        config.attribs["galaxy_root"] = app_config.get("root") or gravity_config.galaxy_root
-        if config.attribs["galaxy_root"] is None:
+        config["galaxy_root"] = app_config.get("root") or gravity_config.galaxy_root
+        if config["galaxy_root"] is None:
             if os.environ.get("GALAXY_ROOT_DIR"):
-                config.attribs["galaxy_root"] = abspath(os.environ["GALAXY_ROOT_DIR"])
+                config["galaxy_root"] = abspath(os.environ["GALAXY_ROOT_DIR"])
             elif exists(join(dirname(conf), pardir, "lib", "galaxy")):
-                config.attribs["galaxy_root"] = abspath(join(dirname(conf), pardir))
+                config["galaxy_root"] = abspath(join(dirname(conf), pardir))
             elif conf.endswith(join('galaxy', 'config', 'sample', 'galaxy.yml.sample')):
-                config.attribs["galaxy_root"] = abspath(join(dirname(conf), pardir, pardir, pardir, pardir))
+                config["galaxy_root"] = abspath(join(dirname(conf), pardir, pardir, pardir, pardir))
             else:
                 exception(f"Cannot locate Galaxy root directory: set $GALAXY_ROOT_DIR or `root' in the `galaxy' section of {conf}")
 
@@ -136,7 +140,7 @@ class ConfigManager(object):
             job_config = app_config.get("job_config_file", DEFAULT_JOB_CONFIG_FILE)
             if not isabs(job_config):
                 # FIXME: relative to root
-                job_config = abspath(join(config.attribs["galaxy_root"], job_config))
+                job_config = abspath(join(config["galaxy_root"], job_config))
                 if not exists(job_config):
                     job_config = None
         if config.config_type == "galaxy" and job_config:
@@ -155,6 +159,7 @@ class ConfigManager(object):
         # see how this is determined.
         self.create_handler_services(gravity_config, config)
         self.create_gxit_services(gravity_config, app_config, config)
+        self.__configs[conf] = config
         return config
 
     def create_handler_services(self, gravity_config: Settings, config):
@@ -238,101 +243,7 @@ class ConfigManager(object):
         ensure that it was previously registered.
         """
         with self.state as state:
-            if "remove_configs" not in state:
-                state.remove_configs = {}
-            state.remove_configs[key] = state.config_files.pop(key)
-
-    def _purge_config_file(self, key):
-        """Forget a previously deregister config file.  The caller should
-        ensure that it was previously deregistered.
-        """
-        with self.state as state:
-            del state.remove_configs[key]
-            if not state.remove_configs:
-                del state["remove_configs"]
-
-    def determine_config_changes(self):
-        """The magic: Determine what has changed since the last time.
-
-        Caller should pass the returned config to register_config_changes to persist.
-        """
-        # 'update' here is synonymous with 'add or update'
-        instances = set()
-        new_configs = {}
-        meta_changes = {"changed_instances": set(), "remove_instances": [], "remove_configs": self.get_remove_configs()}
-        for config_file, stored_config in self.get_registered_configs().items():
-            new_config = stored_config
-            try:
-                ini_config = self.get_config(config_file, defaults=stored_config.defaults)
-            except OSError as exc:
-                warn("Unable to read %s (hint: use `rename` or `remove` to fix): %s", config_file, exc)
-                new_configs[config_file] = stored_config
-                instances.add(stored_config["instance_name"])
-                continue
-            if ini_config["instance_name"] is not None:
-                # instance name is explicitly set in the config
-                instance_name = ini_config["instance_name"]
-                if ini_config["instance_name"] != stored_config["instance_name"]:
-                    # instance name has changed
-                    # (removal of old instance will happen later if no other config references it)
-                    new_config["update_instance_name"] = instance_name
-                meta_changes["changed_instances"].add(instance_name)
-            else:
-                # instance name is dynamically generated
-                instance_name = stored_config["instance_name"]
-            if ini_config["attribs"] != stored_config["attribs"]:
-                new_config["update_attribs"] = ini_config["attribs"]
-                meta_changes["changed_instances"].add(instance_name)
-            # make sure this instance isn't removed
-            instances.add(instance_name)
-            services = []
-            for service in ini_config["services"]:
-                for stored_service in stored_config["services"]:
-                    if service.full_match(stored_service):
-                        # service is configured and has no changes
-                        break
-                else:
-                    # instance has a new service or service has config change
-                    if "update_services" not in new_config:
-                        new_config["update_services"] = []
-                    new_config["update_services"].append(service)
-                    meta_changes["changed_instances"].add(instance_name)
-                # make sure this service isn't removed
-                services.append(service)
-            for service in stored_config["services"]:
-                if service not in services:
-                    if "remove_services" not in new_config:
-                        new_config["remove_services"] = []
-                    new_config["remove_services"].append(service)
-                    meta_changes["changed_instances"].add(instance_name)
-            new_configs[config_file] = new_config
-        # once finished processing all configs, find any instances which have been deleted
-        for instance_name in self.get_registered_instances(include_removed=True):
-            if instance_name not in instances:
-                meta_changes["remove_instances"].append(instance_name)
-        return new_configs, meta_changes
-
-    def register_config_changes(self, configs, meta_changes):
-        """Persist config changes to the JSON state file. When a config
-        changes, a process manager may perform certain actions based on these
-        changes. This method can be called once the actions are complete.
-        """
-        for config_file in meta_changes["remove_configs"].keys():
-            self._purge_config_file(config_file)
-        for config_file, config in configs.items():
-            if "update_attribs" in config:
-                config["attribs"] = config.pop("update_attribs")
-            if "update_instance_name" in config:
-                config["instance_name"] = config.pop("update_instance_name")
-            if "update_services" in config or "remove_services" in config:
-                remove = config.pop("remove_services", [])
-                services = config.pop("update_services", [])
-                # need to prevent old service defs from overwriting new ones
-                for service in config["services"]:
-                    if service not in remove and service not in services:
-                        services.append(service)
-                config["services"] = services
-            self._register_config_file(config_file, config)
+            del state.config_files[key]
 
     @property
     def state(self):
@@ -351,34 +262,21 @@ class ConfigManager(object):
 
     def get_registered_configs(self, instances=None):
         """Return the persisted values of all config files registered with the config manager."""
+        rval = {}
         configs = self.state.config_files
-        if instances is not None:
-            for config_file, config in list(configs.items()):
-                if config["instance_name"] not in instances:
-                    configs.pop(config_file)
-        return configs
-
-    def get_remove_configs(self):
-        """Return the persisted values of all config files pending removal by the process manager."""
-        return self.state.get("remove_configs", {})
+        for config_file, config in list(configs.items()):
+            if (instances is not None and config["instance_name"] in instances) or instances is None:
+                rval[config_file] = self.get_config(config_file)
+        return rval
 
     def get_registered_config(self, config_file):
         """Return the persisted value of the named config file."""
-        return self.state.config_files.get(config_file, None)
-
-    def get_registered_instances(self, include_removed=False):
-        """Return the persisted names of all instances across all registered configs."""
-        rval = []
-        configs = list(self.state.config_files.values())
-        if include_removed:
-            configs.extend(list(self.get_remove_configs().values()))
-        for config in configs:
-            if config["instance_name"] not in rval:
-                rval.append(config["instance_name"])
-        return rval
+        if config_file in self.state.config_files:
+            return self.get_config(config_file)
+        return None
 
     def get_instance_config(self, instance_name):
-        for config in list(self.state.config_files.values()):
+        for config in list(self.get_registered_configs().values()):
             if config["instance_name"] == instance_name:
                 return config
         exception(f'Instance "{instance_name}" unknown, known instance(s) are {", ".join(self.get_registered_instance_names())}.')
@@ -391,7 +289,7 @@ class ConfigManager(object):
 
     def get_registered_services(self):
         rval = []
-        for config_file, config in self.state.config_files.items():
+        for config_file, config in self.get_registered_configs.items():
             for service in config["services"]:
                 service["config_file"] = config_file
                 service["instance_name"] = config["instance_name"]
@@ -433,8 +331,7 @@ class ConfigManager(object):
             conf_data = {
                 "config_type": conf["config_type"],
                 "instance_name": conf["instance_name"],
-                "attribs": conf["attribs"],
-                "services": [],  # services will be populated by the update method
+                "galaxy_root": conf["galaxy_root"],
             }
             self._register_config_file(config_file, conf_data)
             info("Registered %s config: %s", conf["config_type"], config_file)
