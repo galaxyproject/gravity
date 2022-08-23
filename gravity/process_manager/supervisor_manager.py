@@ -290,7 +290,7 @@ class SupervisorProcessManager(BaseProcessManager):
             "program_name": program_name,
             "process_name_opt": process_name_opt,
             "galaxy_conf": config_file,
-            "galaxy_root": attribs["galaxy_root"],
+            "galaxy_root": config["galaxy_root"],
             "virtualenv_bin": virtualenv_bin,
             "supervisor_state_dir": self.supervisor_state_dir,
             "state_dir": self.state_dir,
@@ -338,98 +338,6 @@ class SupervisorProcessManager(BaseProcessManager):
                 out.write(contents)
         else:
             debug("No changes to existing config for %s %s at %s", file_type, name, path)
-
-    def _process_config_changes(self, configs, meta_changes, force=False):
-        # remove the services of any configs which have been removed
-        for config in meta_changes["remove_configs"].values():
-            instance_name = config["instance_name"]
-            instance_conf_dir = join(self.supervisord_conf_dir, f"{instance_name}.d")
-            for service in config["services"]:
-                info("Removing service %s", self._service_program_name(instance_name, service))
-                conf = join(instance_conf_dir, f"{service['config_type']}_{service['service_type']}_{service['service_name']}.conf")
-                if exists(conf):
-                    os.unlink(conf)
-
-        # update things for existing or new configs
-        for config_file, config in configs.items():
-            instance_name = config["instance_name"]
-            attribs = config["attribs"]
-            update_all_configs = False or force
-
-            # config attribs have changed (galaxy_root, virtualenv, etc.)
-            if "update_attribs" in config:
-                info(f"Updating all dependent services of config {config_file} due to changes")
-                attribs = config["update_attribs"]
-                update_all_configs = True
-
-            # instance name has changed, so supervisor group config must change
-            if "update_instance_name" in config:
-                instance_name = config["update_instance_name"]
-                info("Creating new instance for name change: %s -> %s", config["instance_name"], instance_name)
-                update_all_configs = True
-
-            # always attempt to make the config dir
-            instance_conf_dir = join(self.supervisord_conf_dir, f"{instance_name}.d")
-            try:
-                os.makedirs(instance_conf_dir)
-            except OSError as exc:
-                if exc.errno != errno.EEXIST:
-                    raise
-
-            if update_all_configs:
-                for service in config["services"]:
-                    info("Updating service %s", self._service_program_name(instance_name, service))
-                    self.__update_service(config_file, config, attribs, service, instance_conf_dir, instance_name)
-
-            # new services
-            if "update_services" in config:
-                for service in config["update_services"]:
-                    info("Creating or updating service %s", self._service_program_name(instance_name, service))
-                    self.__update_service(config_file, config, attribs, service, instance_conf_dir, instance_name)
-
-            # deleted services
-            if "remove_services" in config:
-                for service in config["remove_services"]:
-                    info("Removing service %s", self._service_program_name(instance_name, service))
-                    conf = join(instance_conf_dir, f"{service['config_type']}_{service['service_type']}_{service['service_name']}.conf")
-                    if exists(conf):
-                        os.unlink(conf)
-
-            # sanity check, make sure everything that should exist does exist
-            for service in config["services"]:
-                conf = join(instance_conf_dir, f"{service['config_type']}_{service['service_type']}_{service['service_name']}.conf")
-                if service not in config.get("remove_services", []) and not exists(conf):
-                    self.__update_service(config_file, config, attribs, service, instance_conf_dir, instance_name)
-                    warn(f"Missing service config recreated: {conf}")
-
-        # all configs referencing an instance name have been removed (or their
-        # instance names have changed), nuke the group
-        for instance_name in meta_changes["remove_instances"]:
-            info("Removing instance %s", instance_name)
-            instance_conf_dir = join(self.supervisord_conf_dir, f"{instance_name}.d")
-            if exists(instance_conf_dir):
-                shutil.rmtree(instance_conf_dir)
-            conf = join(self.supervisord_conf_dir, f"group_{instance_name}.conf")
-            if exists(conf):
-                os.unlink(join(conf))
-
-        # persist to the state file
-        self.config_manager.register_config_changes(configs, meta_changes)
-
-        # now we can create/update the instance group
-        for instance_name in meta_changes["changed_instances"]:
-            programs = []
-            for service in self.config_manager.get_registered_services():
-                if service["instance_name"] == instance_name and service["service_type"] != "uwsgi":
-                    programs.append(f"{instance_name}_{service['config_type']}_{service['service_type']}_{service['service_name']}")
-            conf = join(self.supervisord_conf_dir, f"group_{instance_name}.conf")
-            if programs and self.use_group:
-                format_vars = {"instance_conf_dir": instance_conf_dir, "instance_name": instance_name, "programs": ",".join(programs)}
-                open(conf, "w").write(SUPERVISORD_GROUP_TEMPLATE.format(**format_vars))
-            else:
-                # no programs for the group, so it should be removed
-                if exists(conf):
-                    os.unlink(conf)
 
     def _process_config(self, config_file, config, supervisord_conf_dir=None):
         """Perform necessary supervisor config updates as per current Galaxy/Gravity configuration.
@@ -556,8 +464,7 @@ class SupervisorProcessManager(BaseProcessManager):
         if force:
             shutil.rmtree(self.supervisord_conf_dir)
             os.makedirs(self.supervisord_conf_dir)
-        for config_file in self.config_manager.get_registered_configs().keys():
-            config = self.config_manager.get_config(config_file)
+        for config_file, config in self.config_manager.get_registered_configs().items():
             self._process_config(config_file, config)
         # only need to update if supervisord is running, otherwise changes will be picked up at next start
         if self.__supervisord_is_running():
