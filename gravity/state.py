@@ -17,6 +17,7 @@ DEFAULT_GALAXY_ENVIRONMENT = {
     "PYTHONPATH": "lib",
     "GALAXY_CONFIG_FILE": "{galaxy_conf}",
 }
+CELERY_BEAT_DB_FILENAME = "celery-beat-schedule"
 
 
 class GracefulMethod(enum.Enum):
@@ -117,7 +118,7 @@ class GalaxyCeleryBeatService(Service):
                        " --app galaxy.celery" \
                        " beat" \
                        " --loglevel {celery[loglevel]}" \
-                       " --schedule {state_dir}/celery-beat-schedule"
+                       " --schedule {state_dir}/" + CELERY_BEAT_DB_FILENAME
 
 
 class GalaxyGxItProxyService(Service):
