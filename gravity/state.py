@@ -147,6 +147,9 @@ class GalaxyStandaloneService(Service):
     command_template = "{virtualenv_bin}python ./lib/galaxy/main.py -c {galaxy_conf} --server-name={server_name}{attach_to_pool_opt}" \
                        " --pid-file={supervisor_state_dir}/{program_name}.pid"
 
+    def get_environment(self):
+        return self.get("environment") or {}
+
 
 class ConfigFile(AttributeDict):
     def __init__(self, *args, **kwargs):

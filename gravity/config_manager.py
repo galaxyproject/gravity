@@ -140,8 +140,12 @@ class ConfigManager(object):
                 if not exists(job_config):
                     job_config = None
         if config.config_type == "galaxy" and job_config:
-            for service_name in [x["service_name"] for x in ConfigManager.get_job_config(job_config) if x["service_name"] not in webapp_service_names]:
-                config.services.append(service_for_service_type("standalone")(config_type=config.config_type, service_name=service_name))
+            for handler_settings in [x for x in ConfigManager.get_job_config(job_config) if x["service_name"] not in webapp_service_names]:
+                config.services.append(service_for_service_type("standalone")(
+                    config_type=config.config_type,
+                    service_name=handler_settings["service_name"],
+                    environment=handler_settings.get("environment")
+                ))
 
         # Dynamic job handlers are configured using `job_handler_count` in galaxy.yml.
         #
@@ -157,8 +161,14 @@ class ConfigManager(object):
         expanded_handlers = self.expand_handlers(gravity_config, config)
         for service_name, handler_settings in expanded_handlers.items():
             pools = handler_settings.get('pools')
+            environment = handler_settings.get("environment")
             config.services.append(
-                service_for_service_type("standalone")(config_type=config.config_type, service_name=service_name, server_pools=pools))
+                service_for_service_type("standalone")(
+                    config_type=config.config_type,
+                    service_name=service_name,
+                    server_pools=pools,
+                    environment=environment
+                ))
 
     def create_gxit_services(self, gravity_config: Settings, app_config, config):
         if app_config.get("interactivetools_enable") and gravity_config.gx_it_proxy.enable:
