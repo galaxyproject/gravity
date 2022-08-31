@@ -2,6 +2,12 @@
  History
 =========
 
+0.13.4
+======
+
+- Fixes for startup test by @natefoo in https://github.com/galaxyproject/gravity/pull/68
+- Fix setting environment vars on handlers by @natefoo in https://github.com/galaxyproject/gravity/pull/70
+
 0.13.3
 ======
 
