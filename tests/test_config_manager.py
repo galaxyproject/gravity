@@ -42,12 +42,14 @@ def test_preload_default(galaxy_yml, default_config_manager):
 
 def test_register_non_default(galaxy_yml, default_config_manager):
     new_bind = 'localhost:8081'
+    environment = {'FOO': 'foo'}
     concurrency = 4
     galaxy_yml.write(json.dumps({
         'galaxy': None,
         'gravity': {
             'gunicorn': {
-                'bind': new_bind
+                'bind': new_bind,
+                'environment': environment
             },
             'celery': {
                 'concurrency': concurrency
@@ -58,6 +60,7 @@ def test_register_non_default(galaxy_yml, default_config_manager):
     state = default_config_manager.state['config_files'][str(galaxy_yml)]
     gunicorn_attributes = state['attribs']['gunicorn']
     assert gunicorn_attributes['bind'] == new_bind
+    assert gunicorn_attributes['environment'] == environment
     default_settings = Settings()
     assert gunicorn_attributes['workers'] == default_settings.gunicorn.workers
     celery_attributes = state['attribs']['celery']

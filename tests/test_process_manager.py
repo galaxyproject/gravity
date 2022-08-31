@@ -21,6 +21,8 @@ handling:
   processes:
     handler0:
     handler1:
+      environment:
+        BAZ: baz
     sge_handler:
       # Restrict a handler to load specific runners, by default they will load all.
       plugins: ['sge']
@@ -58,10 +60,14 @@ gravity:
       pools:
         - job-handlers
         - workflow-schedulers
+      environment:
+        FOO: foo
     handler1:
       processes: 1
       pools:
         - job-handlers.special
+      environment:
+        BAR: bar
     handler2:
       processes: 1
       pools:
@@ -123,9 +129,11 @@ def test_dynamic_handlers(default_config_manager, galaxy_yml, job_conf):
         handler0_config = handler_config_paths[0].open().read()
         assert " --server-name=handler0" in handler0_config
         assert " --attach-to-pool=job-handlers --attach-to-pool=workflow-schedulers" in handler0_config
+        assert " FOO=foo" in handler0_config
         handler1_config = handler_config_paths[1].open().read()
         assert " --server-name=handler1" in handler1_config
         assert " --attach-to-pool=job-handlers.special" in handler1_config
+        assert " BAR=bar" in handler1_config
         handler2_config = handler_config_paths[2].open().read()
         assert " --server-name=handler2" in handler2_config
         assert " --attach-to-pool=job-handlers --attach-to-pool=job-handlers.special" in handler2_config
@@ -166,7 +174,9 @@ def test_static_handlers_yaml(default_config_manager, galaxy_yml, job_conf):
         assert '.yml --server-name=handler0 --pid-file=' in handler0_config_path.open().read()
         handler1_config_path = instance_conf_dir / 'galaxy_standalone_handler1.conf'
         assert handler1_config_path.exists()
-        assert '.yml --server-name=handler1 --pid-file=' in handler1_config_path.open().read()
+        handler1_config = handler1_config_path.open().read()
+        assert '.yml --server-name=handler1 --pid-file=' in handler1_config
+        assert 'BAZ=baz' in handler1_config
         assert (instance_conf_dir / 'galaxy_standalone_sge_handler.conf').exists()
         assert (instance_conf_dir / 'galaxy_standalone_special_handler0.conf').exists()
         assert (instance_conf_dir / 'galaxy_standalone_special_handler1.conf').exists()

@@ -304,15 +304,13 @@ In ``gravity.yml`` on the job handler host::
 Galaxy Job Handlers
 -------------------
 
-Gravity has limited support for reading Galaxy's job configuration: it can read statically configured job handlers in
-the ``job_conf.xml`` file, but cannot read the newer YAML-format job configuration, or the job configuration inline from
-``galaxy.yml``. Improved support for reading Galaxy's job configuration is planned, but for the time being, Gravity will
-run standalone Galaxy job handler processes if you:
+Gravity has support for reading Galaxy's job configuration: it can read statically configured job handlers in the
+``job_conf.yml`` or ``job_conf.yml`` files, or the job configuration inline from the ``job_config`` option in
+``galaxy.yml``. However, unless you need to statically define handlers, it is simpler to configure Gravity to run
+`dynamically defined handlers`_ as detailed in the Galaxy scaling documentation.
 
-1. Set ``job_handler_count`` to a number greater than ``0``. **NOTE:** You must also explicitly set the `job handler
-   assignment method`_ to ``db-skip-locked`` or ``db-transaction-isolation`` to prevent the web process from also
-   handling jobs. This is the preferred method for specifying job handlers.
-2. Define static ``<handler id="..."/>`` handlers in the XML-format job configuration file.
+When using dynamically defined handlers, be sure to explicitly set the `job handler assignment method`_ to
+``db-skip-locked`` or ``db-transaction-isolation`` to prevent the web process from also handling jobs.
 
 Configuration Precedence
 ------------------------
@@ -466,5 +464,6 @@ A ``configstate.yaml`` file for a Galaxy service might look like::
 .. _FastAPI: https://fastapi.tiangolo.com/
 .. _unicornherder: https://github.com/alphagov/unicornherder
 .. _job handler assignment method: https://docs.galaxyproject.org/en/master/admin/scaling.html#job-handler-assignment-methods
+.. _dynamically defined handlers: https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defined-handlers
 .. _Ansible: http://www.ansible.com/
 .. _Issue #6: https://github.com/galaxyproject/gravity/issues/6
