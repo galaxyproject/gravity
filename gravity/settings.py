@@ -27,6 +27,11 @@ class LogLevel(str, Enum):
     error = "ERROR"
 
 
+class ProcessManager(str, Enum):
+    supervisor = "supervisor"
+    systemd = "systemd"
+
+
 class AppServer(str, Enum):
     gunicorn = "gunicorn"
     unicornherder = "unicornherder"
@@ -172,6 +177,13 @@ class Settings(BaseSettings):
     Configuration for Gravity process manager.
     ``uwsgi:`` section will be ignored if Galaxy is started via Gravity commands (e.g ``./run.sh``, ``galaxy`` or ``galaxyctl``).
     """
+
+    process_manager: ProcessManager = Field(
+        ProcessManager.supervisor,
+        description="""
+Process manager to use.
+``supervisor`` is the default process manager.
+""")
 
     galaxy_root: Optional[str] = Field(
         None,

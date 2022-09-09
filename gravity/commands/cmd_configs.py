@@ -14,7 +14,7 @@ def cli(ctx):
         registered = cm.get_registered_configs()
         if registered:
             click.echo("%-12s  %-24s  %s" % ("TYPE", "INSTANCE NAME", "CONFIG PATH"))
-            for config in sorted(registered.keys()):
-                click.echo("%-12s  %-24s  %s" % (registered[config].get("config_type", "unknown"), registered[config].get("instance_name", "unknown"), config))
+            for config in registered:
+                click.echo("%-12s  %-24s  %s" % (config.get("config_type", "unknown"), config.get("instance_name", "unknown"), config.attribs["config_file"]))
         else:
             click.echo("No config files registered")

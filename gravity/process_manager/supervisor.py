@@ -10,6 +10,7 @@ from os.path import exists, join
 
 from gravity.io import debug, error, exception, info, warn
 from gravity.process_manager import BaseProcessManager
+from gravity.settings import ProcessManager
 from gravity.state import GracefulMethod
 from gravity.util import which
 
@@ -183,8 +184,11 @@ programs = {programs}
 
 
 class SupervisorProcessManager(BaseProcessManager):
-    def __init__(self, state_dir=None, start_daemon=True, foreground=False):
-        super(SupervisorProcessManager, self).__init__(state_dir=state_dir)
+
+    name = ProcessManager.supervisor
+
+    def __init__(self, state_dir=None, config_manager=None, start_daemon=True, foreground=False):
+        super().__init__(state_dir=state_dir, config_manager=config_manager)
         self.supervisord_exe = which("supervisord")
         self.supervisor_state_dir = join(self.state_dir, "supervisor")
         self.supervisord_conf_path = join(self.supervisor_state_dir, "supervisord.conf")
@@ -340,13 +344,14 @@ class SupervisorProcessManager(BaseProcessManager):
         else:
             debug("No changes to existing config for %s %s at %s", file_type, name, path)
 
-    def _process_config(self, config_file, config):
+    def _process_config(self, config):
         """Perform necessary supervisor config updates as per current Galaxy/Gravity configuration.
 
         Does not call ``supervisorctl update``.
         """
         instance_name = config["instance_name"]
         attribs = config["attribs"]
+        config_file = config.__file__
         instance_conf_dir = join(self.supervisord_conf_dir, f"{instance_name}.d")
         intended_configs = set()
         try:
@@ -376,7 +381,7 @@ class SupervisorProcessManager(BaseProcessManager):
             os.unlink(file)
 
     def _remove_invalid_configs(self):
-        valid_names = [c.instance_name for c in self.config_manager.get_registered_configs().values()]
+        valid_names = [c.instance_name for c in self.config_manager.get_registered_configs()]
         valid_instance_dirs = [f"{name}.d" for name in valid_names]
         valid_group_confs = []
         if self.use_group:
@@ -390,49 +395,38 @@ class SupervisorProcessManager(BaseProcessManager):
                 info(f"Removing instance directory {path}")
                 shutil.rmtree(path)
 
-    def __start_stop(self, op, instance_names):
-        self.update()
-        instance_names, service_names, registered_instance_names = self.get_instance_names(instance_names)
-        for instance_name in instance_names:
-            target = f"{instance_name}:*" if self.use_group else "all"
-            self.supervisorctl(op, target)
-            for service in self.config_manager.get_instance_services(instance_name):
-                if service["service_type"] == "uwsgi":
-                    self.supervisorctl(op, f"{instance_name}_{service['config_type']}_{service['service_name']}")
-        # shortcut for just passing service names directly
-        for name in service_names:
-            self.supervisorctl(op, name)
+    def __start_stop(self, op, configs, service_names):
+        self.update(configs=configs)
+        for config in configs:
+            if service_names:
+                services = [s for s in config.services if s["service_name"] in service_names]
+                for service in services:
+                    program_name = self._service_program_name(config.instance_name, service)
+                    self.supervisorctl(op, program_name)
+            else:
+                target = f"{config.instance_name}:*" if self.use_group else "all"
+                self.supervisorctl(op, target)
 
-    def __reload_graceful(self, op, instance_names):
-        self.update()
-        instance_names, service_names, registered_instance_names = self.get_instance_names(instance_names)
-        if not instance_names:
-            instance_names = registered_instance_names
-        known_services = []
-        unknown_services = list(service_names)
-        for instance_name in instance_names:
-            for service in self.config_manager.get_instance_services(instance_name):
-                program_name = self._service_program_name(instance_name, service)
-                known_services.append(program_name)
-                if service_names:
-                    if program_name not in service_names:
-                        continue
-                    else:
-                        unknown_services.remove(program_name)
-                config = self.config_manager.get_instance_config(instance_name)
+    def __reload_graceful(self, op, configs, service_names):
+        self.update(configs=configs)
+        for config in configs:
+            if service_names:
+                services = [s for s in config.services if s["service_name"] in service_names]
+            else:
+                services = config.services
+            for service in services:
+                program_name = self._service_program_name(config.instance_name, service)
                 if service.get_graceful_method(config["attribs"]) == GracefulMethod.SIGHUP:
                     self.supervisorctl("signal", "SIGHUP", program_name)
                 else:
                     self.supervisorctl("restart", program_name)
-        if unknown_services:
-            exception(f'Invalid service(s): {", ".join(unknown_services)}. Known service(s) are {", ".join(known_services)}')
 
-    def start(self, instance_names):
-        self.__start_stop("start", instance_names)
+    def start(self, configs=None, service_names=None):
+        self.__start_stop("start", configs, service_names)
         self.supervisorctl("status")
 
-    def stop(self, instance_names):
-        self.__start_stop("stop", instance_names)
+    def stop(self, configs=None, service_names=None):
+        self.__start_stop("stop", configs, service_names)
         # Exit supervisor if all processes are stopped
         supervisor = self.__get_supervisor()
         proc_infos = supervisor.getAllProcessInfo()
@@ -442,16 +436,16 @@ class SupervisorProcessManager(BaseProcessManager):
         else:
             info("Not all processes stopped, supervisord not shut down (hint: see `galaxyctl status`)")
 
-    def restart(self, instance_names):
-        self.__start_stop("restart", instance_names)
+    def restart(self, configs=None, service_names=None):
+        self.__start_stop("restart", configs, service_names)
 
-    def reload(self, instance_names):
-        self.__reload_graceful("reload", instance_names)
+    def reload(self, configs=None, service_names=None):
+        self.__reload_graceful("reload", configs, service_names)
 
-    def graceful(self, instance_names):
-        self.__reload_graceful("graceful", instance_names)
+    def graceful(self, configs=None, service_names=None):
+        self.__reload_graceful("graceful", configs, service_names)
 
-    def status(self):
+    def status(self, configs=None, service_names=None):
         # TODO: create our own formatted output
         # supervisor = self.get_supervisor()
         # all_infos = supervisor.getAllProcessInfo()
@@ -464,13 +458,13 @@ class SupervisorProcessManager(BaseProcessManager):
             time.sleep(0.5)
         info("supervisord has terminated")
 
-    def update(self, force=False):
+    def update(self, configs=None, force=False, **kwargs):
         """Add newly defined servers, remove any that are no longer present"""
         if force:
             shutil.rmtree(self.supervisord_conf_dir)
             os.makedirs(self.supervisord_conf_dir)
-        for config_file, config in self.config_manager.get_registered_configs().items():
-            self._process_config(config_file, config)
+        for config in configs:
+            self._process_config(config)
         self._remove_invalid_configs()
         # only need to update if supervisord is running, otherwise changes will be picked up at next start
         if self.__supervisord_is_running():
@@ -489,3 +483,5 @@ class SupervisorProcessManager(BaseProcessManager):
                 pass
             else:
                 raise
+
+    pm = supervisorctl

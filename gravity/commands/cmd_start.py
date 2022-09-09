@@ -26,12 +26,12 @@ def cli(ctx, foreground, instance, quiet=False):
                 "Nothing to start: no Galaxy instances configured and no Galaxy configuration files found, "
                 "see `galaxyctl register --help`")
     with process_manager.process_manager(state_dir=ctx.parent.state_dir, foreground=foreground) as pm:
-        pm.start(instance)
+        pm.start(instance_names=instance)
         if foreground:
-            pm.follow(instance, quiet=quiet)
+            pm.follow(instance_names=instance, quiet=quiet)
         elif pm.config_manager.single_instance:
-            config = list(pm.config_manager.get_registered_configs().values())[0]
+            config = list(pm.config_manager.get_registered_configs())[0]
             info(f"Log files are in {config.attribs['log_dir']}")
         else:
-            for config in pm.config_manager.get_registered_configs(instances=instance or None).values():
+            for config in pm.config_manager.get_registered_configs(instances=instance or None):
                 info(f"Log files for {config.instance_name} are in {config.attribs['log_dir']}")

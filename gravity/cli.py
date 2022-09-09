@@ -23,6 +23,7 @@ COMMAND_ALIASES = {
     "forget": "deregister",
     "get": "show",
     "reload": "graceful",
+    "supervisorctl": "pm",
 }
 
 
