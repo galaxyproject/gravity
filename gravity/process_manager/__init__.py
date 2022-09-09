@@ -7,35 +7,63 @@ import inspect
 import os
 import subprocess
 from abc import ABCMeta, abstractmethod
+from functools import partial, wraps
 
 from gravity.config_manager import ConfigManager
-from gravity.io import exception
+from gravity.io import debug, exception, warn
+from gravity.state import VALID_SERVICE_NAMES
 from gravity.util import which
 
 
-# If at some point we have additional process managers we can make a factory,
-# but for the moment there's only supervisor.
 @contextlib.contextmanager
 def process_manager(*args, **kwargs):
-    # roulette!
-    for filename in os.listdir(os.path.dirname(__file__)):
-        if filename.endswith(".py") and not filename.startswith("_"):
-            mod = importlib.import_module("gravity.process_manager." + filename[: -len(".py")])
-            for name in dir(mod):
-                obj = getattr(mod, name)
-                if not name.startswith("_") and inspect.isclass(obj) and issubclass(obj, BaseProcessManager) and obj != BaseProcessManager:
-                    pm = obj(*args, **kwargs)
-                    try:
-                        yield pm
-                    finally:
-                        pm.terminate()
-                    return
+    pm = ProcessManagerRouter(*args, **kwargs)
+    try:
+        yield pm
+    finally:
+        pm.terminate()
 
 
-class BaseProcessManager(object, metaclass=ABCMeta):
+def _route(func, all_process_managers=False):
+    """Given instance names, populates kwargs with instance configs for the given PM, and calls the PM-routed function
+    """
+    @wraps(func)
+    def decorator(self, *args, instance_names=None, **kwargs):
+        configs_by_pm = {}
+        pm_names = self.process_managers.keys()
+        instance_names, service_names = self._instance_service_names(instance_names)
+        configs = self.config_manager.get_registered_configs(instances=instance_names or None)
+        for config in configs:
+            try:
+                configs_by_pm[config.process_manager].append(config)
+            except KeyError:
+                configs_by_pm[config.process_manager] = [config]
+        if not all_process_managers:
+            pm_names = configs_by_pm.keys()
+        for pm_name in pm_names:
+            routed_func = getattr(self.process_managers[pm_name], func.__name__)
+            routed_func_params = inspect.getargspec(routed_func).args
+            if "configs" in routed_func_params:
+                pm_configs = configs_by_pm.get(pm_name, [])
+                kwargs["configs"] = pm_configs
+                debug(f"Calling {func.__name__} in process manager {pm_name} for instances: {[c.instance_name for c in pm_configs]}")
+            else:
+                debug(f"Calling {func.__name__} in process manager {pm_name} for all instances")
+            if "service_names" in routed_func_params:
+                kwargs["service_names"] = service_names
+            routed_func(*args, **kwargs)
+        # note we don't ever actually call the decorated function, we call the routed one(s)
+    return decorator
 
-    def __init__(self, state_dir=None, start_daemon=True, foreground=False):
-        self.config_manager = ConfigManager(state_dir=state_dir)
+
+route = partial(_route, all_process_managers=False)
+route_to_all = partial(_route, all_process_managers=True)
+
+
+class BaseProcessManager(metaclass=ABCMeta):
+
+    def __init__(self, state_dir=None, config_manager=None, start_daemon=True, foreground=False):
+        self.config_manager = config_manager or ConfigManager(state_dir=state_dir)
         self.state_dir = self.config_manager.state_dir
         self.tail = which("tail")
 
@@ -53,51 +81,24 @@ class BaseProcessManager(object, metaclass=ABCMeta):
         environment.update(attribs.get(environment_from, {}).get("environment", {}))
         return environment
 
-    @abstractmethod
-    def start(self, instance_names):
-        """ """
-
-    @abstractmethod
-    def _process_config(self, config_file, config, **kwargs):
-        """ """
-
-    @abstractmethod
-    def terminate(self):
-        """ """
-
-    @abstractmethod
-    def stop(self, instance_names):
-        """ """
-
-    @abstractmethod
-    def restart(self, instance_names):
-        """ """
-
-    @abstractmethod
-    def reload(self, instance_names):
-        """ """
-
-    def follow(self, instance_names, quiet=False):
+    def follow(self, configs=None, service_names=None, quiet=False):
         # supervisor has a built-in tail command but it only works on a single log file. `galaxyctl supervisorctl tail
         # ...` can be used if desired, though
         if not self.tail:
             exception("`tail` not found on $PATH, please install it")
-        instance_names, service_names, registered_instance_names = self.get_instance_names(instance_names)
         log_files = []
         if quiet:
             cmd = [self.tail, "-f", self.log_file]
             tail_popen = subprocess.Popen(cmd)
             tail_popen.wait()
         else:
-            if not instance_names:
-                instance_names = registered_instance_names
-            for instance_name in instance_names:
-                config = self.config_manager.get_instance_config(instance_name)
-                log_dir = config["attribs"]["log_dir"]
+            if not configs:
+                configs = self.config_manager.get_registered_configs()
+            for config in configs:
+                log_dir = config.attribs["log_dir"]
                 if not service_names:
-                    services = self.config_manager.get_instance_services(instance_name)
-                    for service in services:
-                        program_name = self._service_program_name(instance_name, service)
+                    for service in config.services:
+                        program_name = self._service_program_name(config.instance_name, service)
                         log_files.append(self._service_log_file(log_dir, program_name))
                 else:
                     log_files.extend([self._service_log_file(log_dir, s) for s in service_names])
@@ -106,30 +107,123 @@ class BaseProcessManager(object, metaclass=ABCMeta):
                 tail_popen.wait()
 
     @abstractmethod
-    def graceful(self, instance_names):
+    def _process_config(self, config_file, config, **kwargs):
         """ """
 
     @abstractmethod
-    def update(self, instance_names):
+    def start(self, configs=None, service_names=None):
         """ """
 
     @abstractmethod
-    def shutdown(self, instance_names):
+    def stop(self, configs=None, service_names=None):
         """ """
 
-    def get_instance_names(self, instance_names):
+    @abstractmethod
+    def restart(self, configs=None, service_names=None):
+        """ """
+
+    @abstractmethod
+    def reload(self, configs=None, service_names=None):
+        """ """
+
+    @abstractmethod
+    def graceful(self, configs=None, service_names=None):
+        """ """
+
+    @abstractmethod
+    def status(self):
+        """ """
+
+    @abstractmethod
+    def update(self, configs=None, service_names=None, force=False):
+        """ """
+
+    @abstractmethod
+    def shutdown(self):
+        """ """
+
+    @abstractmethod
+    def terminate(self):
+        """ """
+
+    @abstractmethod
+    def pm(self, *args, **kwargs):
+        """Direct pass-thru to process manager."""
+
+
+class ProcessManagerRouter:
+    def __init__(self, state_dir=None, **kwargs):
+        self.config_manager = ConfigManager(state_dir=state_dir)
+        self.state_dir = self.config_manager.state_dir
+        self._load_pm_modules(state_dir=state_dir, **kwargs)
+
+    def _load_pm_modules(self, *args, **kwargs):
+        self.process_managers = {}
+        for filename in os.listdir(os.path.dirname(__file__)):
+            if filename.endswith(".py") and not filename.startswith("_"):
+                mod = importlib.import_module("gravity.process_manager." + filename[: -len(".py")])
+                for name in dir(mod):
+                    obj = getattr(mod, name)
+                    if not name.startswith("_") and inspect.isclass(obj) and issubclass(obj, BaseProcessManager) and obj != BaseProcessManager:
+                        pm = obj(*args, config_manager=self.config_manager, **kwargs)
+                        self.process_managers[pm.name] = pm
+
+    def _instance_service_names(self, names):
+        instance_names = []
+        service_names = []
         registered_instance_names = self.config_manager.get_registered_instance_names()
-        unknown_instance_names = []
-        if instance_names:
-            _instance_names = []
-            for n in instance_names:
-                if n in registered_instance_names:
-                    _instance_names.append(n)
+        if names:
+            for name in names:
+                if name in registered_instance_names:
+                    instance_names.append(name)
+                elif name in VALID_SERVICE_NAMES:
+                    service_names.append(name)
                 else:
-                    unknown_instance_names.append(n)
-            instance_names = _instance_names
-        elif registered_instance_names:
-            instance_names = registered_instance_names
-        else:
-            exception("No instances registered (hint: `galaxyctl register /path/to/galaxy.yml`)")
-        return instance_names, unknown_instance_names, registered_instance_names
+                    warn(f"Warning: Not a known instance or service name: {name}")
+            if not instance_names and not service_names:
+                exception(f"No provided names are known instance or service names")
+        return (instance_names, service_names)
+
+    @route
+    def follow(self, instance_names=None, quiet=None):
+        """ """
+
+    @route
+    def start(self, instance_names=None):
+        """ """
+
+    @route
+    def stop(self, instance_names=None):
+        """ """
+
+    @route
+    def restart(self, instance_names=None):
+        """ """
+
+    @route
+    def reload(self, instance_names=None):
+        """ """
+
+    @route
+    def graceful(self, instance_names=None):
+        """ """
+
+    @route
+    def status(self):
+        """ """
+
+    @route_to_all
+    def update(self, instance_names=None, force=False):
+        """ """
+
+    @route
+    def shutdown(self):
+        """ """
+
+    @route
+    def terminate(self):
+        """ """
+
+    @route
+    def pm(self):
+        """ """

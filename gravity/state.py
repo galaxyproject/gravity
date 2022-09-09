@@ -174,6 +174,7 @@ class ConfigFile(AttributeDict):
     @property
     def defaults(self):
         return {
+            "process_manager": self["process_manager"],
             "instance_name": self["instance_name"],
             "galaxy_root": self["galaxy_root"],
             "log_dir": self["attribs"]["log_dir"],
@@ -250,3 +251,5 @@ SERVICE_CLASS_MAP = {
     "tusd": GalaxyTUSDService,
     "standalone": GalaxyStandaloneService,
 }
+
+VALID_SERVICE_NAMES = set(SERVICE_CLASS_MAP.keys())

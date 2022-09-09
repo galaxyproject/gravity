@@ -9,4 +9,4 @@ from gravity import process_manager
 def cli(ctx, force):
     """Update process manager from config changes."""
     with process_manager.process_manager(state_dir=ctx.parent.state_dir, start_daemon=False) as pm:
-        pm.update(force)
+        pm.update(force=force)

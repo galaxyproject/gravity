@@ -112,6 +112,9 @@ class ConfigManager(object):
         config.services = []
         config.instance_name = gravity_config.instance_name
         config.config_type = server_section
+        config.process_manager = gravity_config.process_manager
+        # FIXME: should this be attribs?
+        config.attribs["config_file"] = conf
         config.attribs["galaxy_infrastructure_url"] = app_config.get("galaxy_infrastructure_url", "").rstrip("/")
         if gravity_config.tusd.enable and not config.attribs["galaxy_infrastructure_url"]:
             exception("To run the tusd server you need to set galaxy_infrastructure_url in the galaxy section of galaxy.yml")
@@ -168,8 +171,6 @@ class ConfigManager(object):
                     environment=handler_settings.get("environment")
                 ))
 
-        # Dynamic job handlers are configured using `job_handler_count` in galaxy.yml.
-        #
         # FIXME: This should imply explicit configuration of the handler assignment method. If not explicitly set, the
         # web process will be a handler, which is not desirable when dynamic handlers are used. Currently Gravity
         # doesn't parse that part of the job config. See logic in lib/galaxy/web_stack/handlers.py _get_is_handler() to
@@ -279,11 +280,11 @@ class ConfigManager(object):
 
     def get_registered_configs(self, instances=None):
         """Return the persisted values of all config files registered with the config manager."""
-        rval = {}
-        configs = self.state.config_files
-        for config_file, config in list(configs.items()):
+        rval = []
+        config_files = self.state.config_files
+        for config_file, config in list(config_files.items()):
             if (instances is not None and config["instance_name"] in instances) or instances is None:
-                rval[config_file] = self.get_config(config_file)
+                rval.append(self.get_config(config_file))
         return rval
 
     def get_registered_config(self, config_file):
@@ -292,26 +293,8 @@ class ConfigManager(object):
             return self.get_config(config_file)
         return None
 
-    def get_instance_config(self, instance_name):
-        for config in list(self.get_registered_configs().values()):
-            if config["instance_name"] == instance_name:
-                return config
-        exception(f'Instance "{instance_name}" unknown, known instance(s) are {", ".join(self.get_registered_instance_names())}.')
-
     def get_registered_instance_names(self):
-        return [c['instance_name'] for c in self.state.config_files.values()]
-
-    def get_instance_services(self, instance_name):
-        return self.get_instance_config(instance_name)["services"]
-
-    def get_registered_services(self):
-        rval = []
-        for config_file, config in self.get_registered_configs.items():
-            for service in config["services"]:
-                service["config_file"] = config_file
-                service["instance_name"] = config["instance_name"]
-                rval.append(service)
-        return rval
+        return [c["instance_name"] for c in self.state.config_files.values()]
 
     def auto_register(self):
         """Attempt to automatically register a config file if none are registered."""
