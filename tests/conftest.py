@@ -30,6 +30,69 @@ galaxy:
 """
 
 
+# old-style string formatting is used because of curly braces in the YAML
+CONFIGSTATE_YAML_0_X = """
+config_files:
+  %(galaxy_yml)s:
+    config_type: galaxy
+    instance_name: gravity-0-x
+    attribs:
+      galaxy_infrastructure_url: ''
+      app_server: gunicorn
+      log_dir: %(state_dir)s/log
+      virtualenv:
+      gunicorn:
+        enable: true
+        bind: localhost:8080
+        workers: 1
+        timeout: 300
+        extra_args: ''
+        preload: true
+        environment: {}
+      tusd:
+        enable: false
+        tusd_path: tusd
+        host: localhost
+        port: 1080
+        upload_dir: ''
+        hooks_enabled_events: pre-create
+        extra_args: ''
+        environment: {}
+      celery:
+        enable: true
+        enable_beat: true
+        concurrency: 2
+        loglevel: DEBUG
+        queues: celery,galaxy.internal,galaxy.external
+        pool: threads
+        extra_args: ''
+        environment: {}
+      handlers: {}
+      gravity_version: 0.13.4
+      galaxy_root: %(galaxy_root_dir)s
+      gx_it_proxy:
+        enable: false
+        ip: localhost
+        port: 4002
+        sessions: database/interactivetools_map.sqlite
+        verbose: true
+        forward_ip:
+        forward_port:
+        reverse_proxy: false
+        environment: {}
+    services:
+    - config_type: galaxy
+      service_type: gunicorn
+      service_name: gunicorn
+    - config_type: galaxy
+      service_type: celery
+      service_name: celery
+    - config_type: galaxy
+      service_type: celery-beat
+      service_name: celery-beat
+"""
+
+
 @pytest.fixture(scope='session')
 def galaxy_git_dir():
     galaxy_dir = TEST_DIR / 'galaxy.git'
@@ -73,6 +136,15 @@ def state_dir():
 def default_config_manager(state_dir):
     with config_manager.config_manager(state_dir=state_dir) as cm:
         yield cm
+
+
+@pytest.fixture
+def configstate_yaml_0_x(galaxy_root_dir, state_dir, galaxy_yml):
+    return CONFIGSTATE_YAML_0_X % {
+        "galaxy_root_dir": galaxy_root_dir,
+        "state_dir": state_dir,
+        "galaxy_yml": str(galaxy_yml)
+    }
 
 
 @pytest.fixture()

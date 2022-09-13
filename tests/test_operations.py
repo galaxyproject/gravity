@@ -101,7 +101,8 @@ def test_cmd_start_with_gxit(state_dir, galaxy_yml, gxit_startup_config, free_po
     assert result.exit_code == 0, result.output
     start_instance(state_dir, free_port)
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'status'])
-    assert result.exit_code == 0, result.output
+    assert result.exit_code == 0, f"{result.output}\ngx-it-proxy startup failed. " \
+        f"gx-it-proxy startup logs:\n{open(state_dir / 'log' / 'gx-it-proxy.log').read()}"
     startup_done = wait_for_gxit_proxy(state_dir)
     assert startup_done is True, f"gx-it-proxy startup failed. gx-it-proxy startup logs:\n {startup_done}"
 
@@ -122,6 +123,18 @@ def test_cmd_restart_with_update(state_dir, galaxy_yml, startup_config, free_por
     assert result.exit_code == 0, result.output
     startup_done = wait_for_startup(state_dir=state_dir, free_port=free_port, prefix=prefix)
     assert startup_done is True, f"Startup failed. Application startup logs:\n {startup_done}"
+
+
+def test_cmd_update_with_0_x_config(state_dir, configstate_yaml_0_x):
+    runner = CliRunner()
+    configstate_yaml = state_dir / "configstate.yaml"
+    open(configstate_yaml, "w").write(configstate_yaml_0_x)
+    result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'update'])
+    assert result.exit_code == 0, result.output
+    assert "Converting Gravity config state to 1.0 format" in result.output
+    assert "Adding service gunicorn" in result.output
+    assert "Adding service celery" in result.output
+    assert "Adding service celery-beat" in result.output
 
 
 def test_cmd_show(state_dir, galaxy_yml):

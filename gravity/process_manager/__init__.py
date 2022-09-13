@@ -58,7 +58,7 @@ class BaseProcessManager(object, metaclass=ABCMeta):
         """ """
 
     @abstractmethod
-    def _process_config_changes(self, configs, meta_changes):
+    def _process_config(self, config_file, config, **kwargs):
         """ """
 
     @abstractmethod
@@ -118,7 +118,7 @@ class BaseProcessManager(object, metaclass=ABCMeta):
         """ """
 
     def get_instance_names(self, instance_names):
-        registered_instance_names = self.config_manager.get_registered_instances()
+        registered_instance_names = self.config_manager.get_registered_instance_names()
         unknown_instance_names = []
         if instance_names:
             _instance_names = []

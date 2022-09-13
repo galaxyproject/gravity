@@ -1,21 +1,22 @@
 import json
 from pathlib import Path
 
+from gravity import __version__, config_manager
 from gravity.settings import Settings
 
 
 def test_register_defaults(galaxy_yml, galaxy_root_dir, state_dir, default_config_manager):
     default_config_manager.add([str(galaxy_yml)])
     assert str(galaxy_yml) in default_config_manager.state['config_files']
-    state = default_config_manager.state['config_files'][str(galaxy_yml)]
+    config = default_config_manager.get_registered_config(str(galaxy_yml))
     default_settings = Settings()
-    assert state['config_type'] == 'galaxy'
-    assert state['instance_name'] == default_settings.instance_name
-    assert state['services'] == []
-    attributes = state['attribs']
+    assert config['config_type'] == 'galaxy'
+    assert config['instance_name'] == default_settings.instance_name
+    assert config['services'] != []
+    attributes = config['attribs']
     assert attributes['app_server'] == 'gunicorn'
     assert Path(attributes['log_dir']) == Path(state_dir) / 'log'
-    assert Path(attributes['galaxy_root']) == galaxy_root_dir
+    assert Path(config['galaxy_root']) == galaxy_root_dir
     gunicorn_attributes = attributes['gunicorn']
     assert gunicorn_attributes['bind'] == default_settings.gunicorn.bind
     assert gunicorn_attributes['workers'] == default_settings.gunicorn.workers
@@ -35,8 +36,8 @@ def test_preload_default(galaxy_yml, default_config_manager):
         }
     }))
     default_config_manager.add([str(galaxy_yml)])
-    state = default_config_manager.state['config_files'][str(galaxy_yml)]
-    gunicorn_attributes = state['attribs']['gunicorn']
+    config = default_config_manager.get_registered_config(str(galaxy_yml))
+    gunicorn_attributes = config['attribs']['gunicorn']
     assert gunicorn_attributes['preload'] is False
 
 
@@ -57,13 +58,13 @@ def test_register_non_default(galaxy_yml, default_config_manager):
         }
     }))
     default_config_manager.add([str(galaxy_yml)])
-    state = default_config_manager.state['config_files'][str(galaxy_yml)]
-    gunicorn_attributes = state['attribs']['gunicorn']
+    config = default_config_manager.get_registered_config(str(galaxy_yml))
+    gunicorn_attributes = config['attribs']['gunicorn']
     assert gunicorn_attributes['bind'] == new_bind
     assert gunicorn_attributes['environment'] == environment
     default_settings = Settings()
     assert gunicorn_attributes['workers'] == default_settings.gunicorn.workers
-    celery_attributes = state['attribs']['celery']
+    celery_attributes = config['attribs']['celery']
     assert celery_attributes['concurrency'] == concurrency
 
 
@@ -102,3 +103,14 @@ def test_register_sample_update_to_non_sample(galaxy_root_dir, state_dir, defaul
     galaxy_yml_sample.copy(galaxy_yml)
     default_config_manager.instance_count == 1
     assert default_config_manager.get_registered_config(str(galaxy_yml))
+
+
+def test_convert_0_x_config(state_dir, galaxy_yml, configstate_yaml_0_x):
+    configstate_yaml = state_dir / "configstate.yaml"
+    open(configstate_yaml, "w").write(configstate_yaml_0_x)
+    with config_manager.config_manager(state_dir=state_dir) as cm:
+        assert cm.state.gravity_version == __version__
+        config = cm.state.config_files[str(galaxy_yml)]
+        assert config.config_type == "galaxy"
+        assert config.instance_name == "gravity-0-x"
+        assert "attribs" not in config
