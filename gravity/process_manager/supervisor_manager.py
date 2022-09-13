@@ -306,6 +306,9 @@ class SupervisorProcessManager(BaseProcessManager):
             raise Exception(f"Unknown service type: {service['service_type']}")
 
         environment = self._service_environment(service, attribs)
+        if virtualenv_bin and service.add_virtualenv_to_path:
+            path = environment.get("PATH", "%(ENV_PATH)s")
+            environment["PATH"] = ":".join([virtualenv_bin, path])
         format_vars["environment"] = ",".join("{}={}".format(k, shlex.quote(v.format(**format_vars))) for k, v in environment.items())
 
         with open(conf, "w") as out:

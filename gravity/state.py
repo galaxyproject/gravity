@@ -30,6 +30,7 @@ class Service(AttributeDict):
     service_name = "_default_"
     environment_from = None
     default_environment = {}
+    add_virtualenv_to_path = False
     graceful_method = GracefulMethod.DEFAULT
 
     def __init__(self, *args, **kwargs):
@@ -127,6 +128,8 @@ class GalaxyGxItProxyService(Service):
     default_environment = {
         "npm_config_yes": "true",
     }
+    # the npx shebang is $!/usr/bin/env node, so $PATH has to be correct
+    add_virtualenv_to_path = True
     command_template = "{virtualenv_bin}npx gx-it-proxy --ip {gx_it_proxy[ip]} --port {gx_it_proxy[port]}" \
                        " --sessions {gx_it_proxy[sessions]} {gx_it_proxy[verbose]}"
 
