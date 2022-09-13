@@ -15,6 +15,6 @@ def cli(ctx):
         if registered:
             click.echo("%-12s  %-24s  %s" % ("TYPE", "INSTANCE NAME", "CONFIG PATH"))
             for config in registered:
-                click.echo("%-12s  %-24s  %s" % (config.get("config_type", "unknown"), config.get("instance_name", "unknown"), config.attribs["config_file"]))
+                click.echo("%-12s  %-24s  %s" % (config.get("config_type", "unknown"), config.get("instance_name", "unknown"), config.__file__))
         else:
             click.echo("No config files registered")
