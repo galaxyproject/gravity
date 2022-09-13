@@ -5,14 +5,15 @@ import errno
 import hashlib
 import logging
 import os
+import shutil
 import xml.etree.ElementTree as elementtree
 from os import pardir
 from os.path import abspath, dirname, exists, expanduser, isabs, join
 from typing import Union
 
+import packaging.version
 from yaml import safe_load
 
-from gravity import __version__
 from gravity.settings import Settings
 from gravity.io import debug, error, exception, info, warn
 from gravity.state import (
@@ -59,16 +60,33 @@ class ConfigManager(object):
             state.set_name(self.config_state_path)
         # copies on __exit__
 
+    def __backup_config(self, backup_ext):
+        backup_path = f"{self.config_state_path}.{backup_ext}"
+        info(f"Previous Gravity config state saved in: {backup_path}")
+        shutil.copy(self.config_state_path, backup_path)
+
     def __convert_config(self):
-        config_state_json = join(self.state_dir, "configstate.json")
-        if exists(config_state_json) and not exists(self.config_state_path):
-            warn(f"Converting {config_state_json} to {self.config_state_path}")
-            json_state = GravityState.open(config_state_json)
-            self.__copy_config(config_state_json)
-            assert exists(self.config_state_path), f"Conversion failed ({self.config_state_path} does not exist)"
-            yaml_state = GravityState.open(self.config_state_path)
-            assert json_state == yaml_state, f"Converted config differs from previous config, remove {self.config_state_path} to retry"
-            os.unlink(config_state_json)
+        # the gravity version has been included in the configstate since 0.10.0, but it was previously a configfile
+        # attrib, which doesn't really make sense, and 1.0.0 removes persisted configfile attribs anyway
+        state_version = self.state.get("gravity_version")
+        debug(f"Gravity state version: {state_version}")
+        if not state_version or (packaging.version.parse(state_version) < packaging.version.parse("1.0.0")):
+            # this hardcoded versioning suffices for now, might have to get fancier in the future
+            with self.state as state:
+                self.__convert_config_1_0(state)
+
+    def __convert_config_1_0(self, state):
+        info("Converting Gravity config state to 1.0 format, this will only occur once")
+        self.__backup_config("pre-1.0")
+        for config_file, config in state.config_files.items():
+            try:
+                config.galaxy_root = config.attribs["galaxy_root"]
+            except KeyError:
+                warn(f"Unable to read 'galaxy_root' from attribs: {config.attribs}")
+            for key in list(config.keys()):
+                if key not in ConfigFile.persist_keys:
+                    del config[key]
+            state.config_files[config_file] = config
 
     def get_config(self, conf, defaults=None):
         if conf in self.__configs:
@@ -105,7 +123,6 @@ class ConfigManager(object):
         config.attribs["celery"] = gravity_config.celery.dict()
         config.attribs["handlers"] = gravity_config.handlers
         # Store gravity version, in case we need to convert old setting
-        config.attribs['gravity_version'] = __version__
         webapp_service_names = []
 
         # shortcut for galaxy configs in the standard locations -- explicit arg ?
@@ -328,11 +345,9 @@ class ConfigManager(object):
                 exception(f"Cannot add {config_file}: File is unknown type")
             if conf["instance_name"] is None:
                 conf["instance_name"] = conf["config_type"] + "-" + hashlib.md5(os.urandom(32)).hexdigest()[:12]
-            conf_data = {
-                "config_type": conf["config_type"],
-                "instance_name": conf["instance_name"],
-                "galaxy_root": conf["galaxy_root"],
-            }
+            conf_data = {}
+            for key in ConfigFile.persist_keys:
+                conf_data[key] = conf[key]
             self._register_config_file(config_file, conf_data)
             info("Registered %s config: %s", conf["config_type"], config_file)
 
