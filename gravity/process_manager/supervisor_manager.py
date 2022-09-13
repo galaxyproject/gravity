@@ -220,6 +220,7 @@ class SupervisorProcessManager(BaseProcessManager):
     def __supervisord(self):
         format_vars = {"supervisor_state_dir": self.supervisor_state_dir, "supervisord_conf_dir": self.supervisord_conf_dir}
         supervisord_cmd = [self.supervisord_exe, "-c", self.supervisord_conf_path]
+        self._remove_invalid_configs()
         if self.foreground:
             supervisord_cmd.append('--nodaemon')
         if not self.__supervisord_is_running():
@@ -339,18 +340,15 @@ class SupervisorProcessManager(BaseProcessManager):
         else:
             debug("No changes to existing config for %s %s at %s", file_type, name, path)
 
-    def _process_config(self, config_file, config, supervisord_conf_dir=None):
+    def _process_config(self, config_file, config):
         """Perform necessary supervisor config updates as per current Galaxy/Gravity configuration.
 
         Does not call ``supervisorctl update``.
         """
         instance_name = config["instance_name"]
         attribs = config["attribs"]
-        supervisord_conf_dir = supervisord_conf_dir or self.supervisord_conf_dir
-        instance_conf_dir = join(supervisord_conf_dir, f"{instance_name}.d")
+        instance_conf_dir = join(self.supervisord_conf_dir, f"{instance_name}.d")
         intended_configs = set()
-        present_configs = set()
-        present_dirs = set()
         try:
             os.makedirs(instance_conf_dir)
         except OSError as exc:
@@ -363,27 +361,34 @@ class SupervisorProcessManager(BaseProcessManager):
             programs.append(f"{instance_name}_{service['config_type']}_{service['service_type']}_{service['service_name']}")
 
         # TODO: test group mode
+        group_conf = join(self.supervisord_conf_dir, f"group_{instance_name}.conf")
         if self.use_group:
-            group_conf = join(supervisord_conf_dir, f"group_{instance_name}.conf")
             format_vars = {"instance_name": instance_name, "programs": ",".join(programs)}
             contents = SUPERVISORD_GROUP_TEMPLATE.format(**format_vars)
             self._update_file(group_conf, contents, instance_name, "supervisor group")
-            intended_configs.add(group_conf)
+        elif os.path.exists(group_conf):
+            os.unlink(group_conf)
 
-        for root, dirs, files in os.walk(supervisord_conf_dir):
-            for file in files:
-                present_configs.add(join(root, file))
-            for dir in dirs:
-                present_dirs.add(join(root, dir))
+        present_configs = set([join(instance_conf_dir, f) for f in os.listdir(instance_conf_dir)])
 
         for file in (present_configs - intended_configs):
             info("Removing service config %s", file)
             os.unlink(file)
 
-        for dir in present_dirs:
-            if not os.listdir(dir):
-                debug("Removing empty dir %s", dir)
-                os.rmdir(dir)
+    def _remove_invalid_configs(self):
+        valid_names = [c.instance_name for c in self.config_manager.get_registered_configs().values()]
+        valid_instance_dirs = [f"{name}.d" for name in valid_names]
+        valid_group_confs = []
+        if self.use_group:
+            valid_group_confs = [f"group_{name}.conf" for name in valid_names]
+        for entry in os.listdir(self.supervisord_conf_dir):
+            path = join(self.supervisord_conf_dir, entry)
+            if entry.startswith("group_") and entry not in valid_group_confs:
+                info(f"Removing group config {path}")
+                os.unlink(path)
+            elif entry.endswith(".d") and entry not in valid_instance_dirs:
+                info(f"Removing instance directory {path}")
+                shutil.rmtree(path)
 
     def __start_stop(self, op, instance_names):
         self.update()
@@ -466,6 +471,7 @@ class SupervisorProcessManager(BaseProcessManager):
             os.makedirs(self.supervisord_conf_dir)
         for config_file, config in self.config_manager.get_registered_configs().items():
             self._process_config(config_file, config)
+        self._remove_invalid_configs()
         # only need to update if supervisord is running, otherwise changes will be picked up at next start
         if self.__supervisord_is_running():
             self.supervisorctl("update")

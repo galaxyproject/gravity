@@ -99,6 +99,17 @@ def test_update_force(galaxy_yml, default_config_manager):
     assert gunicorn_conf_path.stat().st_mtime != update_time
 
 
+def test_cleanup(galaxy_yml, default_config_manager):
+    test_update(galaxy_yml, default_config_manager)
+    instance_conf_dir = Path(default_config_manager.state_dir) / 'supervisor' / 'supervisord.conf.d' / '_default_.d'
+    gunicorn_conf_path = instance_conf_dir / "galaxy_gunicorn_gunicorn.conf"
+    default_config_manager.remove([str(galaxy_yml)])
+    assert gunicorn_conf_path.exists()
+    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
+        pm.update()
+    assert not gunicorn_conf_path.exists()
+
+
 def test_disable_services(galaxy_yml, default_config_manager):
     default_config_manager.add([str(galaxy_yml)])
     galaxy_yml.write(json.dumps(
