@@ -8,7 +8,7 @@ import subprocess
 import time
 from os.path import exists, join
 
-from gravity.io import debug, error, exception, info, warn
+from gravity.io import debug, error, info, warn
 from gravity.process_manager import BaseProcessManager
 from gravity.settings import ProcessManager
 from gravity.state import GracefulMethod

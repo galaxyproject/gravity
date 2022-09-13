@@ -181,7 +181,7 @@ class ProcessManagerRouter:
                 else:
                     warn(f"Warning: Not a known instance or service name: {name}")
             if not instance_names and not service_names:
-                exception(f"No provided names are known instance or service names")
+                exception("No provided names are known instance or service names")
         return (instance_names, service_names)
 
     @route

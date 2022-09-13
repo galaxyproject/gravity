@@ -15,7 +15,7 @@ def cli(ctx):
             # not the most efficient...
             for instance in instances:
                 instance_str = instance
-                for config in configs.values():
+                for config in configs:
                     if config["instance_name"] == instance:
                         for service in config["services"]:
                             click.echo("%-24s  %-10s  %-10s  %s" % (instance_str, service.config_type, service.service_type, service.service_name))
