@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from gravity import __version__, config_manager
 from gravity.settings import Settings
 
 
@@ -102,3 +103,14 @@ def test_register_sample_update_to_non_sample(galaxy_root_dir, state_dir, defaul
     galaxy_yml_sample.copy(galaxy_yml)
     default_config_manager.instance_count == 1
     assert default_config_manager.get_registered_config(str(galaxy_yml))
+
+
+def test_convert_0_x_config(state_dir, galaxy_yml, configstate_yaml_0_x):
+    configstate_yaml = state_dir / "configstate.yaml"
+    open(configstate_yaml, "w").write(configstate_yaml_0_x)
+    with config_manager.config_manager(state_dir=state_dir) as cm:
+        assert cm.state.gravity_version == __version__
+        config = cm.state.config_files[str(galaxy_yml)]
+        assert config.config_type == "galaxy"
+        assert config.instance_name == "gravity-0-x"
+        assert "attribs" not in config
