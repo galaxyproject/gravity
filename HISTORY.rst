@@ -2,6 +2,12 @@
  History
 =========
 
+0.13.5
+======
+
+- If virtualenv is set in the Gravity config, automatically add its bin dir to $PATH if the gx-it-proxy is enabled by @natefoo in https://github.com/galaxyproject/gravity/pull/71
+- Support converting settings to command line arguments in a generalized way by @natefoo in https://github.com/galaxyproject/gravity/pull/73
+
 0.13.4
 ======
 
