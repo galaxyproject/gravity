@@ -252,4 +252,4 @@ SERVICE_CLASS_MAP = {
     "standalone": GalaxyStandaloneService,
 }
 
-VALID_SERVICE_NAMES = set(SERVICE_CLASS_MAP.keys())
+VALID_SERVICE_NAMES = set(SERVICE_CLASS_MAP)
