@@ -32,6 +32,7 @@ class Service(AttributeDict):
     default_environment = {}
     add_virtualenv_to_path = False
     graceful_method = GracefulMethod.DEFAULT
+    command_arguments = {}
 
     def __init__(self, *args, **kwargs):
         super(Service, self).__init__(*args, **kwargs)
@@ -48,6 +49,19 @@ class Service(AttributeDict):
 
     def get_environment(self):
         return self.default_environment.copy()
+
+    def get_command_arguments(self, attribs, format_vars):
+        rval = {}
+        for setting, value in attribs.get(self.service_type, {}).items():
+            if setting in self.command_arguments:
+                # FIXME: this truthiness testing of value is probably not the best
+                if value:
+                    rval[setting] = self.command_arguments[setting].format(**format_vars)
+                else:
+                    rval[setting] = ""
+            else:
+                rval[setting] = value
+        return rval
 
 
 class GalaxyGunicornService(Service):
@@ -130,8 +144,15 @@ class GalaxyGxItProxyService(Service):
     }
     # the npx shebang is $!/usr/bin/env node, so $PATH has to be correct
     add_virtualenv_to_path = True
+    command_arguments = {
+        "forward_ip": "--forwardIP {gx_it_proxy[forward_ip]}",
+        "forward_port": "--forwardPort {gx_it_proxy[forward_port]}",
+        "reverse_proxy": "--reverseProxy",
+    }
     command_template = "{virtualenv_bin}npx gx-it-proxy --ip {gx_it_proxy[ip]} --port {gx_it_proxy[port]}" \
-                       " --sessions {gx_it_proxy[sessions]} {gx_it_proxy[verbose]}"
+                       " --sessions {gx_it_proxy[sessions]} {gx_it_proxy[verbose]}" \
+                       " {command_arguments[forward_ip]} {command_arguments[forward_port]}" \
+                       " {command_arguments[reverse_proxy]}"
 
 
 class GalaxyTUSDService(Service):
