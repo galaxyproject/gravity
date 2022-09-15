@@ -178,7 +178,7 @@ class ConfigManager(object):
             gxit_config.sessions = app_config.get("interactivetools_map", gxit_config.sessions)
             gxit_config.verbose = '--verbose' if gxit_config.verbose else ''
             config.services.append(service_for_service_type("gx-it-proxy")(config_type=config.config_type))
-        config.attribs["gx_it_proxy"] = gravity_config.gx_it_proxy.dict()
+        config.attribs["gx-it-proxy"] = gravity_config.gx_it_proxy.dict()
 
     @staticmethod
     def expand_handlers(gravity_config: Settings, config):

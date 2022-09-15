@@ -285,7 +285,7 @@ class SupervisorProcessManager(BaseProcessManager):
             "celery": attribs["celery"],
             "galaxy_infrastructure_url": attribs["galaxy_infrastructure_url"],
             "tusd": attribs["tusd"],
-            "gx_it_proxy": attribs["gx_it_proxy"],
+            "gx_it_proxy": attribs["gx-it-proxy"],
             "galaxy_umask": service.get("umask", "022"),
             "program_name": program_name,
             "process_name_opt": process_name_opt,
@@ -295,6 +295,7 @@ class SupervisorProcessManager(BaseProcessManager):
             "supervisor_state_dir": self.supervisor_state_dir,
             "state_dir": self.state_dir,
         }
+        format_vars["command_arguments"] = service.get_command_arguments(attribs, format_vars)
         format_vars["command"] = service.command_template.format(**format_vars)
         conf = join(instance_conf_dir, f"{service['config_type']}_{service['service_type']}_{service['service_name']}.conf")
 
