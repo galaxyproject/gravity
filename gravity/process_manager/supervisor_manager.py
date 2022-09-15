@@ -285,7 +285,7 @@ class SupervisorProcessManager(BaseProcessManager):
             "celery": attribs["celery"],
             "galaxy_infrastructure_url": attribs["galaxy_infrastructure_url"],
             "tusd": attribs["tusd"],
-            "gx_it_proxy": attribs["gx_it_proxy"],
+            "gx_it_proxy": attribs["gx-it-proxy"],
             "galaxy_umask": service.get("umask", "022"),
             "program_name": program_name,
             "process_name_opt": process_name_opt,
