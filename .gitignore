@@ -10,6 +10,7 @@ coverage.xml
 /*.egg-info/
 *.egg
 tests/galaxy.git
+docs/_build
 
 # dev scripts
 /galaxycfg
