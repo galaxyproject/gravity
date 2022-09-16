@@ -15,16 +15,17 @@ from gravity import __version__  # noqa: E402
 project = 'Gravity'
 copyright = '2022, The Galaxy Project'
 author = 'The Galaxy Project'
-release = '__version__'
+release = __version__
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
+
+master_doc = 'index'
 
 extensions = []
 
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
-
 
 
 # -- Options for HTML output -------------------------------------------------
