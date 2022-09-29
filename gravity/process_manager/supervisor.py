@@ -360,8 +360,10 @@ class SupervisorProcessManager(BaseProcessManager):
             info("Removing service config %s", file)
             os.unlink(file)
 
-    def _remove_invalid_configs(self):
-        valid_names = [c.instance_name for c in self.config_manager.get_registered_configs()]
+    def _remove_invalid_configs(self, valid_configs=None):
+        if not valid_configs:
+            valid_configs = [c for c in self.config_manager.get_registered_configs() if c.process_manager == self.name]
+        valid_names = [c.instance_name for c in valid_configs]
         valid_instance_dirs = [f"{name}.d" for name in valid_names]
         valid_group_confs = []
         if self.use_group:
@@ -440,12 +442,14 @@ class SupervisorProcessManager(BaseProcessManager):
 
     def update(self, configs=None, force=False, **kwargs):
         """Add newly defined servers, remove any that are no longer present"""
-        if force:
+        if force and os.listdir(self.supervisord_conf_dir):
+            info(f"Removing supervisord conf dir due to --force option: {self.supervisord_conf_dir}")
             shutil.rmtree(self.supervisord_conf_dir)
             os.makedirs(self.supervisord_conf_dir)
+        elif not force:
+            self._remove_invalid_configs(valid_configs=configs)
         for config in configs:
             self._process_config(config)
-        self._remove_invalid_configs()
         # only need to update if supervisord is running, otherwise changes will be picked up at next start
         if self.__supervisord_is_running():
             self.supervisorctl("update")
