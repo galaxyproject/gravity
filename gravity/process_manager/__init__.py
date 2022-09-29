@@ -10,7 +10,7 @@ from abc import ABCMeta, abstractmethod
 from functools import partial, wraps
 
 from gravity.config_manager import ConfigManager
-from gravity.io import debug, exception, warn
+from gravity.io import debug, exception, info, warn
 from gravity.state import VALID_SERVICE_NAMES
 from gravity.util import which
 
@@ -80,6 +80,26 @@ class BaseProcessManager(metaclass=ABCMeta):
             environment_from = service.service_type
         environment.update(attribs.get(environment_from, {}).get("environment", {}))
         return environment
+
+    def _file_needs_update(self, path, contents):
+        """Update if contents differ"""
+        if os.path.exists(path):
+            # check first whether there are changes
+            with open(path) as fh:
+                existing_contents = fh.read()
+            if existing_contents == contents:
+                return False
+        return True
+
+    def _update_file(self, path, contents, name, file_type):
+        exists = os.path.exists(path)
+        if (exists and self._file_needs_update(path, contents)) or not exists:
+            verb = "Updating" if exists else "Adding"
+            info("%s %s %s", verb, file_type, name)
+            with open(path, "w") as out:
+                out.write(contents)
+        else:
+            debug("No changes to existing config for %s %s at %s", file_type, name, path)
 
     def follow(self, configs=None, service_names=None, quiet=False):
         # supervisor has a built-in tail command but it only works on a single log file. `galaxyctl supervisorctl tail
