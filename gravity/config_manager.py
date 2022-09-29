@@ -27,6 +27,7 @@ log = logging.getLogger(__name__)
 
 DEFAULT_JOB_CONFIG_FILE = "config/job_conf.xml"
 DEFAULT_STATE_DIR = join("~", ".config", "galaxy-gravity")
+DEFAULT_ROOT_STATE_DIR = "/var/lib/gravity"
 if "XDG_CONFIG_HOME" in os.environ:
     DEFAULT_STATE_DIR = join(os.environ["XDG_CONFIG_HOME"], "galaxy-gravity")
 
@@ -42,7 +43,10 @@ class ConfigManager(object):
 
     def __init__(self, state_dir=None, python_exe=None):
         if state_dir is None:
-            state_dir = DEFAULT_STATE_DIR
+            if self.is_root:
+                state_dir = DEFAULT_ROOT_STATE_DIR
+            else:
+                state_dir = DEFAULT_STATE_DIR
         self.state_dir = abspath(expanduser(state_dir))
         debug(f"Gravity state dir: {self.state_dir}")
         self.__configs = {}
@@ -87,6 +91,10 @@ class ConfigManager(object):
                 if key not in ConfigFile.persist_keys:
                     del config[key]
             state.config_files[config_file] = config
+
+    @property
+    def is_root(self):
+        return os.geteuid() == 0
 
     def get_config(self, conf, defaults=None):
         if conf in self.__configs:
