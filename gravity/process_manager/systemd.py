@@ -4,8 +4,9 @@ import errno
 import os
 import shlex
 import subprocess
+from glob import glob
 
-from gravity.io import debug, info
+from gravity.io import debug, error, info, warn
 from gravity.process_manager import BaseProcessManager
 from gravity.settings import ProcessManager
 
@@ -51,7 +52,7 @@ class SystemdProcessManager(BaseProcessManager):
 
     def __init__(self, state_dir=None, start_daemon=True, foreground=False, **kwargs):
         super(SystemdProcessManager, self).__init__(state_dir=state_dir, **kwargs)
-        self.user_mode = os.geteuid() != 0
+        self.user_mode = not self.config_manager.is_root
 
     @property
     def __systemd_unit_dir(self):
@@ -75,7 +76,7 @@ class SystemdProcessManager(BaseProcessManager):
 
     def terminate(self):
         """ """
-        debug("TERMINATE")
+        pass
 
     def __unit_name(self, instance_name, service):
         unit_name = f"{service['config_type']}-"
@@ -96,7 +97,19 @@ class SystemdProcessManager(BaseProcessManager):
             # Insert a single leading space
             attach_to_pool_opt = f" {_attach_to_pool_opt}"
 
+        # under supervisor we expect that gravity is installed in the galaxy venv and the venv is active when gravity
+        # runs, but under systemd this is not the case. we do assume $VIRTUAL_ENV is the galaxy venv if running as an
+        # unprivileged user, though.
         virtualenv_dir = attribs.get("virtualenv")
+        environ_virtual_env = os.environ.get("VIRTUAL_ENV")
+        if not virtualenv_dir and self.user_mode and environ_virtual_env:
+            warn(f"Assuming Galaxy virtualenv is value of $VIRTUAL_ENV: {environ_virtual_env}")
+            warn("Set `virtualenv` in Gravity configuration to override")
+            virtualenv_dir = environ_virtual_env
+        elif not virtualenv_dir:
+            error("The `virtualenv` Gravtiy config option must be set when using the systemd process manager")
+            sys.exit(1)
+
         virtualenv_bin = f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}' if virtualenv_dir else ""
         gunicorn_options = attribs["gunicorn"].copy()
         gunicorn_options["preload"] = "--preload" if gunicorn_options["preload"] else ""
@@ -217,22 +230,19 @@ class SystemdProcessManager(BaseProcessManager):
 
     def update(self, configs=None, force=False, **kwargs):
         """ """
+        if force:
+            for config in configs:
+                service_units = glob(os.path.join(self.__systemd_unit_dir, f"{config.config_type}-*.service"))
+                # TODO: would need to add targets here assuming we add one
+                if service_units:
+                    newline = '\n'
+                    info(f"Removing systemd units due to --force option:{newline}{newline.join(service_units)}")
+                    map(os.unlink, service_units)
         for config in configs:
-            process_manager = config["process_manager"]
-            if process_manager == self.name:
-                self._process_config(config)
-            else:
-                pass
-                """
-                # FIXME: refactor
-                instance_name = config["instance_name"]
-                instance_conf_dir = join(self.supervisord_conf_dir, f"{instance_name}.d")
-                group_file = join(self.supervisord_conf_dir, f"group_{instance_name}.conf")
-                if os.path.exists(instance_conf_dir):
-                    shutil.rmtree(instance_conf_dir)
-                if os.path.exists(group_file):
-                    os.unlink(group_file)
-                """
+            self._process_config(config)
+        # FIXME: you need an equivalent to the supervisor pm's remove invalid here
+        #    self._remove_invalid_configs(valid_configs=configs)
+        # FIXME: only reload if there are changes
         self.__systemctl("daemon-reload")
 
 

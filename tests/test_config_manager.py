@@ -114,3 +114,6 @@ def test_convert_0_x_config(state_dir, galaxy_yml, configstate_yaml_0_x):
         assert config.config_type == "galaxy"
         assert config.instance_name == "gravity-0-x"
         assert "attribs" not in config
+
+
+# TODO: tests for switching process managers between supervisor and systemd
