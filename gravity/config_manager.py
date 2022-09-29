@@ -119,6 +119,9 @@ class ConfigManager(object):
         config.attribs = {}
         config.services = []
         config.__file__ = conf
+        # FIXME: I don't think we use the persisted value of instance_name anymore, this comes straight from the Gravity
+        # config. We might not need it at all, but we also need to validate that it doesn't collide with other
+        # registered instances on every load, in case the admin has changed the instance name since last run.
         config.instance_name = gravity_config.instance_name
         config.config_type = server_section
         config.process_manager = gravity_config.process_manager
@@ -336,6 +339,8 @@ class ConfigManager(object):
                 exception(f"Cannot add {config_file}: File is unknown type")
             if conf["instance_name"] is None:
                 conf["instance_name"] = conf["config_type"] + "-" + hashlib.md5(os.urandom(32)).hexdigest()[:12]
+            if conf["instance_name"] in self.get_registered_instance_names():
+                exception(f"Cannot add {config_file}: instance_name '{conf['instance_name']}' already in use")
             conf_data = {}
             for key in ConfigFile.persist_keys:
                 conf_data[key] = conf[key]
