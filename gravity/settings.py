@@ -1,3 +1,4 @@
+import os
 from enum import Enum
 from typing import (
     Any,
@@ -183,6 +184,7 @@ class Settings(BaseSettings):
         description="""
 Process manager to use.
 ``supervisor`` is the default process manager.
+``systemd`` is also supported.
 """)
 
     galaxy_root: Optional[str] = Field(
@@ -190,6 +192,18 @@ Process manager to use.
         description="""
 Specify Galaxy's root directory.
 Gravity will attempt to find the root directory, but you can set the directory explicitly with this option.
+""")
+    galaxy_user: Optional[str] = Field(
+        None,
+        description="""
+User to run Galaxy as, required when using the systemd process manager as root.
+Ignored with supervisor or user-mode systemd.
+""")
+    galaxy_group: Optional[str] = Field(
+        None,
+        description="""
+Group to run Galaxy as, optional when using the systemd process manager as root.
+Ignored with supervisor or user-mode systemd.
 """)
     log_dir: Optional[str] = Field(
         None,
@@ -199,7 +213,8 @@ If not specified defaults to ``<state_dir>/log``.
 """)
     virtualenv: Optional[str] = Field(None, description="""
 Set to Galaxy's virtualenv directory.
-If not specified, Gravity assumes all processes are on PATH.
+If not specified, Gravity assumes all processes are on PATH. This option is required in most circumstances when using
+the ``systemd`` process manager.
 """)
     app_server: AppServer = Field(
         AppServer.gunicorn,
@@ -232,6 +247,16 @@ See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defi
     _normalize_gx_it_proxy = validator("gx_it_proxy", allow_reuse=True, pre=True)(none_to_default)
     _normalize_celery = validator("celery", allow_reuse=True, pre=True)(none_to_default)
     _normalize_tusd = validator("tusd", allow_reuse=True, pre=True)(none_to_default)
+
+    # Require galaxy_user if running as root
+    @validator("galaxy_user")
+    def _user_required_if_root(cls, v, values):
+        if os.geteuid() == 0:
+            if values["process_manager"] == ProcessManager.systemd:
+                raise ValueError("galaxy_user is required when running as root")
+            else:
+                raise ValueError("Gravity cannot be run as root unless using the systemd process manager")
+        return v
 
     class Config:
         env_prefix = "gravity_"

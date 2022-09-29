@@ -6,7 +6,7 @@ import shlex
 import subprocess
 from glob import glob
 
-from gravity.io import debug, error, info, warn
+from gravity.io import debug, error, exception, info, warn
 from gravity.process_manager import BaseProcessManager
 from gravity.settings import ProcessManager
 
@@ -45,7 +45,6 @@ SYSTEMD_SERVICE_TEMPLATES["celery"] = SYSTEMD_SERVICE_TEMPLATES["gunicorn"]
 SYSTEMD_SERVICE_TEMPLATES["celery-beat"] = SYSTEMD_SERVICE_TEMPLATES["gunicorn"]
 
 
-# FIXME: need to document and enforce that gravity_config.virtualenv is required in systemd mode
 class SystemdProcessManager(BaseProcessManager):
 
     name = ProcessManager.systemd
@@ -64,13 +63,17 @@ class SystemdProcessManager(BaseProcessManager):
         #return not self.config_manager.single_instance
         return False
 
-    def __systemctl(self, *args, **kwargs):
+    def __systemctl(self, *args, ignore_rc=None, **kwargs):
         args = list(args)
         if self.user_mode:
             args = ["--user"] + args
         try:
             debug("Calling systemctl with args: %s", args)
-            subprocess.check_call(["systemctl"] + args)
+            try:
+                subprocess.check_call(["systemctl"] + args)
+            except subprocess.CalledProcessError as exc:
+                if ignore_rc is None or exc.returncode not in ignore_rc:
+                    raise
         except:
             raise
 
@@ -78,6 +81,7 @@ class SystemdProcessManager(BaseProcessManager):
         """ """
         pass
 
+    # FIXME: should be __service_program_name for follow()?
     def __unit_name(self, instance_name, service):
         unit_name = f"{service['config_type']}-"
         if self.__use_instance:
@@ -107,8 +111,7 @@ class SystemdProcessManager(BaseProcessManager):
             warn("Set `virtualenv` in Gravity configuration to override")
             virtualenv_dir = environ_virtual_env
         elif not virtualenv_dir:
-            error("The `virtualenv` Gravtiy config option must be set when using the systemd process manager")
-            sys.exit(1)
+            exception("The `virtualenv` Gravity config option must be set when using the systemd process manager")
 
         virtualenv_bin = f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}' if virtualenv_dir else ""
         gunicorn_options = attribs["gunicorn"].copy()
@@ -139,7 +142,7 @@ class SystemdProcessManager(BaseProcessManager):
             format_vars["command"] = f"{virtualenv_bin}/{format_vars['command']}"
         if not self.user_mode:
             format_vars["systemd_user_group"] = f"User={attribs['galaxy_user']}"
-            if "galaxy_group" in attribs:
+            if attribs["galaxy_group"] is not None:
                 format_vars["systemd_user_group"] += f"\nGroup={attribs['galaxy_group']}"
         conf = os.path.join(self.__systemd_unit_dir, unit_name)
 
@@ -155,8 +158,7 @@ class SystemdProcessManager(BaseProcessManager):
         format_vars["environment"] = "\n".join("Environment={}={}".format(k, shlex.quote(v.format(**format_vars))) for k, v in environment.items())
 
         contents = template.format(**format_vars)
-        service_name = self._service_program_name(instance_name, service)
-        self._update_file(conf, contents, service_name, "service")
+        self._update_file(conf, contents, unit_name, "service")
 
         return conf
 
@@ -226,7 +228,7 @@ class SystemdProcessManager(BaseProcessManager):
     def status(self, configs=None, service_names=None):
         """ """
         unit_names = self.__unit_names(configs, service_names)
-        self.__systemctl("status", "--lines=0", *unit_names)
+        self.__systemctl("status", "--lines=0", *unit_names, ignore_rc=(3,))
 
     def update(self, configs=None, force=False, **kwargs):
         """ """
@@ -237,7 +239,7 @@ class SystemdProcessManager(BaseProcessManager):
                 if service_units:
                     newline = '\n'
                     info(f"Removing systemd units due to --force option:{newline}{newline.join(service_units)}")
-                    map(os.unlink, service_units)
+                    list(map(os.unlink, service_units))
         for config in configs:
             self._process_config(config)
         # FIXME: you need an equivalent to the supervisor pm's remove invalid here

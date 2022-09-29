@@ -136,6 +136,8 @@ class ConfigManager(object):
         config.attribs["tusd"] = gravity_config.tusd.dict()
         config.attribs["celery"] = gravity_config.celery.dict()
         config.attribs["handlers"] = gravity_config.handlers
+        config.attribs["galaxy_user"] = gravity_config.galaxy_user
+        config.attribs["galaxy_group"] = gravity_config.galaxy_group
         # Store gravity version, in case we need to convert old setting
         webapp_service_names = []
 
