@@ -68,7 +68,7 @@ class GalaxyGunicornService(Service):
     service_type = "gunicorn"
     service_name = "gunicorn"
     default_environment = DEFAULT_GALAXY_ENVIRONMENT
-    graceful_method = GracefulMethod.SIGHUP
+    #graceful_method = GracefulMethod.SIGHUP
     command_template = "{virtualenv_bin}gunicorn 'galaxy.webapps.galaxy.fast_factory:factory()'" \
                        " --timeout {gunicorn[timeout]}" \
                        " --pythonpath lib" \
@@ -78,7 +78,13 @@ class GalaxyGunicornService(Service):
                        " --config python:galaxy.web_stack.gunicorn_config" \
                        " {gunicorn[preload]}" \
                        " {gunicorn[extra_args]}"
-
+    @property
+    def graceful_method(self):
+        if self.get("preload"):
+            return GracefulMethod.DEFAULT
+        else:
+            return GracefulMethod.SIGHUP
+    
     def get_environment(self):
         # Works around https://github.com/galaxyproject/galaxy/issues/11821
         environment = self.default_environment.copy()
