@@ -436,7 +436,8 @@ class SupervisorProcessManager(BaseProcessManager):
                         continue
                     else:
                         unknown_services.remove(program_name)
-                if service.graceful_method == GracefulMethod.SIGHUP:
+                config = self.config_manager.get_instance_config(instance_name)
+                if service.get_graceful_method(config["attribs"]) == GracefulMethod.SIGHUP:
                     self.supervisorctl("signal", "SIGHUP", program_name)
                 else:
                     self.supervisorctl("restart", program_name)
