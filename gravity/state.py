@@ -47,6 +47,9 @@ class Service(AttributeDict):
     def full_match(self, other):
         return set(self.keys()) == set(other.keys()) and all([self[k] == other[k] for k in self if not k.startswith("_")])
 
+    def get_graceful_method(self, attribs):
+        return self.graceful_method
+
     def get_environment(self):
         return self.default_environment.copy()
 
@@ -68,7 +71,6 @@ class GalaxyGunicornService(Service):
     service_type = "gunicorn"
     service_name = "gunicorn"
     default_environment = DEFAULT_GALAXY_ENVIRONMENT
-    graceful_method = GracefulMethod.SIGHUP
     command_template = "{virtualenv_bin}gunicorn 'galaxy.webapps.galaxy.fast_factory:factory()'" \
                        " --timeout {gunicorn[timeout]}" \
                        " --pythonpath lib" \
@@ -78,6 +80,13 @@ class GalaxyGunicornService(Service):
                        " --config python:galaxy.web_stack.gunicorn_config" \
                        " {gunicorn[preload]}" \
                        " {gunicorn[extra_args]}"
+
+    # TODO: services should maybe have access to settings or attribs, and should maybe template their own command lines
+    def get_graceful_method(self, attribs):
+        if attribs["gunicorn"].get("preload"):
+            return GracefulMethod.DEFAULT
+        else:
+            return GracefulMethod.SIGHUP
 
     def get_environment(self):
         # Works around https://github.com/galaxyproject/galaxy/issues/11821
