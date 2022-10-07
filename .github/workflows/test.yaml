@@ -6,14 +6,14 @@ concurrency:
 jobs:
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       fail-fast: false
       matrix:
         python-version: ['3.7', '3.10']
         galaxy-branch: ['release_22.01', 'dev']
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: actions/setup-python@v2
         with:
           python-version: ${{ matrix.python-version }}
@@ -25,6 +25,5 @@ jobs:
         run: tox -e test
         env:
           GRAVITY_TEST_GALAXY_BRANCH: ${{ matrix.galaxy-branch }}
-          XDG_RUNTIME_DIR: /run/user/$UID
       - name: "Upload coverage to Codecov"
         uses: codecov/codecov-action@v2

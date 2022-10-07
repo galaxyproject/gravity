@@ -4,6 +4,7 @@ import re
 import time
 from pathlib import Path
 
+import pytest
 import requests
 from click.testing import CliRunner
 from yaml import safe_load
@@ -92,7 +93,8 @@ def test_cmd_start(state_dir, galaxy_yml, startup_config, free_port):
     assert "All processes stopped, supervisord will exit" in result.output
 
 
-def test_cmd_start_with_gxit(state_dir, galaxy_yml, gxit_startup_config, free_port):
+@pytest.mark.parametrize('process_manager_name', ['supervisor'])
+def test_cmd_start_with_gxit(state_dir, galaxy_yml, gxit_startup_config, free_port, process_manager_name):
     galaxy_yml.write(json.dumps(gxit_startup_config))
     runner = CliRunner()
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'register', str(galaxy_yml)])

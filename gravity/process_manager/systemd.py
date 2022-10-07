@@ -6,7 +6,7 @@ import shlex
 import subprocess
 from glob import glob
 
-from gravity.io import debug, error, exception, info, warn
+from gravity.io import debug, exception, info, warn
 from gravity.process_manager import BaseProcessManager
 from gravity.settings import ProcessManager
 
@@ -71,17 +71,17 @@ class SystemdProcessManager(BaseProcessManager):
 
     def __systemctl(self, *args, ignore_rc=None, **kwargs):
         args = list(args)
+        extra_args = os.environ.get("GRAVITY_SYSTEMCTL_EXTRA_ARGS")
+        if extra_args:
+            args = shlex.split(extra_args) + args
         if self.user_mode:
             args = ["--user"] + args
+        debug("Calling systemctl with args: %s", args)
         try:
-            debug("Calling systemctl with args: %s", args)
-            try:
-                subprocess.check_call(["systemctl"] + args)
-            except subprocess.CalledProcessError as exc:
-                if ignore_rc is None or exc.returncode not in ignore_rc:
-                    raise
-        except:
-            raise
+            subprocess.check_call(["systemctl"] + args)
+        except subprocess.CalledProcessError as exc:
+            if ignore_rc is None or exc.returncode not in ignore_rc:
+                raise
 
     def terminate(self):
         """ """
@@ -260,7 +260,6 @@ class SystemdProcessManager(BaseProcessManager):
         self._process_configs(configs)
         # TODO: only reload if there are changes
         self.__systemctl("daemon-reload")
-
 
     def shutdown(self):
         """ """

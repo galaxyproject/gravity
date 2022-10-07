@@ -85,7 +85,7 @@ gravity:
 
 
 # make pytest.params out of constants
-params={}
+params = {}
 for name in [n for n in dir() if all([(c in string.ascii_uppercase + '_') for c in n])]:
     params[name] = pytest.param(globals()[name], id=name.lower())
 
