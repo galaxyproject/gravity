@@ -11,7 +11,7 @@ from gravity.process_manager import BaseProcessManager
 from gravity.settings import ProcessManager
 
 SYSTEMD_SERVICE_TEMPLATES = {}
-SYSTEMD_SERVICE_TEMPLATES["gunicorn"] = """;
+DEFAULT_SYSTEMD_SERVICE_TEMPLATE = """;
 ; This file is maintained by Gravity - CHANGES WILL BE OVERWRITTEN
 ;
 
@@ -41,8 +41,12 @@ BlockIOAccounting=yes
 WantedBy=multi-user.target
 """
 
-SYSTEMD_SERVICE_TEMPLATES["celery"] = SYSTEMD_SERVICE_TEMPLATES["gunicorn"]
-SYSTEMD_SERVICE_TEMPLATES["celery-beat"] = SYSTEMD_SERVICE_TEMPLATES["gunicorn"]
+SYSTEMD_SERVICE_TEMPLATES["gunicorn"] = DEFAULT_SYSTEMD_SERVICE_TEMPLATE
+SYSTEMD_SERVICE_TEMPLATES["celery"] = DEFAULT_SYSTEMD_SERVICE_TEMPLATE
+SYSTEMD_SERVICE_TEMPLATES["celery-beat"] = DEFAULT_SYSTEMD_SERVICE_TEMPLATE
+SYSTEMD_SERVICE_TEMPLATES["standalone"] = DEFAULT_SYSTEMD_SERVICE_TEMPLATE
+SYSTEMD_SERVICE_TEMPLATES["gx-it-proxy"] = DEFAULT_SYSTEMD_SERVICE_TEMPLATE
+SYSTEMD_SERVICE_TEMPLATES["tusd"] = DEFAULT_SYSTEMD_SERVICE_TEMPLATE
 
 
 class SystemdProcessManager(BaseProcessManager):
@@ -55,7 +59,9 @@ class SystemdProcessManager(BaseProcessManager):
 
     @property
     def __systemd_unit_dir(self):
-        unit_path = "/etc/systemd/system" if not self.user_mode else os.path.expanduser("~/.config/systemd/user")
+        unit_path = os.environ.get("SYSTEMD_UNIT_PATH")
+        if not unit_path:
+            unit_path = "/etc/systemd/system" if not self.user_mode else os.path.expanduser("~/.config/systemd/user")
         return unit_path
 
     @property
@@ -92,7 +98,6 @@ class SystemdProcessManager(BaseProcessManager):
     def __update_service(self, config_file, config, attribs, service, instance_name):
         unit_name = self.__unit_name(instance_name, service)
 
-        # FIXME: refactor
         # used by the "standalone" service type
         attach_to_pool_opt = ""
         server_pools = service.get("server_pools")
@@ -125,6 +130,7 @@ class SystemdProcessManager(BaseProcessManager):
             "config_type": service["config_type"],
             "server_name": service["service_name"],
             "attach_to_pool_opt": attach_to_pool_opt,
+            "pid_file_opt": "",
             "gunicorn": gunicorn_options,
             "celery": attribs["celery"],
             "galaxy_infrastructure_url": attribs["galaxy_infrastructure_url"],
@@ -168,7 +174,6 @@ class SystemdProcessManager(BaseProcessManager):
         attribs = config["attribs"]
         config_file = config.__file__
         intended_configs = set()
-        present_configs = set()
 
         try:
             os.makedirs(self.__systemd_unit_dir)
@@ -176,13 +181,25 @@ class SystemdProcessManager(BaseProcessManager):
             if exc.errno != errno.EEXIST:
                 raise
 
-        # FIXME: none of this works for instances
         for service in config["services"]:
             intended_configs.add(self.__update_service(config_file, config, attribs, service, instance_name))
 
+        return intended_configs
+
+    def _process_configs(self, configs):
+        intended_configs = set()
+
+        for config in configs:
+            intended_configs = intended_configs | self._process_config(config)
+
+        # the unit dir might not exist if $SYSTEMD_UNIT_PATH is set (e.g. for tests), but this is fine if there are no
+        # intended configs
+        if not intended_configs and not os.path.exists(self.__systemd_unit_dir):
+            return
+
         # FIXME: should use config_type, but that's per-service
         _present_configs = filter(lambda f: f.startswith("galaxy-"), os.listdir(self.__systemd_unit_dir))
-        present_configs.update([os.path.join(self.__systemd_unit_dir, f) for f in _present_configs])
+        present_configs = set([os.path.join(self.__systemd_unit_dir, f) for f in _present_configs])
 
         for file in (present_configs - intended_configs):
             service_name = os.path.basename(os.path.splitext(file)[0])
@@ -240,11 +257,8 @@ class SystemdProcessManager(BaseProcessManager):
                     newline = '\n'
                     info(f"Removing systemd units due to --force option:{newline}{newline.join(service_units)}")
                     list(map(os.unlink, service_units))
-        for config in configs:
-            self._process_config(config)
-        # FIXME: you need an equivalent to the supervisor pm's remove invalid here
-        #    self._remove_invalid_configs(valid_configs=configs)
-        # FIXME: only reload if there are changes
+        self._process_configs(configs)
+        # TODO: only reload if there are changes
         self.__systemctl("daemon-reload")
 
 

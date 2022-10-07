@@ -178,9 +178,8 @@ class GalaxyTUSDService(Service):
 class GalaxyStandaloneService(Service):
     service_type = "standalone"
     service_name = "standalone"
-    # FIXME: supervisor-specific
-    command_template = "{virtualenv_bin}python ./lib/galaxy/main.py -c {galaxy_conf} --server-name={server_name}{attach_to_pool_opt}" \
-                       " --pid-file={supervisor_state_dir}/{program_name}.pid"
+    command_template = "{virtualenv_bin}python ./lib/galaxy/main.py -c {galaxy_conf} --server-name={server_name}" \
+                       "{attach_to_pool_opt}{pid_file_opt}"
 
     def get_environment(self):
         return self.get("environment") or {}

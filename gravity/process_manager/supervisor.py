@@ -267,13 +267,14 @@ class SupervisorProcessManager(BaseProcessManager):
 
         program_name = self._service_program_name(instance_name, service)
 
-        # used by the "standalone" service type
+        # TODO: used by the "standalone" service type, refactor this
         attach_to_pool_opt = ""
         server_pools = service.get("server_pools")
         if server_pools:
             _attach_to_pool_opt = " ".join(f"--attach-to-pool={server_pool}" for server_pool in server_pools)
             # Insert a single leading space
             attach_to_pool_opt = f" {_attach_to_pool_opt}"
+        pid_file_opt = f" --pid-file={self.supervisor_state_dir}/{program_name}.pid"
 
         virtualenv_dir = attribs.get("virtualenv")
         virtualenv_bin = f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}' if virtualenv_dir else ""
@@ -286,6 +287,7 @@ class SupervisorProcessManager(BaseProcessManager):
             "config_type": service["config_type"],
             "server_name": service["service_name"],
             "attach_to_pool_opt": attach_to_pool_opt,
+            "pid_file_opt": pid_file_opt,
             "gunicorn": gunicorn_options,
             "celery": attribs["celery"],
             "galaxy_infrastructure_url": attribs["galaxy_infrastructure_url"],
@@ -297,7 +299,6 @@ class SupervisorProcessManager(BaseProcessManager):
             "galaxy_conf": config_file,
             "galaxy_root": config["galaxy_root"],
             "virtualenv_bin": virtualenv_bin,
-            "supervisor_state_dir": self.supervisor_state_dir,
             "state_dir": self.state_dir,
         }
         format_vars["command_arguments"] = service.get_command_arguments(attribs, format_vars)
