@@ -123,7 +123,7 @@ def galaxy_yml(galaxy_root_dir):
 @pytest.fixture()
 def state_dir():
     directory = tempfile.mkdtemp()
-    os.environ['SYSTEMD_UNIT_PATH'] = os.path.join(directory, 'systemd')
+    os.environ['GRAVITY_SYSTEMD_UNIT_PATH'] = f"/run/user/{os.getuid()}/systemd/user"
     try:
         yield Path(directory)
     finally:

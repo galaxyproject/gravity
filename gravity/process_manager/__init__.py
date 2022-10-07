@@ -245,5 +245,5 @@ class ProcessManagerRouter:
         """ """
 
     @route
-    def pm(self):
+    def pm(self, *args):
         """ """

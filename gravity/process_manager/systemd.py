@@ -59,35 +59,49 @@ class SystemdProcessManager(BaseProcessManager):
 
     @property
     def __systemd_unit_dir(self):
-        unit_path = os.environ.get("SYSTEMD_UNIT_PATH")
+        unit_path = os.environ.get("GRAVITY_SYSTEMD_UNIT_PATH")
         if not unit_path:
             unit_path = "/etc/systemd/system" if not self.user_mode else os.path.expanduser("~/.config/systemd/user")
         return unit_path
 
     @property
     def __use_instance(self):
-        #return not self.config_manager.single_instance
-        return False
+        return not self.config_manager.single_instance
 
-    def __systemctl(self, *args, ignore_rc=None, **kwargs):
+    def __systemctl(self, *args, ignore_rc=None, capture=False, **kwargs):
         args = list(args)
+        call = subprocess.check_call
         extra_args = os.environ.get("GRAVITY_SYSTEMCTL_EXTRA_ARGS")
         if extra_args:
             args = shlex.split(extra_args) + args
         if self.user_mode:
             args = ["--user"] + args
         debug("Calling systemctl with args: %s", args)
+        if capture:
+            call = subprocess.check_output
         try:
-            subprocess.check_call(["systemctl"] + args)
+            return call(["systemctl"] + args, text=True)
         except subprocess.CalledProcessError as exc:
             if ignore_rc is None or exc.returncode not in ignore_rc:
                 raise
 
+    def __journalctl(self, *args, **kwargs):
+        args = list(args)
+        if self.user_mode:
+            args = ["--user"] + args
+        debug("Calling journalctl with args: %s", args)
+        subprocess.check_call(["journalctl"] + args)
+
+    def __systemd_env_path(self):
+        environ = self.__systemctl("show-environment", capture=True)
+        for line in environ.splitlines():
+            if line.startswith("PATH="):
+                return line.split("=", 1)[1]
+
     def terminate(self):
-        """ """
+        # this is used to stop a foreground supervisord in the supervisor PM, so it is a no-op here
         pass
 
-    # FIXME: should be __service_program_name for follow()?
     def __unit_name(self, instance_name, service):
         unit_name = f"{service['config_type']}-"
         if self.__use_instance:
@@ -158,8 +172,7 @@ class SystemdProcessManager(BaseProcessManager):
 
         environment = self._service_environment(service, attribs)
         if virtualenv_bin and service.add_virtualenv_to_path:
-            # FIXME: what should we use for a default here?
-            path = environment.get("PATH", "%(ENV_PATH)s")
+            path = self.__systemd_env_path()
             environment["PATH"] = ":".join([virtualenv_bin, path])
         format_vars["environment"] = "\n".join("Environment={}={}".format(k, shlex.quote(v.format(**format_vars))) for k, v in environment.items())
 
@@ -167,6 +180,12 @@ class SystemdProcessManager(BaseProcessManager):
         self._update_file(conf, contents, unit_name, "service")
 
         return conf
+
+    def follow(self, configs=None, service_names=None, quiet=False):
+        """ """
+        unit_names = self.__unit_names(configs, service_names)
+        u_args = [i for l in list(zip(["-u"] * len(unit_names), unit_names)) for i in l]
+        self.__journalctl("-f", *u_args)
 
     def _process_config(self, config, **kwargs):
         """ """
@@ -192,19 +211,21 @@ class SystemdProcessManager(BaseProcessManager):
         for config in configs:
             intended_configs = intended_configs | self._process_config(config)
 
-        # the unit dir might not exist if $SYSTEMD_UNIT_PATH is set (e.g. for tests), but this is fine if there are no
-        # intended configs
+        # the unit dir might not exist if $GRAVITY_SYSTEMD_UNIT_PATH is set (e.g. for tests), but this is fine if there
+        # are no intended configs
         if not intended_configs and not os.path.exists(self.__systemd_unit_dir):
             return
 
         # FIXME: should use config_type, but that's per-service
-        _present_configs = filter(lambda f: f.startswith("galaxy-"), os.listdir(self.__systemd_unit_dir))
+        _present_configs = filter(
+            lambda f: f.startswith("galaxy-") and f.endswith(".service"),
+            os.listdir(self.__systemd_unit_dir))
         present_configs = set([os.path.join(self.__systemd_unit_dir, f) for f in _present_configs])
 
         for file in (present_configs - intended_configs):
-            service_name = os.path.basename(os.path.splitext(file)[0])
-            info(f"Ensuring service is stopped: {service_name}")
-            self.__systemctl("stop", service_name)
+            unit_name = os.path.basename(file)
+            service_name = os.path.splitext(unit_name)[0]
+            self.__systemctl("disable", "--now", unit_name)
             info("Removing service config %s", file)
             os.unlink(file)
 
@@ -220,7 +241,7 @@ class SystemdProcessManager(BaseProcessManager):
     def start(self, configs=None, service_names=None):
         """ """
         unit_names = self.__unit_names(configs, service_names)
-        self.__systemctl("start", *unit_names)
+        self.__systemctl("enable", "--now", *unit_names)
 
     def stop(self, configs=None, service_names=None):
         """ """
@@ -263,7 +284,13 @@ class SystemdProcessManager(BaseProcessManager):
 
     def shutdown(self):
         """ """
-        debug(f"SHUTDOWN")
+        configs = self.config_manager.get_registered_configs(process_manager=self.name)
+        if self.__use_instance:
+            instance_name = config["instance_name"]
+            self.__systemctl("stop", f"galaxy-{instance_name}-*.service")
+        else:
+            self.__systemctl("stop", f"galaxy-*.service")
 
-    def pm(self):
+    def pm(self, *args):
         """ """
+        self.__systemctl(*args)

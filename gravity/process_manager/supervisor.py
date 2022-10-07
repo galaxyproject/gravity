@@ -363,7 +363,7 @@ class SupervisorProcessManager(BaseProcessManager):
 
     def _remove_invalid_configs(self, valid_configs=None):
         if not valid_configs:
-            valid_configs = [c for c in self.config_manager.get_registered_configs() if c.process_manager == self.name]
+            valid_configs = self.config_manager.get_registered_configs(process_manager=self.name)
         valid_names = [c.instance_name for c in valid_configs]
         valid_instance_dirs = [f"{name}.d" for name in valid_names]
         valid_group_confs = []
@@ -455,7 +455,7 @@ class SupervisorProcessManager(BaseProcessManager):
         if self.__supervisord_is_running():
             self.supervisorctl("update")
 
-    def supervisorctl(self, *args, **kwargs):
+    def supervisorctl(self, *args):
         if not self.__supervisord_is_running():
             warn("supervisord is not running")
             return
