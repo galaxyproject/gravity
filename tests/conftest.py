@@ -14,6 +14,7 @@ GALAXY_BRANCH = os.environ.get("GRAVITY_TEST_GALAXY_BRANCH", "dev")
 TEST_DIR = Path(os.path.dirname(__file__))
 GXIT_CONFIG = """
 gravity:
+  process_manager: {process_manager_name}
   gunicorn:
     bind: 'localhost:{gx_port}'
   gx_it_proxy:
@@ -122,6 +123,7 @@ def galaxy_yml(galaxy_root_dir):
 @pytest.fixture()
 def state_dir():
     directory = tempfile.mkdtemp()
+    os.environ['SYSTEMD_UNIT_PATH'] = os.path.join(directory, 'systemd')
     try:
         yield Path(directory)
     finally:
@@ -149,11 +151,11 @@ def configstate_yaml_0_x(galaxy_root_dir, state_dir, galaxy_yml):
 
 @pytest.fixture()
 def job_conf(request, galaxy_root_dir):
-    conf = yaml.safe_load(request.param[0])
+    conf = yaml.safe_load(request.param)
     ext = "xml" if isinstance(conf, str) else "yml"
     job_conf_path = galaxy_root_dir / 'config' / f'job_conf.{ext}'
     with open(job_conf_path, 'w') as jcfh:
-        jcfh.write(request.param[0])
+        jcfh.write(request.param)
     yield job_conf_path
     os.unlink(job_conf_path)
 
@@ -187,14 +189,19 @@ def startup_config(galaxy_virtualenv, free_port):
 
 
 @pytest.fixture
-def gxit_config(free_port, another_free_port):
-    config_yaml = GXIT_CONFIG.format(gxit_port=another_free_port, gx_port=free_port)
+def gxit_config(free_port, another_free_port, process_manager_name):
+    config_yaml = GXIT_CONFIG.format(
+        gxit_port=another_free_port,
+        gx_port=free_port,
+        process_manager_name=process_manager_name)
     return yaml.safe_load(config_yaml)
 
 
 @pytest.fixture
-def tusd_config(startup_config, free_port, another_free_port):
-    startup_config["gravity"] = {"tusd": {"enable": True, "port": another_free_port, "upload_dir": "/tmp"}}
+def tusd_config(startup_config, free_port, another_free_port, process_manager_name):
+    startup_config["gravity"] = {
+        "process_manager": process_manager_name,
+        "tusd": {"enable": True, "port": another_free_port, "upload_dir": "/tmp"}}
     startup_config["galaxy"]["galaxy_infrastructure_url"] = f"http://localhost:{free_port}"
     return startup_config
 

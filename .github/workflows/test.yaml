@@ -25,5 +25,6 @@ jobs:
         run: tox -e test
         env:
           GRAVITY_TEST_GALAXY_BRANCH: ${{ matrix.galaxy-branch }}
+          XDG_RUNTIME_DIR: /run/user/$UID
       - name: "Upload coverage to Codecov"
         uses: codecov/codecov-action@v2
