@@ -291,12 +291,13 @@ class ConfigManager(object):
         """Indicate if there is only one configured instance"""
         return self.instance_count == 1
 
-    def get_registered_configs(self, instances=None):
+    def get_registered_configs(self, instances=None, process_manager=None):
         """Return the persisted values of all config files registered with the config manager."""
         rval = []
         config_files = self.state.config_files
         for config_file, config in list(config_files.items()):
-            if (instances is not None and config["instance_name"] in instances) or instances is None:
+            if (((instances is not None and config["instance_name"] in instances) or instances is None) and
+                ((process_manager is not None and config.get("process_manager", "supervisor") == process_manager) or process_manager is None)):
                 rval.append(self.get_config(config_file))
         return rval
 
