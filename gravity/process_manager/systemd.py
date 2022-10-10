@@ -224,7 +224,6 @@ class SystemdProcessManager(BaseProcessManager):
 
         for file in (present_configs - intended_configs):
             unit_name = os.path.basename(file)
-            service_name = os.path.splitext(unit_name)[0]
             self.__systemctl("disable", "--now", unit_name)
             info("Removing service config %s", file)
             os.unlink(file)
@@ -285,11 +284,12 @@ class SystemdProcessManager(BaseProcessManager):
     def shutdown(self):
         """ """
         configs = self.config_manager.get_registered_configs(process_manager=self.name)
+        # FIXME: what config below?
         if self.__use_instance:
             instance_name = config["instance_name"]
             self.__systemctl("stop", f"galaxy-{instance_name}-*.service")
         else:
-            self.__systemctl("stop", f"galaxy-*.service")
+            self.__systemctl("stop", "galaxy-*.service")
 
     def pm(self, *args):
         """ """
