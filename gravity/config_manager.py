@@ -296,11 +296,15 @@ class ConfigManager(object):
         rval = []
         config_files = self.state.config_files
         for config_file, config in list(config_files.items()):
-            config_pm = config.get("process_manager", "supervisor")
-            if ((instances is not None and config["instance_name"] in instances) or instances is None) and (
-                (process_manager is not None and config_pm == process_manager) or process_manager is None
-            ):
-                rval.append(self.get_config(config_file))
+            # if ((instances is not None and config["instance_name"] in instances) or instances is None) and (
+            #     (process_manager is not None and config_pm == process_manager) or process_manager is None
+            # ):
+            # TODO: if we add process_manager to the state, then we can filter for it as above instead of after
+            # get_config as below
+            if (instances is not None and config["instance_name"] in instances) or instances is None:
+                config = self.get_config(config_file)
+                if (process_manager is not None and config["process_manager"] == process_manager) or process_manager is None:
+                    rval.append(config)
         return rval
 
     def get_registered_config(self, config_file):

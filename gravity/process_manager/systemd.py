@@ -112,6 +112,8 @@ class SystemdProcessManager(BaseProcessManager):
     def __update_service(self, config_file, config, attribs, service, instance_name):
         unit_name = self.__unit_name(instance_name, service)
 
+        # TODO before 1.0.0, most of this should be refactored
+
         # used by the "standalone" service type
         attach_to_pool_opt = ""
         server_pools = service.get("server_pools")
@@ -137,8 +139,6 @@ class SystemdProcessManager(BaseProcessManager):
         gunicorn_options["preload"] = "--preload" if gunicorn_options["preload"] else ""
 
         format_vars = {
-            #"log_dir": attribs["log_dir"],
-            #"log_file": self._service_log_file(attribs["log_dir"], program_name),
             "program_name": service["service_name"],
             "systemd_user_group": "",
             "config_type": service["config_type"],
@@ -184,7 +184,7 @@ class SystemdProcessManager(BaseProcessManager):
     def follow(self, configs=None, service_names=None, quiet=False):
         """ """
         unit_names = self.__unit_names(configs, service_names)
-        u_args = [i for l in list(zip(["-u"] * len(unit_names), unit_names)) for i in l]
+        u_args = [i for sl in list(zip(["-u"] * len(unit_names), unit_names)) for i in sl]
         self.__journalctl("-f", *u_args)
 
     def _process_config(self, config, **kwargs):
@@ -283,11 +283,10 @@ class SystemdProcessManager(BaseProcessManager):
 
     def shutdown(self):
         """ """
-        configs = self.config_manager.get_registered_configs(process_manager=self.name)
-        # FIXME: what config below?
         if self.__use_instance:
-            instance_name = config["instance_name"]
-            self.__systemctl("stop", f"galaxy-{instance_name}-*.service")
+            # we could use galaxy-*.service but this only shuts down the instances managed by *this* gravity
+            configs = self.config_manager.get_registered_configs(process_manager=self.name)
+            self.__systemctl("stop", *[f"galaxy-{c.instance_name}-*.service" for c in configs])
         else:
             self.__systemctl("stop", "galaxy-*.service")
 

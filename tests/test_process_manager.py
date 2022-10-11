@@ -326,3 +326,6 @@ def test_tusd_process(default_config_manager, galaxy_yml, tusd_config, process_m
         tusd_config_path = service_conf_path(default_config_manager.state_dir, process_manager_name, 'tusd')
         assert tusd_config_path.exists()
         assert "tusd -host" in tusd_config_path.read_text()
+
+
+# TODO: test switching PMs in between invocations, test multiple instances
