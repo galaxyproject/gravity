@@ -33,6 +33,11 @@ class ProcessManager(str, Enum):
     systemd = "systemd"
 
 
+class ServiceCommandStyle(str, Enum):
+    gravity = "gravity"
+    direct = "direct"
+
+
 class AppServer(str, Enum):
     gunicorn = "gunicorn"
     unicornherder = "unicornherder"
@@ -193,6 +198,14 @@ class Settings(BaseSettings):
 Process manager to use.
 ``supervisor`` is the default process manager.
 ``systemd`` is also supported.
+""")
+
+    service_command_style: ServiceCommandStyle = Field(
+        ServiceCommandStyle.gravity,
+        description="""
+What command to write to the process manager configs
+`gravity` (`galaxyctl exec <service-name>`) is the default
+`direct` (each service's actual command) is also supported.
 """)
 
     galaxy_root: Optional[str] = Field(

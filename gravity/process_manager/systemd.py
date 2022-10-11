@@ -136,7 +136,7 @@ class SystemdProcessManager(BaseProcessManager):
         format_vars = self._service_format_vars(config, service, program_name, systemd_format_vars)
 
         if not format_vars["command"].startswith("/"):
-            format_vars["command"] = f"{format_vars['virtualenv_bin']}/{format_vars['command']}"
+            format_vars["command"] = f"{format_vars['virtualenv_bin']}{format_vars['command']}"
 
         conf = os.path.join(self.__systemd_unit_dir, unit_name)
         template = SYSTEMD_SERVICE_TEMPLATE

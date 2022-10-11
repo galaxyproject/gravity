@@ -12,6 +12,7 @@ from functools import partial, wraps
 
 from gravity.config_manager import ConfigManager
 from gravity.io import debug, exception, info, warn
+from gravity.settings import ServiceCommandStyle
 from gravity.state import VALID_SERVICE_NAMES
 from gravity.util import which
 
@@ -110,15 +111,19 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
         format_vars.update(pm_format_vars)
 
         # template the command template
-        format_vars["command_arguments"] = service.get_command_arguments(attribs, format_vars)
-        format_vars["command"] = service.command_template.format(**format_vars)
+        if config.service_command_style == ServiceCommandStyle.direct:
+            format_vars["command_arguments"] = service.get_command_arguments(attribs, format_vars)
+            format_vars["command"] = service.command_template.format(**format_vars)
 
-        # template env vars
-        environment = self._service_environment(service, attribs)
-        virtualenv_bin = format_vars["virtualenv_bin"]  # could have been changed by pm_format_vars
-        if virtualenv_bin and service.add_virtualenv_to_path:
-            path = environment.get("PATH", self._service_default_path())
-            environment["PATH"] = ":".join([virtualenv_bin, path])
+            # template env vars
+            environment = self._service_environment(service, attribs)
+            virtualenv_bin = format_vars["virtualenv_bin"]  # could have been changed by pm_format_vars
+            if virtualenv_bin and service.add_virtualenv_to_path:
+                path = environment.get("PATH", self._service_default_path())
+                environment["PATH"] = ":".join([virtualenv_bin, path])
+        else:
+            format_vars["command"] = f"galaxyctl exec {config.instance_name} {program_name}"
+            environment = {"GRAVITY_STATE_DIR": "{state_dir}"}
         format_vars["environment"] = self._service_environment_formatter(environment, format_vars)
 
         return format_vars
@@ -222,6 +227,8 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
     def exec(self, config, service):
         service_name = service["service_name"]
 
+        # force generation of real commands
+        config.service_command_style = ServiceCommandStyle.direct
         format_vars = self._service_format_vars(config, service, service_name, {})
         print_env = ' '.join('{}={}'.format(k, shlex.quote(v)) for k, v in format_vars["environment"].items())
 

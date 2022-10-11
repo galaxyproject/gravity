@@ -15,6 +15,7 @@ TEST_DIR = Path(os.path.dirname(__file__))
 GXIT_CONFIG = """
 gravity:
   process_manager: {process_manager_name}
+  service_command_style: direct
   gunicorn:
     bind: 'localhost:{gx_port}'
   gx_it_proxy:
@@ -201,6 +202,7 @@ def gxit_config(free_port, another_free_port, process_manager_name):
 def tusd_config(startup_config, free_port, another_free_port, process_manager_name):
     startup_config["gravity"] = {
         "process_manager": process_manager_name,
+        "service_command_style": "direct",
         "tusd": {"enable": True, "port": another_free_port, "upload_dir": "/tmp"}}
     startup_config["galaxy"]["galaxy_infrastructure_url"] = f"http://localhost:{free_port}"
     return startup_config

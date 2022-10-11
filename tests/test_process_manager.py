@@ -60,6 +60,7 @@ JOB_CONF_XML_DYNAMIC_HANDLERS = """
 DYNAMIC_HANDLER_CONFIG = """
 gravity:
   process_manager: %(process_manager_name)s
+  service_command_style: direct
   handlers:
     handler:
       processes: 2
@@ -243,14 +244,34 @@ def test_static_handlers(default_config_manager, galaxy_yml, job_conf, process_m
         conf_dir = service_conf_dir(default_config_manager.state_dir, process_manager_name)
         handler0_config_path = conf_dir / service_conf_file(process_manager_name, 'handler0', service_type='standalone')
         assert handler0_config_path.exists()
+        assert 'exec _default_ handler0' in handler0_config_path.open().read()
+        handler1_config_path = conf_dir / service_conf_file(process_manager_name, 'handler1', service_type='standalone')
+        assert handler1_config_path.exists()
+        handler1_config = handler1_config_path.open().read()
+        assert 'exec _default_ handler1' in handler1_config
+        for handler_name in ('sge_handler', 'special_handler0', 'special_handler1'):
+            assert (conf_dir / service_conf_file(process_manager_name, handler_name, service_type='standalone')).exists()
+
+
+@pytest.mark.parametrize('job_conf', [params["JOB_CONF_YAML_STATIC_HANDLERS"]], indirect=True)
+@pytest.mark.parametrize('process_manager_name', ['supervisor', 'systemd'])
+def test_static_handlers_direct(default_config_manager, galaxy_yml, job_conf, process_manager_name):
+    with open(galaxy_yml, 'w') as config_fh:
+        config_fh.write(json.dumps({
+            'gravity': {'process_manager': process_manager_name, 'service_command_style': 'direct'},
+            'galaxy': {'job_config_file': str(job_conf)}}))
+    default_config_manager.add([str(galaxy_yml)])
+    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
+        pm.update()
+        conf_dir = service_conf_dir(default_config_manager.state_dir, process_manager_name)
+        handler0_config_path = conf_dir / service_conf_file(process_manager_name, 'handler0', service_type='standalone')
+        assert handler0_config_path.exists()
         assert '.yml --server-name=handler0' in handler0_config_path.open().read()
         handler1_config_path = conf_dir / service_conf_file(process_manager_name, 'handler1', service_type='standalone')
         assert handler1_config_path.exists()
         handler1_config = handler1_config_path.open().read()
         assert '.yml --server-name=handler1' in handler1_config
-        if job_conf.ext == '.yml':
-            # setting env vars on static handlers is only supported with YAML job conf
-            assert 'BAZ=baz' in handler1_config
+        assert 'BAZ=baz' in handler1_config
         for handler_name in ('sge_handler', 'special_handler0', 'special_handler1'):
             assert (conf_dir / service_conf_file(process_manager_name, handler_name, service_type='standalone')).exists()
 
@@ -267,10 +288,10 @@ def test_static_handlers_embedded_in_galaxy_yml(default_config_manager, galaxy_y
         conf_dir = service_conf_dir(default_config_manager.state_dir, process_manager_name)
         handler0_config_path = conf_dir / service_conf_file(process_manager_name, 'handler0', service_type='standalone')
         assert handler0_config_path.exists()
-        assert '.yml --server-name=handler0' in handler0_config_path.open().read()
+        assert 'exec _default_ handler0' in handler0_config_path.open().read()
         handler1_config_path = conf_dir / service_conf_file(process_manager_name, 'handler1', service_type='standalone')
         assert handler1_config_path.exists()
-        assert '.yml --server-name=handler1' in handler1_config_path.open().read()
+        assert 'exec _default_ handler1' in handler1_config_path.open().read()
         for handler_name in ('sge_handler', 'special_handler0', 'special_handler1'):
             assert (conf_dir / service_conf_file(process_manager_name, handler_name, service_type='standalone')).exists()
 

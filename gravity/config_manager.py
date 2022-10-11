@@ -125,6 +125,7 @@ class ConfigManager(object):
         config.instance_name = gravity_config.instance_name
         config.config_type = server_section
         config.process_manager = gravity_config.process_manager
+        config.service_command_style = gravity_config.service_command_style
         # FIXME: should this be attribs?
         config.attribs["galaxy_infrastructure_url"] = app_config.get("galaxy_infrastructure_url", "").rstrip("/")
         if gravity_config.tusd.enable and not config.attribs["galaxy_infrastructure_url"]:
