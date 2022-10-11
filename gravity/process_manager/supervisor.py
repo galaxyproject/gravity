@@ -171,8 +171,7 @@ class SupervisorProcessManager(BaseProcessManager):
         # FIXME: dedup below
         template = SUPERVISORD_SERVICE_TEMPLATE
         contents = template.format(**format_vars)
-        service_name = self._service_program_name(instance_name, service)
-        self._update_file(conf, contents, service_name, "service")
+        self._update_file(conf, contents, program_name, "service")
 
         return conf
 

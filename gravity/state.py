@@ -199,13 +199,15 @@ class GalaxyStandaloneService(Service):
 
     def get_command_arguments(self, attribs, format_vars):
         # full override because standalone doesn't have settings
-        command_arguments = {}
+        command_arguments = {
+            "attach_to_pool": "",
+            "pid_file": " --pid-file={state_dir}/{program_name}.pid".format(**format_vars),
+        }
         server_pools = self.get("server_pools")
         if server_pools:
             _attach_to_pool = " ".join(f"--attach-to-pool={server_pool}" for server_pool in server_pools)
             # Insert a single leading space
             command_arguments["attach_to_pool"] = f" {_attach_to_pool}"
-        command_arguments["pid_file"] = " --pid-file={state_dir}/{program_name}.pid".format(**format_vars)
         return command_arguments
 
     def get_settings(self, attribs, format_vars):

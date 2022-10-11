@@ -126,6 +126,7 @@ class SystemdProcessManager(BaseProcessManager):
         # systemd-specific format vars
         systemd_format_vars = {
             "virtualenv_bin": f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}' if virtualenv_dir else "",
+            "systemd_user_group": "",
         }
         if not self.user_mode:
             systemd_format_vars["systemd_user_group"] = f"User={attribs['galaxy_user']}"
@@ -134,13 +135,10 @@ class SystemdProcessManager(BaseProcessManager):
 
         format_vars = self._service_format_vars(config, service, program_name, systemd_format_vars)
 
-        # FIXME: bit of a hack
         if not format_vars["command"].startswith("/"):
-            format_vars["command"] = f"{virtualenv_bin}/{format_vars['command']}"
+            format_vars["command"] = f"{format_vars['virtualenv_bin']}/{format_vars['command']}"
 
         conf = os.path.join(self.__systemd_unit_dir, unit_name)
-
-        # FIXME: dedup below
         template = SYSTEMD_SERVICE_TEMPLATE
         contents = template.format(**format_vars)
         self._update_file(conf, contents, unit_name, "service")

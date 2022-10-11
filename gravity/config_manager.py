@@ -323,6 +323,13 @@ class ConfigManager(object):
             return self.get_config(config_file)
         return None
 
+    def get_configured_service_names(self):
+        rval = set()
+        for config in self.get_registered_configs():
+            for service in config["services"]:
+                rval.add(service["service_name"])
+        return rval
+
     def get_registered_instance_names(self):
         return [c["instance_name"] for c in self.state.config_files.values()]
 

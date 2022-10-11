@@ -5,6 +5,7 @@ import contextlib
 import importlib
 import inspect
 import os
+import shlex
 import subprocess
 from abc import ABCMeta, abstractmethod
 from functools import partial, wraps
@@ -60,22 +61,21 @@ route = partial(_route, all_process_managers=False)
 route_to_all = partial(_route, all_process_managers=True)
 
 
-class BaseProcessManager(metaclass=ABCMeta):
-
+class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
     def __init__(self, state_dir=None, config_manager=None, start_daemon=True, foreground=False):
         self.config_manager = config_manager or ConfigManager(state_dir=state_dir)
         self.state_dir = self.config_manager.state_dir
         self.tail = which("tail")
 
-    def _service_log_file(self, log_dir, program_name):
-        return os.path.join(log_dir, program_name + ".log")
+    @abstractmethod
+    def _service_environment_formatter(self, environment, format_vars):
+        raise NotImplementedError()
 
     def _service_default_path(self):
         return os.environ["PATH"]
 
-    @abstractmethod
-    def _service_environment_formatter(self, environment, format_vars):
-        raise NotImplementedError()
+    def _service_log_file(self, log_dir, program_name):
+        return os.path.join(log_dir, program_name + ".log")
 
     def _service_program_name(self, instance_name, service):
         return f"{instance_name}_{service['config_type']}_{service['service_type']}_{service['service_name']}"
@@ -123,6 +123,8 @@ class BaseProcessManager(metaclass=ABCMeta):
 
         return format_vars
 
+
+class BaseProcessManager(BaseProcessExecutionEnvironment, metaclass=ABCMeta):
     def _file_needs_update(self, path, contents):
         """Update if contents differ"""
         if os.path.exists(path):
@@ -142,9 +144,6 @@ class BaseProcessManager(metaclass=ABCMeta):
                 out.write(contents)
         else:
             debug("No changes to existing config for %s %s at %s", file_type, name, path)
-
-    def exec(self, configs=None, service_names=None):
-        pass
 
     def follow(self, configs=None, service_names=None, quiet=False):
         # supervisor has a built-in tail command but it only works on a single log file. `galaxyctl supervisorctl tail
@@ -216,11 +215,33 @@ class BaseProcessManager(metaclass=ABCMeta):
         """Direct pass-thru to process manager."""
 
 
+class ProcessExecutor(BaseProcessExecutionEnvironment):
+    def _service_environment_formatter(self, environment, format_vars):
+        return {k: v.format(**format_vars) for k, v in environment.items()}
+
+    def exec(self, config, service):
+        service_name = service["service_name"]
+
+        format_vars = self._service_format_vars(config, service, service_name, {})
+        print_env = ' '.join('{}={}'.format(k, shlex.quote(v)) for k, v in format_vars["environment"].items())
+
+        cmd = shlex.split(format_vars["command"])
+        env = format_vars["environment"] | os.environ
+        cwd = format_vars["galaxy_root"]
+
+        info(f"Working directory: {cwd}")
+        info(f"Executing: {print_env} {format_vars['command']}")
+
+        os.chdir(cwd)
+        os.execvpe(cmd[0], cmd, env)
+
+
 class ProcessManagerRouter:
     def __init__(self, state_dir=None, **kwargs):
         self.config_manager = ConfigManager(state_dir=state_dir)
         self.state_dir = self.config_manager.state_dir
         self._load_pm_modules(state_dir=state_dir, **kwargs)
+        self._process_executor = ProcessExecutor(config_manager=self.config_manager)
 
     def _load_pm_modules(self, *args, **kwargs):
         self.process_managers = {}
@@ -237,11 +258,12 @@ class ProcessManagerRouter:
         instance_names = []
         service_names = []
         registered_instance_names = self.config_manager.get_registered_instance_names()
+        configured_service_names = self.config_manager.get_configured_service_names()
         if names:
             for name in names:
                 if name in registered_instance_names:
                     instance_names.append(name)
-                elif name in VALID_SERVICE_NAMES:
+                elif name in configured_service_names | VALID_SERVICE_NAMES:
                     service_names.append(name)
                 else:
                     warn(f"Warning: Not a known instance or service name: {name}")
@@ -249,9 +271,28 @@ class ProcessManagerRouter:
                 exception("No provided names are known instance or service names")
         return (instance_names, service_names)
 
-    @route
     def exec(self, instance_names=None):
         """ """
+        instance_names, service_names = self._instance_service_names(instance_names)
+
+        if len(instance_names) == 0 and self.config_manager.single_instance:
+            instance_names = None
+        elif len(instance_names) != 1:
+            exception("Only zero or one instance name can be provided")
+
+        config = self.config_manager.get_registered_configs(instances=instance_names)[0]
+        service_list = ", ".join(s["service_name"] for s in config["services"])
+
+        if len(service_names) != 1:
+            exception(f"Exactly one service name must be provided. Configured service(s): {service_list}")
+
+        service_name = service_names[0]
+        services = [s for s in config["services"] if s["service_name"] == service_name]
+        if not services:
+            exception(f"Service '{service_name}' is not configured. Configured service(s): {service_list}")
+
+        service = services[0]
+        return self._process_executor.exec(config, service)
 
     @route
     def follow(self, instance_names=None, quiet=None):
