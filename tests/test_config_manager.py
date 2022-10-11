@@ -3,6 +3,7 @@ from pathlib import Path
 
 from gravity import __version__, config_manager
 from gravity.settings import Settings
+from gravity.state import GracefulMethod
 
 
 def test_register_defaults(galaxy_yml, galaxy_root_dir, state_dir, default_config_manager):
@@ -114,6 +115,26 @@ def test_convert_0_x_config(state_dir, galaxy_yml, configstate_yaml_0_x):
         assert config.config_type == "galaxy"
         assert config.instance_name == "gravity-0-x"
         assert "attribs" not in config
+
+
+def test_gunicorn_graceful_method_preload(galaxy_yml, default_config_manager):
+    default_config_manager.add([str(galaxy_yml)])
+    config = default_config_manager.get_registered_config(str(galaxy_yml))
+    gunicorn_service = [s for s in config["services"] if s["service_name"] == "gunicorn"][0]
+    graceful_method = gunicorn_service.get_graceful_method(config["attribs"])
+    assert graceful_method == GracefulMethod.DEFAULT
+
+
+def test_gunicorn_graceful_method_no_preload(galaxy_yml, default_config_manager):
+    galaxy_yml.write(json.dumps(
+        {'galaxy': None, 'gravity': {
+            'gunicorn': {'preload': False}}}
+    ))
+    default_config_manager.add([str(galaxy_yml)])
+    config = default_config_manager.get_registered_config(str(galaxy_yml))
+    gunicorn_service = [s for s in config["services"] if s["service_name"] == "gunicorn"][0]
+    graceful_method = gunicorn_service.get_graceful_method(config["attribs"])
+    assert graceful_method == GracefulMethod.SIGHUP
 
 
 # TODO: tests for switching process managers between supervisor and systemd

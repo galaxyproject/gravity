@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 from gravity import process_manager
-from gravity.state import GracefulMethod
 from yaml import safe_load
 
 
@@ -186,34 +185,6 @@ def test_disable_services(galaxy_yml, default_config_manager, process_manager_na
     assert not celery_conf_path.exists()
     celery_beat_conf_path = conf_dir / service_conf_file(process_manager_name, 'celery-beat')
     assert not celery_beat_conf_path.exists()
-
-
-def test_gunicorn_graceful_method_preload(galaxy_yml, default_config_manager):
-    instance_name = '_default_'
-    default_config_manager.add([str(galaxy_yml)])
-    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
-        pm.update()
-    config = default_config_manager.get_instance_config(instance_name)
-    services = default_config_manager.get_instance_services(instance_name)
-    gunicorn_service = [s for s in services if s["service_name"] == "gunicorn"][0]
-    graceful_method = gunicorn_service.get_graceful_method(config["attribs"])
-    assert graceful_method == GracefulMethod.DEFAULT
-
-
-def test_gunicorn_graceful_method_no_preload(galaxy_yml, default_config_manager):
-    instance_name = '_default_'
-    default_config_manager.add([str(galaxy_yml)])
-    galaxy_yml.write(json.dumps(
-        {'galaxy': None, 'gravity': {
-            'gunicorn': {'preload': False}}}
-    ))
-    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
-        pm.update()
-    config = default_config_manager.get_instance_config(instance_name)
-    services = default_config_manager.get_instance_services(instance_name)
-    gunicorn_service = [s for s in services if s["service_name"] == "gunicorn"][0]
-    graceful_method = gunicorn_service.get_graceful_method(config["attribs"])
-    assert graceful_method == GracefulMethod.SIGHUP
 
 
 @pytest.mark.parametrize('job_conf', [params["JOB_CONF_XML_DYNAMIC_HANDLERS"]], indirect=True)
