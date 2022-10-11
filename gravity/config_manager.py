@@ -181,7 +181,9 @@ class ConfigManager(object):
                 config.services.append(service_for_service_type("standalone")(
                     config_type=config.config_type,
                     service_name=handler_settings["service_name"],
-                    environment=handler_settings.get("environment")
+                    environment=handler_settings.get("environment"),
+                    start_timeout=handler_settings.get("start_timeout"),
+                    stop_timeout=handler_settings.get("stop_timeout")
                 ))
 
         # FIXME: This should imply explicit configuration of the handler assignment method. If not explicitly set, the
@@ -194,16 +196,24 @@ class ConfigManager(object):
         return config
 
     def create_handler_services(self, gravity_config: Settings, config):
+        # we pull push environment from settings to services but the rest of the services pull their env options from
+        # settings directly. this can be a bit confusing but is probably ok since there are 3 ways to configure
+        # handlers, and gravity is only 1 of them.
         expanded_handlers = self.expand_handlers(gravity_config, config)
         for service_name, handler_settings in expanded_handlers.items():
             pools = handler_settings.get('pools')
             environment = handler_settings.get("environment")
+            # TODO: add these to Galaxy docs
+            start_timeout = handler_settings.get("start_timeout")
+            stop_timeout = handler_settings.get("stop_timeout")
             config.services.append(
                 service_for_service_type("standalone")(
                     config_type=config.config_type,
                     service_name=service_name,
                     server_pools=pools,
-                    environment=environment
+                    environment=environment,
+                    start_timeout=start_timeout,
+                    stop_timeout=stop_timeout
                 ))
 
     def create_gxit_services(self, gravity_config: Settings, app_config, config):

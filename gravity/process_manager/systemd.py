@@ -11,7 +11,7 @@ from gravity.process_manager import BaseProcessManager
 from gravity.settings import ProcessManager
 
 SYSTEMD_SERVICE_TEMPLATES = {}
-DEFAULT_SYSTEMD_SERVICE_TEMPLATE = """;
+SYSTEMD_SERVICE_TEMPLATE = """;
 ; This file is maintained by Gravity - CHANGES WILL BE OVERWRITTEN
 ;
 
@@ -25,7 +25,8 @@ UMask={galaxy_umask}
 Type=simple
 {systemd_user_group}
 WorkingDirectory={galaxy_root}
-TimeoutStartSec=15
+TimeoutStartSec={settings[start_timeout]}
+TimeoutStopSec={settings[stop_timeout]}
 ExecStart={command}
 #ExecReload=
 #ExecStop=
@@ -40,13 +41,6 @@ BlockIOAccounting=yes
 [Install]
 WantedBy=multi-user.target
 """
-
-SYSTEMD_SERVICE_TEMPLATES["gunicorn"] = DEFAULT_SYSTEMD_SERVICE_TEMPLATE
-SYSTEMD_SERVICE_TEMPLATES["celery"] = DEFAULT_SYSTEMD_SERVICE_TEMPLATE
-SYSTEMD_SERVICE_TEMPLATES["celery-beat"] = DEFAULT_SYSTEMD_SERVICE_TEMPLATE
-SYSTEMD_SERVICE_TEMPLATES["standalone"] = DEFAULT_SYSTEMD_SERVICE_TEMPLATE
-SYSTEMD_SERVICE_TEMPLATES["gx-it-proxy"] = DEFAULT_SYSTEMD_SERVICE_TEMPLATE
-SYSTEMD_SERVICE_TEMPLATES["tusd"] = DEFAULT_SYSTEMD_SERVICE_TEMPLATE
 
 
 class SystemdProcessManager(BaseProcessManager):
@@ -92,11 +86,14 @@ class SystemdProcessManager(BaseProcessManager):
         debug("Calling journalctl with args: %s", args)
         subprocess.check_call(["journalctl"] + args)
 
-    def __systemd_env_path(self):
+    def _service_default_path(self):
         environ = self.__systemctl("show-environment", capture=True)
         for line in environ.splitlines():
             if line.startswith("PATH="):
                 return line.split("=", 1)[1]
+
+    def _service_environment_formatter(self, environment, format_vars):
+        return "\n".join("Environment={}={}".format(k, shlex.quote(v.format(**format_vars))) for k, v in environment.items())
 
     def terminate(self):
         # this is used to stop a foreground supervisord in the supervisor PM, so it is a no-op here
@@ -109,18 +106,10 @@ class SystemdProcessManager(BaseProcessManager):
         unit_name += f"{service['service_name']}.service"
         return unit_name
 
-    def __update_service(self, config_file, config, attribs, service, instance_name):
+    def __update_service(self, config, service, instance_name):
+        attribs = config.attribs
+        program_name = service["service_name"]
         unit_name = self.__unit_name(instance_name, service)
-
-        # TODO before 1.0.0, most of this should be refactored
-
-        # used by the "standalone" service type
-        attach_to_pool_opt = ""
-        server_pools = service.get("server_pools")
-        if server_pools:
-            _attach_to_pool_opt = " ".join(f"--attach-to-pool={server_pool}" for server_pool in server_pools)
-            # Insert a single leading space
-            attach_to_pool_opt = f" {_attach_to_pool_opt}"
 
         # under supervisor we expect that gravity is installed in the galaxy venv and the venv is active when gravity
         # runs, but under systemd this is not the case. we do assume $VIRTUAL_ENV is the galaxy venv if running as an
@@ -134,48 +123,25 @@ class SystemdProcessManager(BaseProcessManager):
         elif not virtualenv_dir:
             exception("The `virtualenv` Gravity config option must be set when using the systemd process manager")
 
-        virtualenv_bin = f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}' if virtualenv_dir else ""
-        gunicorn_options = attribs["gunicorn"].copy()
-        gunicorn_options["preload"] = "--preload" if gunicorn_options["preload"] else ""
-
-        format_vars = {
-            "program_name": service["service_name"],
-            "systemd_user_group": "",
-            "config_type": service["config_type"],
-            "server_name": service["service_name"],
-            "attach_to_pool_opt": attach_to_pool_opt,
-            "pid_file_opt": "",
-            "gunicorn": gunicorn_options,
-            "celery": attribs["celery"],
-            "galaxy_infrastructure_url": attribs["galaxy_infrastructure_url"],
-            "tusd": attribs["tusd"],
-            "gx_it_proxy": attribs["gx_it_proxy"],
-            "galaxy_umask": service.get("umask", "022"),
-            "galaxy_conf": config_file,
-            "galaxy_root": config["galaxy_root"],
-            "virtualenv_bin": virtualenv_bin,
-            "state_dir": self.state_dir,
+        # systemd-specific format vars
+        systemd_format_vars = {
+            "virtualenv_bin": f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}' if virtualenv_dir else "",
         }
-        format_vars["command"] = service.command_template.format(**format_vars)
-        if not format_vars["command"].startswith("/"):
-            # FIXME: bit of a hack
-            format_vars["command"] = f"{virtualenv_bin}/{format_vars['command']}"
         if not self.user_mode:
-            format_vars["systemd_user_group"] = f"User={attribs['galaxy_user']}"
+            systemd_format_vars["systemd_user_group"] = f"User={attribs['galaxy_user']}"
             if attribs["galaxy_group"] is not None:
-                format_vars["systemd_user_group"] += f"\nGroup={attribs['galaxy_group']}"
+                systemd_format_vars["systemd_user_group"] += f"\nGroup={attribs['galaxy_group']}"
+
+        format_vars = self._service_format_vars(config, service, program_name, systemd_format_vars)
+
+        # FIXME: bit of a hack
+        if not format_vars["command"].startswith("/"):
+            format_vars["command"] = f"{virtualenv_bin}/{format_vars['command']}"
+
         conf = os.path.join(self.__systemd_unit_dir, unit_name)
 
-        template = SYSTEMD_SERVICE_TEMPLATES.get(service["service_type"])
-        if not template:
-            raise Exception(f"Unknown service type: {service['service_type']}")
-
-        environment = self._service_environment(service, attribs)
-        if virtualenv_bin and service.add_virtualenv_to_path:
-            path = self.__systemd_env_path()
-            environment["PATH"] = ":".join([virtualenv_bin, path])
-        format_vars["environment"] = "\n".join("Environment={}={}".format(k, shlex.quote(v.format(**format_vars))) for k, v in environment.items())
-
+        # FIXME: dedup below
+        template = SYSTEMD_SERVICE_TEMPLATE
         contents = template.format(**format_vars)
         self._update_file(conf, contents, unit_name, "service")
 
@@ -190,8 +156,6 @@ class SystemdProcessManager(BaseProcessManager):
     def _process_config(self, config, **kwargs):
         """ """
         instance_name = config["instance_name"]
-        attribs = config["attribs"]
-        config_file = config.__file__
         intended_configs = set()
 
         try:
@@ -201,7 +165,7 @@ class SystemdProcessManager(BaseProcessManager):
                 raise
 
         for service in config["services"]:
-            intended_configs.add(self.__update_service(config_file, config, attribs, service, instance_name))
+            intended_configs.add(self.__update_service(config, service, instance_name))
 
         return intended_configs
 
@@ -278,7 +242,7 @@ class SystemdProcessManager(BaseProcessManager):
                     info(f"Removing systemd units due to --force option:{newline}{newline.join(service_units)}")
                     list(map(os.unlink, service_units))
         self._process_configs(configs)
-        # TODO: only reload if there are changes
+        # FIXME BEFORE RELEASE: only reload if there are changes
         self.__systemctl("daemon-reload")
 
     def shutdown(self):

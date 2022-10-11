@@ -72,6 +72,8 @@ without the Galaxy web process being available.
 You can find a list of available hooks at https://github.com/tus/tusd/blob/master/docs/hooks.md#list-of-available-hooks.
 """)
     extra_args: str = Field(default="", description="Extra arguments to pass to tusd command line.")
+    start_timeout: int = Field(10, description="Value of supervisor startsecs, systemd TimeoutStartSec")
+    stop_timeout: int = Field(10, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
     environment: Dict[str, str] = Field(
         default={},
         description="""
@@ -88,6 +90,8 @@ class CelerySettings(BaseModel):
     queues: str = Field("celery,galaxy.internal,galaxy.external", description="Queues to join")
     pool: Pool = Field(Pool.threads, description="Pool implementation")
     extra_args: str = Field(default="", description="Extra arguments to pass to Celery command line.")
+    start_timeout: int = Field(10, description="Value of supervisor startsecs, systemd TimeoutStartSec")
+    stop_timeout: int = Field(10, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
     environment: Dict[str, str] = Field(
         default={},
         description="""
@@ -129,6 +133,8 @@ If you disable the ``preload`` option workers need to have finished booting with
 Use Gunicorn's --preload option to fork workers after loading the Galaxy Application.
 Consumes less memory when multiple processes are configured. Default is ``false`` if using unicornherder, else ``true``.
 """)
+    start_timeout: int = Field(15, description="Value of supervisor startsecs, systemd TimeoutStartSec")
+    stop_timeout: int = Field(65, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
     environment: Dict[str, str] = Field(
         default={},
         description="""
@@ -165,6 +171,8 @@ This is an advanced option that is only needed when proxying to remote interacti
 Rewrite location blocks with proxy port.
 This is an advanced option that is only needed when proxying to remote interactive tool container that cannot be reached through the local network.
 """)
+    start_timeout: int = Field(10, description="Value of supervisor startsecs, systemd TimeoutStartSec")
+    stop_timeout: int = Field(10, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
     environment: Dict[str, str] = Field(
         default={},
         description="""

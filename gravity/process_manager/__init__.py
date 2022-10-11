@@ -70,6 +70,13 @@ class BaseProcessManager(metaclass=ABCMeta):
     def _service_log_file(self, log_dir, program_name):
         return os.path.join(log_dir, program_name + ".log")
 
+    def _service_default_path(self):
+        return os.environ["PATH"]
+
+    @abstractmethod
+    def _service_environment_formatter(self, environment, format_vars):
+        raise NotImplementedError()
+
     def _service_program_name(self, instance_name, service):
         return f"{instance_name}_{service['config_type']}_{service['service_type']}_{service['service_name']}"
 
@@ -80,6 +87,41 @@ class BaseProcessManager(metaclass=ABCMeta):
             environment_from = service.service_type
         environment.update(attribs.get(environment_from, {}).get("environment", {}))
         return environment
+
+    def _service_format_vars(self, config, service, program_name, pm_format_vars):
+        attribs = config.attribs
+        virtualenv_dir = attribs.get("virtualenv")
+        virtualenv_bin = f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}' if virtualenv_dir else ""
+
+        format_vars = {
+            "config_type": service["config_type"],
+            "server_name": service["service_name"],
+            "program_name": program_name,
+            "galaxy_infrastructure_url": attribs["galaxy_infrastructure_url"],
+            "galaxy_umask": service.get("umask", "022"),
+            "galaxy_conf": config.__file__,
+            "galaxy_root": config["galaxy_root"],
+            "virtualenv_bin": virtualenv_bin,
+            "state_dir": self.state_dir,
+        }
+        format_vars["settings"] = service.get_settings(attribs, format_vars)
+
+        # update here from PM overrides
+        format_vars.update(pm_format_vars)
+
+        # template the command template
+        format_vars["command_arguments"] = service.get_command_arguments(attribs, format_vars)
+        format_vars["command"] = service.command_template.format(**format_vars)
+
+        # template env vars
+        environment = self._service_environment(service, attribs)
+        virtualenv_bin = format_vars["virtualenv_bin"]  # could have been changed by pm_format_vars
+        if virtualenv_bin and service.add_virtualenv_to_path:
+            path = environment.get("PATH", self._service_default_path())
+            environment["PATH"] = ":".join([virtualenv_bin, path])
+        format_vars["environment"] = self._service_environment_formatter(environment, format_vars)
+
+        return format_vars
 
     def _file_needs_update(self, path, contents):
         """Update if contents differ"""
@@ -100,6 +142,9 @@ class BaseProcessManager(metaclass=ABCMeta):
                 out.write(contents)
         else:
             debug("No changes to existing config for %s %s at %s", file_type, name, path)
+
+    def exec(self, configs=None, service_names=None):
+        pass
 
     def follow(self, configs=None, service_names=None, quiet=False):
         # supervisor has a built-in tail command but it only works on a single log file. `galaxyctl supervisorctl tail
@@ -203,6 +248,10 @@ class ProcessManagerRouter:
             if not instance_names and not service_names:
                 exception("No provided names are known instance or service names")
         return (instance_names, service_names)
+
+    @route
+    def exec(self, instance_names=None):
+        """ """
 
     @route
     def follow(self, instance_names=None, quiet=None):

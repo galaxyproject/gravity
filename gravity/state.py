@@ -31,6 +31,7 @@ class Service(AttributeDict):
     service_type = "service"
     service_name = "_default_"
     environment_from = None
+    settings_from = None
     default_environment = {}
     add_virtualenv_to_path = False
     graceful_method = GracefulMethod.DEFAULT
@@ -57,7 +58,7 @@ class Service(AttributeDict):
 
     def get_command_arguments(self, attribs, format_vars):
         rval = {}
-        for setting, value in attribs.get(self.service_type, {}).items():
+        for setting, value in attribs.get(self.settings_from or self.service_type, {}).items():
             if setting in self.command_arguments:
                 # FIXME: this truthiness testing of value is probably not the best
                 if value:
@@ -68,20 +69,26 @@ class Service(AttributeDict):
                 rval[setting] = value
         return rval
 
+    def get_settings(self, attribs, format_vars):
+        return attribs[self.settings_from or self.service_type].copy()
+
 
 class GalaxyGunicornService(Service):
     service_type = "gunicorn"
     service_name = "gunicorn"
     default_environment = DEFAULT_GALAXY_ENVIRONMENT
+    command_arguments = {
+        "preload": "--preload"
+    }
     command_template = "{virtualenv_bin}gunicorn 'galaxy.webapps.galaxy.fast_factory:factory()'" \
-                       " --timeout {gunicorn[timeout]}" \
+                       " --timeout {settings[timeout]}" \
                        " --pythonpath lib" \
                        " -k galaxy.webapps.galaxy.workers.Worker" \
-                       " -b {gunicorn[bind]}" \
-                       " --workers={gunicorn[workers]}" \
+                       " -b {settings[bind]}" \
+                       " --workers={settings[workers]}" \
                        " --config python:galaxy.web_stack.gunicorn_config" \
-                       " {gunicorn[preload]}" \
-                       " {gunicorn[extra_args]}"
+                       " {command_arguments[preload]}" \
+                       " {settings[extra_args]}"
 
     # TODO: services should maybe have access to settings or attribs, and should maybe template their own command lines
     def get_graceful_method(self, attribs):
@@ -102,18 +109,20 @@ class GalaxyUnicornHerderService(Service):
     service_type = "unicornherder"
     service_name = "unicornherder"
     environment_from = "gunicorn"
+    settings_from = "gunicorn"
     graceful_method = GracefulMethod.SIGHUP
     default_environment = DEFAULT_GALAXY_ENVIRONMENT
-    command_template = "{virtualenv_bin}unicornherder --pidfile {supervisor_state_dir}/{program_name}.pid --" \
+    command_arguments = GalaxyGunicornService.command_arguments
+    command_template = "{virtualenv_bin}unicornherder --pidfile {state_dir}/{program_name}.pid --" \
                        " 'galaxy.webapps.galaxy.fast_factory:factory()'" \
-                       " --timeout {gunicorn[timeout]}" \
+                       " --timeout {settings[timeout]}" \
                        " --pythonpath lib" \
                        " -k galaxy.webapps.galaxy.workers.Worker" \
-                       " -b {gunicorn[bind]}" \
-                       " --workers={gunicorn[workers]}" \
+                       " -b {settings[bind]}" \
+                       " --workers={settings[workers]}" \
                        " --config python:galaxy.web_stack.gunicorn_config" \
-                       " {gunicorn[preload]}" \
-                       " {gunicorn[extra_args]}"
+                       " {command_arguments[preload]}" \
+                       " {settings[extra_args]}"
 
     def get_environment(self):
         environment = self.default_environment.copy()
@@ -129,21 +138,22 @@ class GalaxyCeleryService(Service):
     default_environment = DEFAULT_GALAXY_ENVIRONMENT
     command_template = "{virtualenv_bin}celery" \
                        " --app galaxy.celery worker" \
-                       " --concurrency {celery[concurrency]}" \
-                       " --loglevel {celery[loglevel]}" \
-                       " --pool {celery[pool]}" \
-                       " --queues {celery[queues]}" \
-                       " {celery[extra_args]}"
+                       " --concurrency {settings[concurrency]}" \
+                       " --loglevel {settings[loglevel]}" \
+                       " --pool {settings[pool]}" \
+                       " --queues {settings[queues]}" \
+                       " {settings[extra_args]}"
 
 
 class GalaxyCeleryBeatService(Service):
     service_type = "celery-beat"
     service_name = "celery-beat"
+    settings_from = "celery"
     default_environment = DEFAULT_GALAXY_ENVIRONMENT
     command_template = "{virtualenv_bin}celery" \
                        " --app galaxy.celery" \
                        " beat" \
-                       " --loglevel {celery[loglevel]}" \
+                       " --loglevel {settings[loglevel]}" \
                        " --schedule {state_dir}/" + CELERY_BEAT_DB_FILENAME
 
 
@@ -156,12 +166,12 @@ class GalaxyGxItProxyService(Service):
     # the npx shebang is $!/usr/bin/env node, so $PATH has to be correct
     add_virtualenv_to_path = True
     command_arguments = {
-        "forward_ip": "--forwardIP {gx_it_proxy[forward_ip]}",
-        "forward_port": "--forwardPort {gx_it_proxy[forward_port]}",
+        "forward_ip": "--forwardIP {settings[forward_ip]}",
+        "forward_port": "--forwardPort {settings[forward_port]}",
         "reverse_proxy": "--reverseProxy",
     }
-    command_template = "{virtualenv_bin}npx gx-it-proxy --ip {gx_it_proxy[ip]} --port {gx_it_proxy[port]}" \
-                       " --sessions {gx_it_proxy[sessions]} {gx_it_proxy[verbose]}" \
+    command_template = "{virtualenv_bin}npx gx-it-proxy --ip {settings[ip]} --port {settings[port]}" \
+                       " --sessions {settings[sessions]} {settings[verbose]}" \
                        " {command_arguments[forward_ip]} {command_arguments[forward_port]}" \
                        " {command_arguments[reverse_proxy]}"
 
@@ -169,20 +179,40 @@ class GalaxyGxItProxyService(Service):
 class GalaxyTUSDService(Service):
     service_type = "tusd"
     service_name = "tusd"
-    command_template = "{tusd[tusd_path]} -host={tusd[host]} -port={tusd[port]} -upload-dir={tusd[upload_dir]}" \
+    command_template = "{settings[tusd_path]} -host={settings[host]} -port={settings[port]}" \
+                       " -upload-dir={settings[upload_dir]}" \
                        " -hooks-http={galaxy_infrastructure_url}/api/upload/hooks" \
-                       " -hooks-http-forward-headers=X-Api-Key,Cookie {tusd[extra_args]}" \
-                       " -hooks-enabled-events {tusd[hooks_enabled_events]}"
+                       " -hooks-http-forward-headers=X-Api-Key,Cookie {settings[extra_args]}" \
+                       " -hooks-enabled-events {settings[hooks_enabled_events]}"
 
 
 class GalaxyStandaloneService(Service):
     service_type = "standalone"
     service_name = "standalone"
+    default_start_timeout = 20
+    default_stop_timeout = 65
     command_template = "{virtualenv_bin}python ./lib/galaxy/main.py -c {galaxy_conf} --server-name={server_name}" \
-                       "{attach_to_pool_opt}{pid_file_opt}"
+                       " {command_arguments[attach_to_pool]} {command_arguments[pid_file]}"
 
     def get_environment(self):
         return self.get("environment") or {}
+
+    def get_command_arguments(self, attribs, format_vars):
+        # full override because standalone doesn't have settings
+        command_arguments = {}
+        server_pools = self.get("server_pools")
+        if server_pools:
+            _attach_to_pool = " ".join(f"--attach-to-pool={server_pool}" for server_pool in server_pools)
+            # Insert a single leading space
+            command_arguments["attach_to_pool"] = f" {_attach_to_pool}"
+        command_arguments["pid_file"] = " --pid-file={state_dir}/{program_name}.pid".format(**format_vars)
+        return command_arguments
+
+    def get_settings(self, attribs, format_vars):
+        return {
+            "start_timeout": self.start_timeout or self.default_start_timeout,
+            "stop_timeout": self.stop_timeout or self.default_stop_timeout,
+        }
 
 
 class ConfigFile(AttributeDict):
