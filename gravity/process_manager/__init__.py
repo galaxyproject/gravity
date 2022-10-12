@@ -233,7 +233,7 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
         print_env = ' '.join('{}={}'.format(k, shlex.quote(v)) for k, v in format_vars["environment"].items())
 
         cmd = shlex.split(format_vars["command"])
-        env = format_vars["environment"] | os.environ
+        env = format_vars["environment"] | dict(os.environ)
         cwd = format_vars["galaxy_root"]
 
         info(f"Working directory: {cwd}")
