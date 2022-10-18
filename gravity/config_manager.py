@@ -128,31 +128,31 @@ class ConfigManager(object):
 
         app_config = None
 
-        if self.gravity_config_section in config_dict and server_section in config_dict:
-            config.__file__ = config.galaxy_config_file = conf
-        elif self.gravity_config_section in config_dict and gravity_config.galaxy_config_file:
-            config.__file__ = conf
+        config.__file__ = config.galaxy_config_file = conf
+
+        if (self.gravity_config_section in config_dict and server_section not in config_dict
+                and gravity_config.galaxy_config_file):
             config.galaxy_config_file = gravity_config.galaxy_config_file
             if not isabs(config.galaxy_config_file):
                 config.galaxy_config_file = join(dirname(config.__file__), config.galaxy_config_file)
             with open(config.galaxy_config_file) as config_fh:
                 app_config = safe_load(config_fh).get(server_section)
-        elif self.gravity_config_section in config_dict:
-            exception(
-                f"Config file appears to be a Gravity config but contains no {server_section} section. You must"
-                f" explicitly set a path to the Galaxy config file in the `galaxy_config_file` option: {conf}")
-        elif server_section in config_dict:
-            config.__file__ = config.galaxy_config_file = conf
+                if app_config is None:
+                    # we let this slide in other scenarios but if you set the option to something that doesn't contain a
+                    # galaxy section that's almost surely a mistake
+                    exception(f"Config file does not contain a {server_section} section: {config.galaxy_config_file}")
+        elif self.gravity_config_section in config_dict and server_section not in config_dict:
+            warn(
+                f"Config file appears to be a Gravity config but contains no {server_section}"
+                f" section, Galaxy defaults will be used (hint: did you forget to set `galaxy_config_file`?: {conf}")
+        elif self.gravity_config_section not in config_dict and server_section in config_dict:
             warn(
                 f"Config file appears to be a {server_section} config but contains no {self.gravity_config_section}"
                 f" section, Gravity defaults will be used: {conf}")
-        else:
+        elif self.gravity_config_section not in config_dict and server_section not in config_dict:
             exception(f"Config file does not look like valid Galaxy, Reports or Gravity configuration file: {conf}")
 
         app_config = app_config or config_dict.get(server_section) or {}
-
-        if app_config is None:
-            exception(f"Config file does not contain a {server_section} section: {config.galaxy_config_file}")
 
         # FIXME: I don't think we use the persisted value of instance_name anymore, this comes straight from the Gravity
         # config. We might not need it at all, but we also need to validate that it doesn't collide with other
