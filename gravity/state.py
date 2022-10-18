@@ -257,6 +257,27 @@ class GravityState(AttributeDict):
         "config_files": {},
     }
 
+
+class GravityStateDict(GravityState):
+    contents = None
+
+    @classmethod
+    def open(cls, name):
+        if GravityStateDict.contents is None:
+            GravityStateDict.contents = cls(**GravityState.init_contents)
+        return GravityStateDict.contents
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pass
+
+
+class GravityStateFile(GravityState):
     @classmethod
     def open(cls, name):
         try:
@@ -270,7 +291,7 @@ class GravityState(AttributeDict):
         return s
 
     def __init__(self, *args, **kwargs):
-        super(GravityState, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         normalized_state = defaultdict(dict)
         for config_file, config_dict in self["config_files"].items():
             # resolve path, so we always deal with absolute and symlink-resolved paths
@@ -300,6 +321,13 @@ def service_for_service_type(service_type):
         return SERVICE_CLASS_MAP[service_type]
     except KeyError:
         raise RuntimeError(f"Unknown service type: {service_type}")
+
+
+def gravity_state(state_path):
+    if state_path:
+        return GravityStateFile
+    else:
+        return GravityStateDict
 
 
 # TODO: better to pull this from __class__.service_type

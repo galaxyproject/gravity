@@ -247,8 +247,8 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
 
 
 class ProcessManagerRouter:
-    def __init__(self, state_dir=None, **kwargs):
-        self.config_manager = ConfigManager(state_dir=state_dir)
+    def __init__(self, state_dir=None, galaxy_config=None, **kwargs):
+        self.config_manager = ConfigManager(state_dir=state_dir, galaxy_config=galaxy_config)
         self.state_dir = self.config_manager.state_dir
         self._load_pm_modules(state_dir=state_dir, **kwargs)
         self._process_executor = ProcessExecutor(config_manager=self.config_manager)

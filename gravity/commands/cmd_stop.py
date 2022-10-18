@@ -14,5 +14,6 @@ def cli(ctx, instance):
 
     If INSTANCE does not match an instance name, it is assumed to be a service and only the listed service(s) are
     stopped."""
-    with process_manager.process_manager(state_dir=ctx.parent.state_dir, start_daemon=False) as pm:
+    cm_args = {"state_dir": ctx.parent.state_dir, "galaxy_config": ctx.parent.galaxy_config}
+    with process_manager.process_manager(start_daemon=False, **cm_args) as pm:
         pm.stop(instance_names=instance)

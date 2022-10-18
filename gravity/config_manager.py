@@ -18,7 +18,8 @@ from gravity.settings import Settings
 from gravity.io import debug, error, exception, info, warn
 from gravity.state import (
     ConfigFile,
-    GravityState,
+    GravityStateDict,
+    GravityStateFile,
     service_for_service_type,
 )
 from gravity.util import recursive_update, yaml_safe_load_with_include
@@ -33,15 +34,15 @@ if "XDG_CONFIG_HOME" in os.environ:
 
 
 @contextlib.contextmanager
-def config_manager(state_dir=None, python_exe=None):
-    yield ConfigManager(state_dir=state_dir, python_exe=python_exe)
+def config_manager(state_dir=None, galaxy_config=None):
+    yield ConfigManager(state_dir=state_dir, galaxy_config=galaxy_config)
 
 
 class ConfigManager(object):
     galaxy_server_config_section = "galaxy"
     gravity_config_section = "gravity"
 
-    def __init__(self, state_dir=None, python_exe=None):
+    def __init__(self, state_dir=None, galaxy_config=None):
         if state_dir is None:
             if self.is_root:
                 state_dir = DEFAULT_ROOT_STATE_DIR
@@ -50,8 +51,17 @@ class ConfigManager(object):
         self.state_dir = abspath(expanduser(state_dir))
         debug(f"Gravity state dir: {self.state_dir}")
         self.__configs = {}
+        self.galaxy_config_file = None
         self.config_state_path = join(self.state_dir, "configstate.yaml")
-        self.python_exe = python_exe
+        if galaxy_config is not None:
+            self.__state_class = GravityStateDict
+            if os.path.exists(self.config_state_path):
+                warn("Warning: Galaxy config file was provided, existing Gravity config state will be ignored:"
+                     f" {self.config_state_path}")
+            self.add([galaxy_config])
+        else:
+            self.__state_class = GravityStateFile
+        debug(f"Gravity state class: {self.__state_class.__name__}")
         try:
             os.makedirs(self.state_dir)
         except OSError as exc:
@@ -60,7 +70,7 @@ class ConfigManager(object):
         self.__convert_config()
 
     def __copy_config(self, old_path):
-        with GravityState.open(old_path) as state:
+        with self.__state_class.open(old_path) as state:
             state.set_name(self.config_state_path)
         # copies on __exit__
 
@@ -297,7 +307,7 @@ class ConfigManager(object):
     @property
     def state(self):
         """Public property to access persisted config state"""
-        return GravityState.open(self.config_state_path)
+        return self.__state_class.open(self.config_state_path)
 
     @property
     def instance_count(self):

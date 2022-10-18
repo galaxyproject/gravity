@@ -13,6 +13,16 @@ def state_dir_option():
     )
 
 
+def galaxy_config_option():
+    return click.option(
+        "-c",
+        "--galaxy-config",
+        type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+        help="Galaxy config file to operate on.",
+        envvar="GALAXY_CONFIG_FILE",
+    )
+
+
 def no_log_option():
     return click.option(
         '--quiet', is_flag=True, default=False, help="Only output supervisor logs, do not include process logs"
@@ -37,5 +47,6 @@ def required_instance_arg():
     return click.argument("instance", nargs=-1)
 
 
+# TODO: this should replace required_instance_arg in most cases
 def instances_services_arg():
     return click.argument("instances_services", metavar="[INSTANCES] [SERVICES]", nargs=-1)
