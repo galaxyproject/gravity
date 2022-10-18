@@ -139,6 +139,7 @@ class ConfigManager(object):
         config.attribs["handlers"] = gravity_config.handlers
         config.attribs["galaxy_user"] = gravity_config.galaxy_user
         config.attribs["galaxy_group"] = gravity_config.galaxy_group
+        config.attribs["memory_limit"] = gravity_config.memory_limit
         # Store gravity version, in case we need to convert old setting
         webapp_service_names = []
 
@@ -183,6 +184,7 @@ class ConfigManager(object):
                     config_type=config.config_type,
                     service_name=handler_settings["service_name"],
                     environment=handler_settings.get("environment"),
+                    memory_limit=handler_settings.get("memory_limit"),
                     start_timeout=handler_settings.get("start_timeout"),
                     stop_timeout=handler_settings.get("stop_timeout")
                 ))
@@ -207,6 +209,7 @@ class ConfigManager(object):
             # TODO: add these to Galaxy docs
             start_timeout = handler_settings.get("start_timeout")
             stop_timeout = handler_settings.get("stop_timeout")
+            memory_limit = handler_settings.get("memory_limit")
             config.services.append(
                 service_for_service_type("standalone")(
                     config_type=config.config_type,
@@ -214,7 +217,8 @@ class ConfigManager(object):
                     server_pools=pools,
                     environment=environment,
                     start_timeout=start_timeout,
-                    stop_timeout=stop_timeout
+                    stop_timeout=stop_timeout,
+                    memory_limit=memory_limit
                 ))
 
     def create_gxit_services(self, gravity_config: Settings, app_config, config):

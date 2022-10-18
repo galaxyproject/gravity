@@ -320,4 +320,59 @@ def test_tusd_process(default_config_manager, galaxy_yml, tusd_config, process_m
         assert "tusd -host" in tusd_config_path.read_text()
 
 
+def test_default_memory_limit(galaxy_yml, default_config_manager):
+    process_manager_name = 'systemd'
+    galaxy_yml.write(json.dumps(
+        {'galaxy': None, 'gravity': {
+            'process_manager': process_manager_name,
+            'memory_limit': 2,
+            'handlers': {'handler': {}}}}))
+    default_config_manager.add([str(galaxy_yml)])
+    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
+        pm.update()
+    conf_dir = service_conf_dir(default_config_manager.state_dir, process_manager_name)
+    gunicorn_conf_path = conf_dir / service_conf_file(process_manager_name, 'gunicorn')
+    assert 'MemoryLimit=2G' in gunicorn_conf_path.open().read()
+    handler0_config_path = conf_dir / service_conf_file(process_manager_name, 'handler_0', service_type='standalone')
+    assert handler0_config_path.exists(), os.listdir(conf_dir)
+    assert 'MemoryLimit=2G' in handler0_config_path.open().read()
+
+
+def test_service_memory_limit(galaxy_yml, default_config_manager):
+    process_manager_name = 'systemd'
+    galaxy_yml.write(json.dumps(
+        {'galaxy': None, 'gravity': {
+            'process_manager': process_manager_name,
+            'gunicorn': {'memory_limit': 4},
+            'handlers': {'handler': {}}}}))
+    default_config_manager.add([str(galaxy_yml)])
+    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
+        pm.update()
+    conf_dir = service_conf_dir(default_config_manager.state_dir, process_manager_name)
+    gunicorn_conf_path = conf_dir / service_conf_file(process_manager_name, 'gunicorn')
+    assert 'MemoryLimit=4G' in gunicorn_conf_path.open().read()
+    handler0_config_path = conf_dir / service_conf_file(process_manager_name, 'handler_0', service_type='standalone')
+    assert handler0_config_path.exists(), os.listdir(conf_dir)
+    assert 'MemoryLimit' not in handler0_config_path.open().read()
+
+
+def test_override_memory_limit(galaxy_yml, default_config_manager):
+    process_manager_name = 'systemd'
+    galaxy_yml.write(json.dumps(
+        {'galaxy': None, 'gravity': {
+            'process_manager': process_manager_name,
+            'memory_limit': 2,
+            'gunicorn': {'memory_limit': 4},
+            'handlers': {'handler': {}}}}))
+    default_config_manager.add([str(galaxy_yml)])
+    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
+        pm.update()
+    conf_dir = service_conf_dir(default_config_manager.state_dir, process_manager_name)
+    gunicorn_conf_path = conf_dir / service_conf_file(process_manager_name, 'gunicorn')
+    assert 'MemoryLimit=4G' in gunicorn_conf_path.open().read()
+    handler0_config_path = conf_dir / service_conf_file(process_manager_name, 'handler_0', service_type='standalone')
+    assert handler0_config_path.exists(), os.listdir(conf_dir)
+    assert 'MemoryLimit=2G' in handler0_config_path.open().read()
+
+
 # TODO: test switching PMs in between invocations, test multiple instances

@@ -9,6 +9,7 @@ from glob import glob
 from gravity.io import debug, exception, info, warn
 from gravity.process_manager import BaseProcessManager
 from gravity.settings import ProcessManager
+from gravity.state import GracefulMethod
 
 SYSTEMD_SERVICE_TEMPLATES = {}
 SYSTEMD_SERVICE_TEMPLATE = """;
@@ -28,10 +29,9 @@ WorkingDirectory={galaxy_root}
 TimeoutStartSec={settings[start_timeout]}
 TimeoutStopSec={settings[stop_timeout]}
 ExecStart={command}
-#ExecReload=
-#ExecStop=
+{systemd_exec_reload}
 {environment}
-#MemoryLimit=
+{systemd_memory_limit}
 Restart=always
 
 MemoryAccounting=yes
@@ -127,13 +127,23 @@ class SystemdProcessManager(BaseProcessManager):
         systemd_format_vars = {
             "virtualenv_bin": f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}' if virtualenv_dir else "",
             "systemd_user_group": "",
+            "systemd_exec_reload": "",
+            "systemd_memory_limit": "",
         }
         if not self.user_mode:
             systemd_format_vars["systemd_user_group"] = f"User={attribs['galaxy_user']}"
             if attribs["galaxy_group"] is not None:
                 systemd_format_vars["systemd_user_group"] += f"\nGroup={attribs['galaxy_group']}"
 
+        if service.get_graceful_method(attribs) == GracefulMethod.SIGHUP:
+            systemd_format_vars["systemd_exec_reload"] = "ExecReload=/bin/kill -HUP $MAINPID"
+
         format_vars = self._service_format_vars(config, service, program_name, systemd_format_vars)
+
+        # this is done after the superclass formatting since it accesses service settings
+        memory_limit = format_vars["settings"].get("memory_limit") or attribs["memory_limit"]
+        if memory_limit:
+            format_vars["systemd_memory_limit"] = f"MemoryLimit={memory_limit}G"
 
         if not format_vars["command"].startswith("/"):
             format_vars["command"] = f"{format_vars['virtualenv_bin']}{format_vars['command']}"

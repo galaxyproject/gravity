@@ -79,6 +79,13 @@ You can find a list of available hooks at https://github.com/tus/tusd/blob/maste
     extra_args: str = Field(default="", description="Extra arguments to pass to tusd command line.")
     start_timeout: int = Field(10, description="Value of supervisor startsecs, systemd TimeoutStartSec")
     stop_timeout: int = Field(10, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
+    memory_limit: Optional[int] = Field(
+        None,
+        description="""
+Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
+``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
+``supervisor``.
+""")
     environment: Dict[str, str] = Field(
         default={},
         description="""
@@ -97,6 +104,13 @@ class CelerySettings(BaseModel):
     extra_args: str = Field(default="", description="Extra arguments to pass to Celery command line.")
     start_timeout: int = Field(10, description="Value of supervisor startsecs, systemd TimeoutStartSec")
     stop_timeout: int = Field(10, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
+    memory_limit: Optional[int] = Field(
+        None,
+        description="""
+Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
+``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
+``supervisor``.
+""")
     environment: Dict[str, str] = Field(
         default={},
         description="""
@@ -140,6 +154,13 @@ Consumes less memory when multiple processes are configured. Default is ``false`
 """)
     start_timeout: int = Field(15, description="Value of supervisor startsecs, systemd TimeoutStartSec")
     stop_timeout: int = Field(65, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
+    memory_limit: Optional[int] = Field(
+        None,
+        description="""
+Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
+``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
+``supervisor``.
+""")
     environment: Dict[str, str] = Field(
         default={},
         description="""
@@ -178,6 +199,13 @@ This is an advanced option that is only needed when proxying to remote interacti
 """)
     start_timeout: int = Field(10, description="Value of supervisor startsecs, systemd TimeoutStartSec")
     stop_timeout: int = Field(10, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
+    memory_limit: Optional[int] = Field(
+        None,
+        description="""
+Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
+``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
+``supervisor``.
+""")
     environment: Dict[str, str] = Field(
         default={},
         description="""
@@ -208,6 +236,14 @@ What command to write to the process manager configs
 `direct` (each service's actual command) is also supported.
 """)
 
+    memory_limit: Optional[int] = Field(
+        None,
+        description="""
+Memory limit (in GB), processes exceeding the limit will be killed. Default is no limit. If set, this is default value
+for all services. Setting ``memory_limit`` on an individual service overrides this value. Ignored if ``process_manager``
+is ``supervisor``.
+""")
+
     galaxy_root: Optional[str] = Field(
         None,
         description="""
@@ -218,13 +254,13 @@ Gravity will attempt to find the root directory, but you can set the directory e
         None,
         description="""
 User to run Galaxy as, required when using the systemd process manager as root.
-Ignored with supervisor or user-mode systemd.
+Ignored if ``process_manager`` is ``supervisor`` or user-mode (non-root) ``systemd``.
 """)
     galaxy_group: Optional[str] = Field(
         None,
         description="""
 Group to run Galaxy as, optional when using the systemd process manager as root.
-Ignored with supervisor or user-mode systemd.
+Ignored if ``process_manager`` is ``supervisor`` or user-mode (non-root) ``systemd``.
 """)
     log_dir: Optional[str] = Field(
         None,
