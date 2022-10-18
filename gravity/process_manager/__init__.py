@@ -130,6 +130,10 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
 
 
 class BaseProcessManager(BaseProcessExecutionEnvironment, metaclass=ABCMeta):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._service_changes = None
+
     def _file_needs_update(self, path, contents):
         """Update if contents differ"""
         if os.path.exists(path):
@@ -147,6 +151,7 @@ class BaseProcessManager(BaseProcessExecutionEnvironment, metaclass=ABCMeta):
             info("%s %s %s", verb, file_type, name)
             with open(path, "w") as out:
                 out.write(contents)
+            self._service_changes = True
         else:
             debug("No changes to existing config for %s %s at %s", file_type, name, path)
 

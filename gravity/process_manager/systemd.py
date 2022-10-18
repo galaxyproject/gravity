@@ -199,6 +199,7 @@ class SystemdProcessManager(BaseProcessManager):
             self.__systemctl("disable", "--now", unit_name)
             info("Removing service config %s", file)
             os.unlink(file)
+            self._service_changes = True
 
     def __unit_names(self, configs, service_names):
         unit_names = []
@@ -249,9 +250,12 @@ class SystemdProcessManager(BaseProcessManager):
                     newline = '\n'
                     info(f"Removing systemd units due to --force option:{newline}{newline.join(service_units)}")
                     list(map(os.unlink, service_units))
+                    self._service_changes = True
         self._process_configs(configs)
-        # FIXME BEFORE RELEASE: only reload if there are changes
-        self.__systemctl("daemon-reload")
+        if self._service_changes:
+            self.__systemctl("daemon-reload")
+        else:
+            debug("No service changes, daemon-reload not performed")
 
     def shutdown(self):
         """ """

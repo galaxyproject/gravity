@@ -168,7 +168,6 @@ class SupervisorProcessManager(BaseProcessManager):
 
         conf = join(instance_conf_dir, f"{service['config_type']}_{service['service_type']}_{service['service_name']}.conf")
 
-        # FIXME: dedup below
         template = SUPERVISORD_SERVICE_TEMPLATE
         contents = template.format(**format_vars)
         self._update_file(conf, contents, program_name, "service")
