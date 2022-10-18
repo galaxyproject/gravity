@@ -44,7 +44,7 @@ def _route(func, all_process_managers=False):
             pm_names = configs_by_pm.keys()
         for pm_name in pm_names:
             routed_func = getattr(self.process_managers[pm_name], func.__name__)
-            routed_func_params = inspect.getargspec(routed_func).args
+            routed_func_params = list(inspect.signature(routed_func).parameters)
             if "configs" in routed_func_params:
                 pm_configs = configs_by_pm.get(pm_name, [])
                 kwargs["configs"] = pm_configs
