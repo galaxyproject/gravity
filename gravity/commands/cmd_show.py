@@ -15,7 +15,7 @@ def cli(ctx, config):
 
     aliases: get
     """
-    with config_manager.config_manager(state_dir=ctx.parent.state_dir) as cm:
+    with config_manager.config_manager(**ctx.parent.cm_kwargs) as cm:
         config_data = cm.get_registered_config(config)
         if config_data is None:
             newline = "\n"

@@ -63,8 +63,8 @@ route_to_all = partial(_route, all_process_managers=True)
 
 
 class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
-    def __init__(self, state_dir=None, config_manager=None, start_daemon=True, foreground=False):
-        self.config_manager = config_manager or ConfigManager(state_dir=state_dir)
+    def __init__(self, state_dir=None, config_file=None, config_manager=None, **kwargs):
+        self.config_manager = config_manager or ConfigManager(state_dir=state_dir, config_file=config_file)
         self.state_dir = self.config_manager.state_dir
         self.tail = which("tail")
 
@@ -100,7 +100,7 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
             "program_name": program_name,
             "galaxy_infrastructure_url": attribs["galaxy_infrastructure_url"],
             "galaxy_umask": service.get("umask", "022"),
-            "galaxy_conf": config.__file__,
+            "galaxy_conf": config.galaxy_config_file,
             "galaxy_root": config["galaxy_root"],
             "virtualenv_bin": virtualenv_bin,
             "state_dir": self.state_dir,
@@ -122,15 +122,18 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
                 path = environment.get("PATH", self._service_default_path())
                 environment["PATH"] = ":".join([virtualenv_bin, path])
         else:
-            format_vars["command"] = f"galaxyctl exec {config.instance_name} {program_name}"
-            environment = {"GRAVITY_STATE_DIR": "{state_dir}"}
+            config_file = shlex.quote(config.__file__)
+            state_dir = shlex.quote(self.state_dir)
+            # setting the config file ensures that there is only one instance and the configstate is ignored
+            format_vars["command"] = f"galaxyctl --config-file {config_file} --state-dir {state_dir} exec {program_name}"
+            environment = {}
         format_vars["environment"] = self._service_environment_formatter(environment, format_vars)
 
         return format_vars
 
 
 class BaseProcessManager(BaseProcessExecutionEnvironment, metaclass=ABCMeta):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, foreground=False, **kwargs):
         super().__init__(*args, **kwargs)
         self._service_changes = None
 
@@ -247,8 +250,8 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
 
 
 class ProcessManagerRouter:
-    def __init__(self, state_dir=None, galaxy_config=None, **kwargs):
-        self.config_manager = ConfigManager(state_dir=state_dir, galaxy_config=galaxy_config)
+    def __init__(self, state_dir=None, config_file=None, no_warn=False, **kwargs):
+        self.config_manager = ConfigManager(state_dir=state_dir, config_file=config_file, no_warn=no_warn)
         self.state_dir = self.config_manager.state_dir
         self._load_pm_modules(state_dir=state_dir, **kwargs)
         self._process_executor = ProcessExecutor(config_manager=self.config_manager)

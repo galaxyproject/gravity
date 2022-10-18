@@ -12,5 +12,5 @@ def cli(ctx, config):
 
     aliases: remove, forget
     """
-    with config_manager.config_manager(state_dir=ctx.parent.state_dir) as cm:
+    with config_manager.config_manager(**ctx.parent.cm_kwargs) as cm:
         cm.remove(config)

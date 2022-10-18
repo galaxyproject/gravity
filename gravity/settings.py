@@ -244,6 +244,12 @@ for all services. Setting ``memory_limit`` on an individual service overrides th
 is ``supervisor``.
 """)
 
+    galaxy_config_file: Optional[str] = Field(
+        None,
+        description="""
+Specify Galaxy config file (galaxy.yml), if the Gravity config is separate from the Galaxy config. Assumed to be the
+same file as the Gravity config if a ``galaxy`` key exists at the root level, otherwise, this option is required.
+""")
     galaxy_root: Optional[str] = Field(
         None,
         description="""

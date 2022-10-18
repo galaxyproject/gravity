@@ -17,16 +17,19 @@ def cli(ctx, foreground, instance, quiet=False):
 
     If INSTANCE does not match an instance name, it is assumed to be a service and only the listed service(s) are
     started."""
-    cm_args = {"state_dir": ctx.parent.state_dir, "galaxy_config": ctx.parent.galaxy_config}
-    if not instance and not ctx.parent.galaxy_config:
-        with config_manager.config_manager(**cm_args) as cm:
+    auto_update = False
+    if not instance and not ctx.parent.cm_kwargs["config_file"]:
+        with config_manager.config_manager(**ctx.parent.cm_kwargs) as cm:
             # If there are no configs registered, we will attempt to auto-register one
             cm.auto_register()
+            auto_update = True
         if not cm.instance_count:
             exception(
                 "Nothing to start: no Galaxy instances configured and no Galaxy configuration files found, "
                 "see `galaxyctl register --help`")
-    with process_manager.process_manager(foreground=foreground, **cm_args) as pm:
+    with process_manager.process_manager(foreground=foreground, **ctx.parent.cm_kwargs) as pm:
+        if auto_update:
+            pm.update()
         pm.start(instance_names=instance)
         if foreground:
             pm.follow(instance_names=instance, quiet=quiet)

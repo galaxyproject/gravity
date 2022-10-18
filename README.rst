@@ -270,36 +270,35 @@ unset are shown)::
 
 As a convenience for cases where you may want to have different Gravity configurations but a single Galaxy
 configuration (e.g. your Galaxy server is split across multiple hosts), the Gravity configuration can be stored in a
-separate file and included into the Galaxy configuration. For example, on a deployment where the web (gunicorn) and job
-handler processes run on different hosts, one might have:
+separate file. In this case, you must set the ``galaxy_config_file`` option in the Gravity config to specify the
+location of the Galaxy config file.
 
-In ``galaxy.yml``::
-
-    gravity: !include gravity.yml
-    galaxy:
-      database_connection: postgresql://...
-      ...
+For example, on a deployment where the web (gunicorn) and job handler processes run on different hosts, one might have:
 
 In ``gravity.yml`` on the web host::
 
-    log_dir: /var/log/galaxy
-    gunicorn:
-      bind: localhost:8888
-    celery:
-      enable: false
-      enable_beat: false
+    gravity:
+      galaxy_config_file: galaxy.yml
+      log_dir: /var/log/galaxy
+      gunicorn:
+        bind: localhost:8888
+      celery:
+        enable: false
+        enable_beat: false
 
 In ``gravity.yml`` on the job handler host::
 
-    log_dir: /var/log/galaxy
-    gunicorn:
-      enable: false
-    celery:
-      enable: true
-      enable_beat: true
-    handlers:
-      handler:
-        processes: 2
+    gravity:
+      galaxy_config_file: galaxy.yml
+      log_dir: /var/log/galaxy
+      gunicorn:
+        enable: false
+      celery:
+        enable: true
+        enable_beat: true
+      handlers:
+        handler:
+          processes: 2
 
 Galaxy Job Handlers
 -------------------

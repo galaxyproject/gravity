@@ -74,7 +74,7 @@ class SupervisorProcessManager(BaseProcessManager):
 
     name = ProcessManager.supervisor
 
-    def __init__(self, state_dir=None, config_manager=None, start_daemon=True, foreground=False):
+    def __init__(self, state_dir=None, config_manager=None, foreground=False):
         super().__init__(state_dir=state_dir, config_manager=config_manager)
         self.supervisord_exe = which("supervisord")
         self.supervisor_state_dir = join(self.state_dir, "supervisor")
@@ -87,9 +87,6 @@ class SupervisorProcessManager(BaseProcessManager):
 
         if not exists(self.supervisord_conf_dir):
             os.makedirs(self.supervisord_conf_dir)
-
-        if start_daemon:
-            self.__supervisord()
 
     @property
     def use_group(self):
@@ -229,7 +226,6 @@ class SupervisorProcessManager(BaseProcessManager):
                 shutil.rmtree(path)
 
     def __start_stop(self, op, configs, service_names):
-        self.update(configs=configs)
         for config in configs:
             if service_names:
                 services = [s for s in config.services if s["service_name"] in service_names]
@@ -255,6 +251,7 @@ class SupervisorProcessManager(BaseProcessManager):
                     self.supervisorctl("restart", program_name)
 
     def start(self, configs=None, service_names=None):
+        self.__supervisord()
         self.__start_stop("start", configs, service_names)
         self.supervisorctl("status")
 
@@ -262,18 +259,27 @@ class SupervisorProcessManager(BaseProcessManager):
         self.__start_stop("stop", configs, service_names)
         # Exit supervisor if all processes are stopped
         supervisor = self.__get_supervisor()
-        proc_infos = supervisor.getAllProcessInfo()
-        if all([i["state"] == 0 for i in proc_infos]):
-            info("All processes stopped, supervisord will exit")
-            self.shutdown()
-        else:
-            info("Not all processes stopped, supervisord not shut down (hint: see `galaxyctl status`)")
+        if self.__supervisord_is_running():
+            proc_infos = supervisor.getAllProcessInfo()
+            if all([i["state"] == 0 for i in proc_infos]):
+                info("All processes stopped, supervisord will exit")
+                self.shutdown()
+            else:
+                info("Not all processes stopped, supervisord not shut down (hint: see `galaxyctl status`)")
 
     def restart(self, configs=None, service_names=None):
-        self.__start_stop("restart", configs, service_names)
+        if not self.__supervisord_is_running():
+            self.__supervisord()
+            warn("supervisord was not previously running; it has been started, so the 'restart' command has been ignored")
+        else:
+            self.__start_stop("restart", configs, service_names)
 
     def graceful(self, configs=None, service_names=None):
-        self.__reload_graceful(configs, service_names)
+        if not self.__supervisord_is_running():
+            self.__supervisord()
+            warn("supervisord was not previously running; it has been started, so the 'graceful' command has been ignored")
+        else:
+            self.__reload_graceful(configs, service_names)
 
     def status(self, configs=None, service_names=None):
         # TODO: create our own formatted output

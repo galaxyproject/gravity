@@ -13,13 +13,12 @@ def state_dir_option():
     )
 
 
-def galaxy_config_option():
+def config_file_option():
     return click.option(
         "-c",
-        "--galaxy-config",
+        "--config-file",
         type=click.Path(exists=True, dir_okay=False, resolve_path=True),
-        help="Galaxy config file to operate on.",
-        envvar="GALAXY_CONFIG_FILE",
+        help="Gravity (or Galaxy) config file to operate on. Can also be set with $GRAVITY_CONFIG_FILE or $GALAXY_CONFIG_FILE",
     )
 
 
