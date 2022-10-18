@@ -15,6 +15,5 @@ def cli(ctx, instances_services):
 
     Exactly one service name is required in SERVICES.
     """
-    # don't warn about config file overriding config state in this case, since it's likely intentional
-    with process_manager.process_manager(no_warn=ctx.parent.cm_kwargs["config_file"], **ctx.parent.cm_kwargs) as pm:
+    with process_manager.process_manager(**ctx.parent.cm_kwargs) as pm:
         pm.exec(instance_names=instances_services)

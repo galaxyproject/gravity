@@ -8,7 +8,7 @@ import subprocess
 import time
 from os.path import exists, join
 
-from gravity.io import debug, error, info, warn
+from gravity.io import debug, error, exception, info, warn
 from gravity.process_manager import BaseProcessManager
 from gravity.settings import ProcessManager
 from gravity.state import GracefulMethod
@@ -74,10 +74,20 @@ class SupervisorProcessManager(BaseProcessManager):
 
     name = ProcessManager.supervisor
 
-    def __init__(self, state_dir=None, config_manager=None, foreground=False):
-        super().__init__(state_dir=state_dir, config_manager=config_manager)
+    def __init__(self, foreground=False, **kwargs):
+        super().__init__(**kwargs)
+
+        if not self.config_manager.state_dir:
+            if not self.config_manager.single_instance:
+                # it shouldn't be possible to have the global state_dir as None and multiple instances configured
+                exception("Cannot configure multiple instances without setting a Gravity state dir")
+            else:
+                state_dir = self.config_manager.get_registered_configs()[0].state_dir
+        else:
+            state_dir = self.config_manager.state_dir
+
         self.supervisord_exe = which("supervisord")
-        self.supervisor_state_dir = join(self.state_dir, "supervisor")
+        self.supervisor_state_dir = join(state_dir, "supervisor")
         self.supervisord_conf_path = join(self.supervisor_state_dir, "supervisord.conf")
         self.supervisord_conf_dir = join(self.supervisor_state_dir, "supervisord.conf.d")
         self.supervisord_pid_path = join(self.supervisor_state_dir, "supervisord.pid")
@@ -237,7 +247,6 @@ class SupervisorProcessManager(BaseProcessManager):
                 self.supervisorctl(op, target)
 
     def __reload_graceful(self, configs, service_names):
-        self.update(configs=configs)
         for config in configs:
             if service_names:
                 services = [s for s in config.services if s["service_name"] in service_names]

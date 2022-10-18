@@ -272,7 +272,7 @@ Ignored if ``process_manager`` is ``supervisor`` or user-mode (non-root) ``syste
         None,
         description="""
 Set to a directory that should contain log files for the processes controlled by Gravity.
-If not specified defaults to ``<state_dir>/log``.
+If not specified defaults to ``<galaxy_data_dir>/gravity/log``.
 """)
     virtualenv: Optional[str] = Field(None, description="""
 Set to Galaxy's virtualenv directory.

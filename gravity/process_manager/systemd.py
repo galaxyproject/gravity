@@ -61,8 +61,8 @@ class SystemdProcessManager(BaseProcessManager):
 
     name = ProcessManager.systemd
 
-    def __init__(self, state_dir=None, foreground=False, **kwargs):
-        super(SystemdProcessManager, self).__init__(state_dir=state_dir, **kwargs)
+    def __init__(self, foreground=False, **kwargs):
+        super(SystemdProcessManager, self).__init__(**kwargs)
         self.user_mode = not self.config_manager.is_root
 
     @property
