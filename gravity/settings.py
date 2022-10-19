@@ -309,9 +309,10 @@ See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defi
     @validator("galaxy_user")
     def _user_required_if_root(cls, v, values):
         if os.geteuid() == 0:
-            if values["process_manager"] == ProcessManager.systemd:
+            is_systemd = values["process_manager"] == ProcessManager.systemd
+            if is_systemd and not v:
                 raise ValueError("galaxy_user is required when running as root")
-            else:
+            elif not is_systemd:
                 raise ValueError("Gravity cannot be run as root unless using the systemd process manager")
         return v
 
