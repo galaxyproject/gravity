@@ -251,6 +251,14 @@ class ConfigFile(AttributeDict):
             return {'bind': f'{self["attribs"]["bind_address"]}:{self["attribs"]["bind_port"]}'}
         return gunicorn
 
+    @property
+    def galaxy_version(self):
+        galaxy_version_file = os.path.join(self["galaxy_root"], "lib", "galaxy", "version.py")
+        with open(galaxy_version_file) as fh:
+            locs = {}
+            exec(fh.read(), {}, locs)
+            return locs["VERSION"]
+
 
 class GravityState(AttributeDict):
     init_contents = {
