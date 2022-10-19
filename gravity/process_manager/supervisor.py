@@ -160,7 +160,6 @@ class SupervisorProcessManager(BaseProcessManager):
         supervisor_format_vars = {
             "log_dir": attribs["log_dir"],
             "log_file": self._service_log_file(attribs["log_dir"], program_name),
-            "program_name": program_name,
             "process_name_opt": f"process_name    = {service['service_name']}" if self.use_group else "",
         }
 

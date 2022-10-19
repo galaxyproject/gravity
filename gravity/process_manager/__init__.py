@@ -152,8 +152,10 @@ class BaseProcessManager(BaseProcessExecutionEnvironment, metaclass=ABCMeta):
             with open(path, "w") as out:
                 out.write(contents)
             self._service_changes = True
+            return True
         else:
             debug("No changes to existing config for %s %s at %s", file_type, name, path)
+            return False
 
     def follow(self, configs=None, service_names=None, quiet=False):
         # supervisor has a built-in tail command but it only works on a single log file. `galaxyctl supervisorctl tail

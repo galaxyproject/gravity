@@ -11,15 +11,15 @@ from gravity.process_manager import BaseProcessManager
 from gravity.settings import ProcessManager
 from gravity.state import GracefulMethod
 
-SYSTEMD_SERVICE_TEMPLATES = {}
 SYSTEMD_SERVICE_TEMPLATE = """;
 ; This file is maintained by Gravity - CHANGES WILL BE OVERWRITTEN
 ;
 
 [Unit]
-Description=Galaxy {program_name}
+Description={systemd_description}
 After=network.target
 After=time-sync.target
+PartOf={systemd_target}
 
 [Service]
 UMask={galaxy_umask}
@@ -37,6 +37,20 @@ Restart=always
 MemoryAccounting=yes
 CPUAccounting=yes
 BlockIOAccounting=yes
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+SYSTEMD_TARGET_TEMPLATE = """;
+; This file is maintained by Gravity - CHANGES WILL BE OVERWRITTEN
+;
+
+[Unit]
+Description={systemd_description}
+After=network.target
+After=time-sync.target
+Wants={systemd_target_wants}
 
 [Install]
 WantedBy=multi-user.target
@@ -99,11 +113,13 @@ class SystemdProcessManager(BaseProcessManager):
         # this is used to stop a foreground supervisord in the supervisor PM, so it is a no-op here
         pass
 
-    def __unit_name(self, instance_name, service):
-        unit_name = f"{service['config_type']}-"
+    def __unit_name(self, instance_name, service, unit_type="service"):
+        unit_name = f"{service['config_type']}"
         if self.__use_instance:
-            unit_name += f"{instance_name}-"
-        unit_name += f"{service['service_name']}.service"
+            unit_name += f"-{instance_name}"
+        if unit_type == "service":
+            unit_name += f"-{service['service_name']}"
+        unit_name += f".{unit_type}"
         return unit_name
 
     def __update_service(self, config, service, instance_name):
@@ -123,12 +139,19 @@ class SystemdProcessManager(BaseProcessManager):
         elif not virtualenv_dir:
             exception("The `virtualenv` Gravity config option must be set when using the systemd process manager")
 
+        if self.__use_instance:
+            description = f"{config['config_type'].capitalize()} {instance_name} {program_name}"
+        else:
+            description = f"{config['config_type'].capitalize()} {program_name}"
+
         # systemd-specific format vars
         systemd_format_vars = {
             "virtualenv_bin": f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}' if virtualenv_dir else "",
             "systemd_user_group": "",
             "systemd_exec_reload": "",
             "systemd_memory_limit": "",
+            "systemd_description": description,
+            "systemd_target": self.__unit_name(instance_name, config, unit_type="target"),
         }
         if not self.user_mode:
             systemd_format_vars["systemd_user_group"] = f"User={attribs['galaxy_user']}"
@@ -157,7 +180,7 @@ class SystemdProcessManager(BaseProcessManager):
 
     def follow(self, configs=None, service_names=None, quiet=False):
         """ """
-        unit_names = self.__unit_names(configs, service_names)
+        unit_names = self.__unit_names(configs, service_names, use_target=False)
         u_args = [i for sl in list(zip(["-u"] * len(unit_names), unit_names)) for i in sl]
         self.__journalctl("-f", *u_args)
 
@@ -172,8 +195,26 @@ class SystemdProcessManager(BaseProcessManager):
             if exc.errno != errno.EEXIST:
                 raise
 
+        service_units = []
         for service in config["services"]:
-            intended_configs.add(self.__update_service(config, service, instance_name))
+            conf = self.__update_service(config, service, instance_name)
+            intended_configs.add(conf)
+            service_units.append(os.path.basename(conf))
+
+        # create systemd target
+        target_unit_name = self.__unit_name(instance_name, config, unit_type="target")
+        target_conf = os.path.join(self.__systemd_unit_dir, target_unit_name)
+        format_vars = {
+            "systemd_description": config["config_type"].capitalize(),
+            "systemd_target_wants": " ".join(service_units),
+        }
+        if self.__use_instance:
+            format_vars["systemd_description"] += f" {instance_name}"
+        contents = SYSTEMD_TARGET_TEMPLATE.format(**format_vars)
+        updated = self._update_file(target_conf, contents, instance_name, "systemd target unit")
+        intended_configs.add(target_conf)
+        if updated:
+            self.__systemctl("enable", target_unit_conf)
 
         return intended_configs
 
@@ -190,22 +231,26 @@ class SystemdProcessManager(BaseProcessManager):
 
         # FIXME: should use config_type, but that's per-service
         _present_configs = filter(
-            lambda f: f.startswith("galaxy-") and f.endswith(".service"),
+            lambda f: f.startswith("galaxy-") and (f.endswith(".service") or f.endswith(".target")),
             os.listdir(self.__systemd_unit_dir))
         present_configs = set([os.path.join(self.__systemd_unit_dir, f) for f in _present_configs])
 
         for file in (present_configs - intended_configs):
             unit_name = os.path.basename(file)
             self.__systemctl("disable", "--now", unit_name)
-            info("Removing service config %s", file)
+            info("Removing systemd config %s", file)
             os.unlink(file)
             self._service_changes = True
 
-    def __unit_names(self, configs, service_names):
+    def __unit_names(self, configs, service_names, use_target=True, include_services=False):
         unit_names = []
         for config in configs:
             services = config.services
-            if service_names:
+            if not service_names and use_target:
+                unit_names.append(self.__unit_name(config.instance_name, config, unit_type="target"))
+                if not include_services:
+                    services = []
+            elif service_names:
                 services = [s for s in config.services if s["service_name"] in service_names]
             unit_names.extend([self.__unit_name(config.instance_name, s) for s in services])
         return unit_names
@@ -213,7 +258,7 @@ class SystemdProcessManager(BaseProcessManager):
     def start(self, configs=None, service_names=None):
         """ """
         unit_names = self.__unit_names(configs, service_names)
-        self.__systemctl("enable", "--now", *unit_names)
+        self.__systemctl("start", *unit_names)
 
     def stop(self, configs=None, service_names=None):
         """ """
@@ -237,7 +282,7 @@ class SystemdProcessManager(BaseProcessManager):
 
     def status(self, configs=None, service_names=None):
         """ """
-        unit_names = self.__unit_names(configs, service_names)
+        unit_names = self.__unit_names(configs, service_names, include_services=True)
         self.__systemctl("status", "--lines=0", *unit_names, ignore_rc=(3,))
 
     def update(self, configs=None, force=False, **kwargs):
