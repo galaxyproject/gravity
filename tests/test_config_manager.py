@@ -7,7 +7,8 @@ from gravity.state import GracefulMethod
 
 
 def test_register_defaults(galaxy_yml, galaxy_root_dir, state_dir, default_config_manager):
-    default_config_manager.add([str(galaxy_yml)])
+    if default_config_manager.instance_count == 0:
+        default_config_manager.add([str(galaxy_yml)])
     assert str(galaxy_yml) in default_config_manager.state['config_files']
     config = default_config_manager.get_registered_config(str(galaxy_yml))
     default_settings = Settings()
@@ -28,6 +29,13 @@ def test_register_defaults(galaxy_yml, galaxy_root_dir, state_dir, default_confi
     assert attributes["tusd"] == default_settings.tusd.dict()
 
 
+def test_stateless_register_defaults(galaxy_yml, galaxy_root_dir):
+    with config_manager.config_manager(config_file=str(galaxy_yml)) as cm:
+        state_dir = Path(galaxy_root_dir) / 'database' / 'gravity'
+        test_register_defaults(galaxy_yml, galaxy_root_dir, state_dir, cm)
+        assert not state_dir.exists()
+
+
 def test_preload_default(galaxy_yml, default_config_manager):
     app_server = 'unicornherder'
     galaxy_yml.write(json.dumps({
@@ -42,31 +50,26 @@ def test_preload_default(galaxy_yml, default_config_manager):
     assert gunicorn_attributes['preload'] is False
 
 
-def test_register_non_default(galaxy_yml, default_config_manager):
-    new_bind = 'localhost:8081'
-    environment = {'FOO': 'foo'}
-    concurrency = 4
-    galaxy_yml.write(json.dumps({
-        'galaxy': None,
-        'gravity': {
-            'gunicorn': {
-                'bind': new_bind,
-                'environment': environment
-            },
-            'celery': {
-                'concurrency': concurrency
-            }
-        }
-    }))
-    default_config_manager.add([str(galaxy_yml)])
+def test_register_non_default(galaxy_yml, default_config_manager, non_default_config):
+    if default_config_manager.instance_count == 0:
+        galaxy_yml.write(json.dumps(non_default_config))
+        default_config_manager.add([str(galaxy_yml)])
     config = default_config_manager.get_registered_config(str(galaxy_yml))
     gunicorn_attributes = config['attribs']['gunicorn']
-    assert gunicorn_attributes['bind'] == new_bind
-    assert gunicorn_attributes['environment'] == environment
+    assert gunicorn_attributes['bind'] == non_default_config['gravity']['gunicorn']['bind']
+    assert gunicorn_attributes['environment'] == non_default_config['gravity']['gunicorn']['environment']
     default_settings = Settings()
     assert gunicorn_attributes['workers'] == default_settings.gunicorn.workers
     celery_attributes = config['attribs']['celery']
-    assert celery_attributes['concurrency'] == concurrency
+    assert celery_attributes['concurrency'] == non_default_config['gravity']['celery']['concurrency']
+
+
+def test_stateless_register_non_default(galaxy_yml, galaxy_root_dir, non_default_config):
+    galaxy_yml.write(json.dumps(non_default_config))
+    with config_manager.config_manager(config_file=str(galaxy_yml)) as cm:
+        state_dir = Path(galaxy_root_dir) / 'database' / 'gravity'
+        test_register_non_default(galaxy_yml, cm, non_default_config)
+        assert not state_dir.exists()
 
 
 def test_deregister(galaxy_yml, default_config_manager):
@@ -97,6 +100,20 @@ def test_auto_register(galaxy_yml, default_config_manager, monkeypatch):
     assert default_config_manager.is_registered(str(galaxy_yml))
 
 
+def test_stateless_auto_register(galaxy_root_dir, monkeypatch):
+    monkeypatch.chdir(galaxy_root_dir)
+    galaxy_yml_sample = galaxy_root_dir / "config" / "galaxy.yml.sample"
+    with config_manager.config_manager() as cm:
+        assert cm.instance_count == 1
+        assert cm.is_registered(galaxy_yml_sample)
+    galaxy_yml = galaxy_root_dir / "config" / "galaxy.yml"
+    galaxy_yml_sample.copy(galaxy_yml)
+    with config_manager.config_manager() as cm:
+        assert cm.instance_count == 1
+        assert cm.is_registered(galaxy_yml)
+    galaxy_yml.remove()
+
+
 def test_register_sample_update_to_non_sample(galaxy_root_dir, state_dir, default_config_manager):
     galaxy_yml_sample = galaxy_root_dir / "config" / "galaxy.yml.sample"
     default_config_manager.add([str(galaxy_yml_sample)])
@@ -104,6 +121,7 @@ def test_register_sample_update_to_non_sample(galaxy_root_dir, state_dir, defaul
     galaxy_yml_sample.copy(galaxy_yml)
     default_config_manager.instance_count == 1
     assert default_config_manager.get_registered_config(str(galaxy_yml))
+    galaxy_yml.remove()
 
 
 def test_convert_0_x_config(state_dir, galaxy_yml, configstate_yaml_0_x):

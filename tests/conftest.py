@@ -189,6 +189,22 @@ def startup_config(galaxy_virtualenv, free_port):
     }
 
 
+@pytest.fixture()
+def non_default_config():
+    return {
+        'galaxy': None,
+        'gravity': {
+            'gunicorn': {
+                'bind': 'localhost:8081',
+                'environment': {'FOO': 'foo'}
+            },
+            'celery': {
+                'concurrency': 4
+            }
+        }
+    }
+
+
 @pytest.fixture
 def gxit_config(free_port, another_free_port, process_manager_name):
     config_yaml = GXIT_CONFIG.format(

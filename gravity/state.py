@@ -1,6 +1,7 @@
 """ Classes to represent and manipulate gravity's stored configuration and
 state data.
 """
+import copy
 import enum
 import errno
 import os
@@ -259,16 +260,12 @@ class GravityState(AttributeDict):
 
 
 class GravityStateDict(GravityState):
-    contents = None
-
-    @classmethod
-    def open(cls, name):
-        if GravityStateDict.contents is None:
-            GravityStateDict.contents = cls(**GravityState.init_contents)
-        return GravityStateDict.contents
+    # this seemingly pointless class exists to preserve interface compatibility with the ConfigManager
+    def open(self, name):
+        return self
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, **copy.deepcopy(GravityState.init_contents))
 
     def __enter__(self):
         return self

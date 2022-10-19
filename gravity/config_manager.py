@@ -47,12 +47,12 @@ class ConfigManager(object):
 
         if config_file is not None:
             # if a config file is passed, we can operate in stateless mode
-            self.__state_class = GravityStateDict
+            self.__state = GravityStateDict()
             self.add([config_file], quiet=True)
             debug(f"Gravity config file: {config_file}")
         elif state_dir is not None:
             # otherwise we need to keep track of what config files are known
-            self.__state_class = GravityStateFile
+            self.__state = GravityStateFile
             self.config_state_path = join(self.state_dir, "configstate.yaml")
             debug(f"Gravity state dir: {self.state_dir}")
             try:
@@ -63,7 +63,7 @@ class ConfigManager(object):
             self.__convert_config()
         else:
             # or attempt to just run statelessly from galaxy source
-            self.__state_class = GravityStateDict
+            self.__state = GravityStateDict()
             self.auto_register(quiet=True)
             if self.instance_count == 0:
                 exception(
@@ -71,7 +71,7 @@ class ConfigManager(object):
                     " --state-dir ($GRAVITY_STATE_DIR) and register one with `galaxyctl register`")
 
     def __copy_config(self, old_path):
-        with self.__state_class.open(old_path) as state:
+        with self.__state.open(old_path) as state:
             state.set_name(self.config_state_path)
         # copies on __exit__
 
@@ -106,10 +106,6 @@ class ConfigManager(object):
     @property
     def is_root(self):
         return os.geteuid() == 0
-
-    @property
-    def is_stateless(self):
-        return self.__state_class is GravityStateDict
 
     def get_config(self, conf, defaults=None):
         if conf in self.__configs:
@@ -343,7 +339,7 @@ class ConfigManager(object):
     @property
     def state(self):
         """Public property to access persisted config state"""
-        return self.__state_class.open(self.config_state_path)
+        return self.__state.open(self.config_state_path)
 
     @property
     def instance_count(self):
