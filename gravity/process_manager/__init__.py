@@ -199,10 +199,6 @@ class BaseProcessManager(BaseProcessExecutionEnvironment, metaclass=ABCMeta):
         """ """
 
     @abstractmethod
-    def reload(self, configs=None, service_names=None):
-        """ """
-
-    @abstractmethod
     def graceful(self, configs=None, service_names=None):
         """ """
 
@@ -322,10 +318,6 @@ class ProcessManagerRouter:
 
     @route
     def restart(self, instance_names=None):
-        """ """
-
-    @route
-    def reload(self, instance_names=None):
         """ """
 
     @route

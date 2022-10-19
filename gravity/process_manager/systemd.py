@@ -6,7 +6,7 @@ import shlex
 import subprocess
 from glob import glob
 
-from gravity.io import debug, exception, info, warn
+from gravity.io import debug, error, exception, info, warn
 from gravity.process_manager import BaseProcessManager
 from gravity.settings import ProcessManager
 from gravity.state import GracefulMethod
@@ -174,7 +174,7 @@ class SystemdProcessManager(BaseProcessManager):
         conf = os.path.join(self.__systemd_unit_dir, unit_name)
         template = SYSTEMD_SERVICE_TEMPLATE
         contents = template.format(**format_vars)
-        self._update_file(conf, contents, unit_name, "service")
+        self._update_file(conf, contents, unit_name, "systemd unit")
 
         return conf
 
@@ -211,10 +211,10 @@ class SystemdProcessManager(BaseProcessManager):
         if self.__use_instance:
             format_vars["systemd_description"] += f" {instance_name}"
         contents = SYSTEMD_TARGET_TEMPLATE.format(**format_vars)
-        updated = self._update_file(target_conf, contents, instance_name, "systemd target unit")
+        updated = self._update_file(target_conf, contents, target_unit_name, "systemd unit")
         intended_configs.add(target_conf)
         if updated:
-            self.__systemctl("enable", target_unit_conf)
+            self.__systemctl("enable", target_conf)
 
         return intended_configs
 
@@ -270,31 +270,35 @@ class SystemdProcessManager(BaseProcessManager):
         unit_names = self.__unit_names(configs, service_names)
         self.__systemctl("restart", *unit_names)
 
-    def reload(self, configs=None, service_names=None):
-        """ """
-        unit_names = self.__unit_names(configs, service_names)
-        self.__systemctl("reload", *unit_names)
-
     def graceful(self, configs=None, service_names=None):
         """ """
-        unit_names = self.__unit_names(configs, service_names)
-        self.__systemctl("reload", *unit_names)
+        # reload-or-restart on a target does a restart on its services, so we use the services directly
+        unit_names = self.__unit_names(configs, service_names, use_target=False)
+        self.__systemctl("reload-or-restart", *unit_names)
 
     def status(self, configs=None, service_names=None):
         """ """
         unit_names = self.__unit_names(configs, service_names, include_services=True)
-        self.__systemctl("status", "--lines=0", *unit_names, ignore_rc=(3,))
+        try:
+            self.__systemctl("status", "--lines=0", *unit_names, ignore_rc=(3,))
+        except subprocess.CalledProcessError as exc:
+            if exc.returncode == 4:
+                error("Some expected systemd units were not found, did you forget to run `galaxyctl update`?")
+            else:
+                raise
 
     def update(self, configs=None, force=False, **kwargs):
         """ """
         if force:
             for config in configs:
-                service_units = glob(os.path.join(self.__systemd_unit_dir, f"{config.config_type}-*.service"))
-                # TODO: would need to add targets here assuming we add one
-                if service_units:
+                units = (glob(os.path.join(self.__systemd_unit_dir, f"{config.config_type}-*.service")) +
+                         glob(os.path.join(self.__systemd_unit_dir, f"{config.config_type}-*.target")) +
+                         glob(os.path.join(self.__systemd_unit_dir, f"{config.config_type}.target")))
+                if units:
                     newline = '\n'
-                    info(f"Removing systemd units due to --force option:{newline}{newline.join(service_units)}")
-                    list(map(os.unlink, service_units))
+                    info(f"Removing systemd units due to --force option:{newline}{newline.join(units)}")
+                    [self.__systemctl("disable", os.path.basename(u)) for u in units]
+                    list(map(os.unlink, units))
                     self._service_changes = True
         self._process_configs(configs)
         if self._service_changes:
@@ -305,11 +309,10 @@ class SystemdProcessManager(BaseProcessManager):
     def shutdown(self):
         """ """
         if self.__use_instance:
-            # we could use galaxy-*.service but this only shuts down the instances managed by *this* gravity
             configs = self.config_manager.get_registered_configs(process_manager=self.name)
-            self.__systemctl("stop", *[f"galaxy-{c.instance_name}-*.service" for c in configs])
+            self.__systemctl("stop", *[f"galaxy-{c.instance_name}.target" for c in configs])
         else:
-            self.__systemctl("stop", "galaxy-*.service")
+            self.__systemctl("stop", "galaxy.target")
 
     def pm(self, *args):
         """ """

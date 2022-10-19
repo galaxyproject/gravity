@@ -240,7 +240,7 @@ class SupervisorProcessManager(BaseProcessManager):
                 target = f"{config.instance_name}:*" if self.use_group else "all"
                 self.supervisorctl(op, target)
 
-    def __reload_graceful(self, op, configs, service_names):
+    def __reload_graceful(self, configs, service_names):
         self.update(configs=configs)
         for config in configs:
             if service_names:
@@ -272,11 +272,8 @@ class SupervisorProcessManager(BaseProcessManager):
     def restart(self, configs=None, service_names=None):
         self.__start_stop("restart", configs, service_names)
 
-    def reload(self, configs=None, service_names=None):
-        self.__reload_graceful("reload", configs, service_names)
-
     def graceful(self, configs=None, service_names=None):
-        self.__reload_graceful("graceful", configs, service_names)
+        self.__reload_graceful(configs, service_names)
 
     def status(self, configs=None, service_names=None):
         # TODO: create our own formatted output
