@@ -15,7 +15,7 @@ from gravity.state import CELERY_BEAT_DB_FILENAME
 STARTUP_TIMEOUT = 30
 CELERY_BEAT_TIMEOUT = 10
 # celery.beat.PersistentScheduler uses shelve, which can append a suffix based on which db backend is used
-CELERY_BEAT_DB_FILENAMES = map(lambda ext: CELERY_BEAT_DB_FILENAME + ext, ('', '.db', '.dat', '.bak', '.dir'))
+CELERY_BEAT_DB_FILENAMES = list(map(lambda ext: CELERY_BEAT_DB_FILENAME + ext, ('', '.db', '.dat', '.bak', '.dir')))
 
 
 def test_cmd_register(state_dir, galaxy_yml):
@@ -84,11 +84,32 @@ def test_cmd_start(state_dir, galaxy_yml, startup_config, free_port):
     assert result.exit_code == 0, result.output
     start_instance(state_dir, free_port)
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'status'])
-    celery_beat_db_paths = map(lambda f: state_dir / f, CELERY_BEAT_DB_FILENAMES)
+    celery_beat_db_paths = list(map(lambda f: state_dir / f, CELERY_BEAT_DB_FILENAMES))
     celery_beat_db_exists = wait_for_any_path(celery_beat_db_paths, CELERY_BEAT_TIMEOUT)
     assert celery_beat_db_exists is True, "celery-beat failed to write db. State dir contents:\n" \
         f"{os.listdir(state_dir)}"
     result = runner.invoke(galaxyctl, ['--state-dir', state_dir, 'stop'])
+    assert result.exit_code == 0, result.output
+    assert "All processes stopped, supervisord will exit" in result.output
+
+
+def test_cmd_start_stateless(stateless_state_dir, galaxy_yml, startup_config, free_port):
+    galaxy_yml.write(json.dumps(startup_config))
+    runner = CliRunner()
+    result = runner.invoke(galaxyctl, ['--config-file', str(galaxy_yml), 'update'])
+    assert result.exit_code == 0, result.output
+    assert not (stateless_state_dir / "configstate.yaml").exists()
+    result = runner.invoke(galaxyctl, ['--config-file', str(galaxy_yml), 'start'])
+    assert re.search(r"gunicorn\s*STARTING", result.output)
+    assert result.exit_code == 0, result.output
+    startup_done = wait_for_startup(stateless_state_dir, free_port)
+    assert startup_done is True, f"Startup failed. Application startup logs:\n {startup_done}"
+    result = runner.invoke(galaxyctl, ['--config-file', str(galaxy_yml), 'status'])
+    celery_beat_db_paths = list(map(lambda f: stateless_state_dir / f, CELERY_BEAT_DB_FILENAMES))
+    celery_beat_db_exists = wait_for_any_path(celery_beat_db_paths, CELERY_BEAT_TIMEOUT)
+    assert celery_beat_db_exists is True, "celery-beat failed to write db. State dir contents:\n" \
+        f"{os.listdir(stateless_state_dir)}"
+    result = runner.invoke(galaxyctl, ['--config-file', str(galaxy_yml), 'stop'])
     assert result.exit_code == 0, result.output
     assert "All processes stopped, supervisord will exit" in result.output
 

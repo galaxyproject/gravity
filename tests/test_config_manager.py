@@ -29,11 +29,10 @@ def test_register_defaults(galaxy_yml, galaxy_root_dir, state_dir, default_confi
     assert attributes["tusd"] == default_settings.tusd.dict()
 
 
-def test_stateless_register_defaults(galaxy_yml, galaxy_root_dir):
+def test_stateless_register_defaults(galaxy_yml, galaxy_root_dir, stateless_state_dir):
     with config_manager.config_manager(config_file=str(galaxy_yml)) as cm:
-        state_dir = Path(galaxy_root_dir) / 'database' / 'gravity'
-        test_register_defaults(galaxy_yml, galaxy_root_dir, state_dir, cm)
-        assert not state_dir.exists()
+        test_register_defaults(galaxy_yml, galaxy_root_dir, stateless_state_dir, cm)
+        assert not stateless_state_dir.exists()
 
 
 def test_preload_default(galaxy_yml, default_config_manager):
@@ -64,12 +63,23 @@ def test_register_non_default(galaxy_yml, default_config_manager, non_default_co
     assert celery_attributes['concurrency'] == non_default_config['gravity']['celery']['concurrency']
 
 
-def test_stateless_register_non_default(galaxy_yml, galaxy_root_dir, non_default_config):
+def test_stateless_register_non_default(galaxy_yml, galaxy_root_dir, non_default_config, stateless_state_dir):
     galaxy_yml.write(json.dumps(non_default_config))
     with config_manager.config_manager(config_file=str(galaxy_yml)) as cm:
-        state_dir = Path(galaxy_root_dir) / 'database' / 'gravity'
         test_register_non_default(galaxy_yml, cm, non_default_config)
-        assert not state_dir.exists()
+        assert not stateless_state_dir.exists()
+
+
+def test_split_config(galaxy_yml, galaxy_root_dir, default_config_manager, non_default_config):
+    default_config_file = str(galaxy_root_dir / "config" / "galaxy.yml.sample")
+    non_default_config['gravity']['galaxy_config_file'] = default_config_file
+    del non_default_config['galaxy']
+    galaxy_yml.write(json.dumps(non_default_config))
+    default_config_manager.add([str(galaxy_yml)])
+    test_register_non_default(galaxy_yml, default_config_manager, non_default_config)
+    config = default_config_manager.get_registered_config(str(galaxy_yml))
+    assert config.__file__ == str(galaxy_yml)
+    assert config.galaxy_config_file == default_config_file
 
 
 def test_deregister(galaxy_yml, default_config_manager):

@@ -135,6 +135,22 @@ def state_dir():
         shutil.rmtree(directory)
 
 
+@pytest.fixture()
+def stateless_state_dir(galaxy_root_dir):
+    directory = os.path.join(galaxy_root_dir, 'database', 'gravity')
+    try:
+        yield Path(directory)
+    finally:
+        try:
+            os.kill(int(open(os.path.join(directory, 'supervisor', 'supervisord.pid')).read()), signal.SIGTERM)
+        except Exception:
+            pass
+        try:
+            shutil.rmtree(directory)
+        except FileNotFoundError:
+            pass
+
+
 @pytest.fixture
 def default_config_manager(state_dir):
     with config_manager.config_manager(state_dir=state_dir) as cm:
