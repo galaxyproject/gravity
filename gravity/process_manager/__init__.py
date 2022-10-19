@@ -121,9 +121,14 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
                 path = environment.get("PATH", self._service_default_path())
                 environment["PATH"] = ":".join([virtualenv_bin, path])
         else:
-            config_file = shlex.quote(config.__file__)
             # setting the config file ensures that there is only one instance and the configstate is ignored
-            format_vars["command"] = f"galaxyctl --config-file {config_file} exec {program_name}"
+            config_file = shlex.quote(config.__file__)
+            # state_dir is passed so it will be used by `galaxyctl exec` in command templates if we are not stateless,
+            # but not passed if unset so that we don't have to rewrite configs if Galaxy's data_dir changes
+            state_dir_opt = ""
+            if self.config_manager.state_dir:
+                state_dir_opt = f" --state-dir {shlex.quote(str(self.config_manager.state_dir))}"
+            format_vars["command"] = f"galaxyctl --config-file {config_file}{state_dir_opt} exec {program_name}"
             environment = {}
         format_vars["environment"] = self._service_environment_formatter(environment, format_vars)
 

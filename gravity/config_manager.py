@@ -42,7 +42,7 @@ class ConfigManager(object):
 
     def __init__(self, state_dir=None, config_file=None):
         self.__configs = {}
-        self.state_dir = None
+        self.state_dir = state_dir
         self.config_state_path = None
 
         if config_file is not None:
@@ -53,7 +53,6 @@ class ConfigManager(object):
         elif state_dir is not None:
             # otherwise we need to keep track of what config files are known
             self.__state_class = GravityStateFile
-            self.state_dir = state_dir
             self.config_state_path = join(self.state_dir, "configstate.yaml")
             debug(f"Gravity state dir: {self.state_dir}")
             try:
@@ -189,7 +188,7 @@ class ConfigManager(object):
             else:
                 exception(f"Cannot locate Galaxy root directory: set $GALAXY_ROOT_DIR or `root' in the `galaxy' section of {conf}")
 
-        # FIXME: document this defaults change
+        # FIXME: document that the default state_dir is data_dir/gravity
         if self.state_dir is None:
             data_dir = app_config.get("data_dir", "database")
             if not isabs(data_dir):
