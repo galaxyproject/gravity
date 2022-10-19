@@ -222,7 +222,10 @@ class ConfigManager(object):
                 ))
 
     def create_gxit_services(self, gravity_config: Settings, app_config, config):
-        if app_config.get("interactivetools_enable") and gravity_config.gx_it_proxy.enable:
+        interactivetools_enable = app_config.get("interactivetools_enable")
+        if gravity_config.gx_it_proxy.enable and not interactivetools_enable:
+            exception("To run the gx-it-proxy server you need to set interactivetools_enable in the galaxy section of galaxy.yml")
+        if gravity_config.gx_it_proxy.enable:
             # TODO: resolve against data_dir, or bring in galaxy-config ?
             # CWD in supervisor template is galaxy_root, so this should work for simple cases as is
             gxit_config = gravity_config.gx_it_proxy
