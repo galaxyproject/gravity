@@ -10,6 +10,7 @@ coverage.xml
 /*.egg-info/
 *.egg
 tests/galaxy.git
+tests/galaxy_venv
 docs/_build
 
 # dev scripts
