@@ -494,6 +494,55 @@ unset are shown):
       # names.
       # environment: {}
 
+    # Configuration for Galaxy Reports.
+    reports:
+
+      # Enable Galaxy Reports server.
+      # enable: false
+
+      # Path to reports.yml, relative to galaxy.yml if not absolute
+      # config_file: reports.yml
+
+      # The socket to bind. A string of the form: ``HOST``, ``HOST:PORT``, ``unix:PATH``, ``fd://FD``. An IP is a valid HOST.
+      # bind: localhost:9001
+
+      # Controls the number of Galaxy Reports application processes Gunicorn will spawn.
+      # It is not generally necessary to increase this for the low-traffic Reports server.
+      # workers: 1
+
+      # Gunicorn workers silent for more than this many seconds are killed and restarted.
+      # Value is a positive number or 0. Setting it to 0 has the effect of infinite timeouts by disabling timeouts for all workers entirely.
+      # timeout: 300
+
+      # URL prefix to serve from.
+      # The corresponding nginx configuration is (replace <url_prefix> and <bind> with the values from these options):
+      #
+      # location /<url_prefix>/ {
+      #     proxy_pass http://<bind>/;
+      # }
+      #
+      # If <bind> is a unix socket, you will need a ``:`` after the socket path but before the trailing slash like so:
+      #     proxy_pass http://unix:/run/reports.sock:/;
+      # url_prefix:
+
+      # Extra arguments to pass to Gunicorn command line.
+      # extra_args:
+
+      # Value of supervisor startsecs, systemd TimeoutStartSec
+      # start_timeout: 10
+
+      # Value of supervisor stopwaitsecs, systemd TimeoutStopSec
+      # stop_timeout: 10
+
+      # Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
+      # ``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
+      # ``supervisor``.
+      # memory_limit:
+
+      # Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
+      # names.
+      # environment: {}
+
     # Configure dynamic handlers in this section.
     # See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defined-handlers for details.
     # handlers: {}

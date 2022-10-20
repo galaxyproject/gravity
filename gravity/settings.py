@@ -200,7 +200,7 @@ location /<url_prefix>/ {
     proxy_pass http://<bind>/;
 }
 
-If <bind> is a unix socket, you will need a `:` after the socket path but before the trailing slash like so:
+If <bind> is a unix socket, you will need a ``:`` after the socket path but before the trailing slash like so:
     proxy_pass http://unix:/run/reports.sock:/;
 """)
     extra_args: str = Field(default="", description="Extra arguments to pass to Gunicorn command line.")
