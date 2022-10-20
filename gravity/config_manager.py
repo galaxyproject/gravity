@@ -27,6 +27,7 @@ log = logging.getLogger(__name__)
 
 DEFAULT_JOB_CONFIG_FILE = "config/job_conf.xml"
 DEFAULT_STATE_DIR = join("~", ".config", "galaxy-gravity")
+DEFAULT_ROOT_STATE_DIR = "/var/lib/gravity"
 if "XDG_CONFIG_HOME" in os.environ:
     DEFAULT_STATE_DIR = join(os.environ["XDG_CONFIG_HOME"], "galaxy-gravity")
 
@@ -42,7 +43,10 @@ class ConfigManager(object):
 
     def __init__(self, state_dir=None, python_exe=None):
         if state_dir is None:
-            state_dir = DEFAULT_STATE_DIR
+            if self.is_root:
+                state_dir = DEFAULT_ROOT_STATE_DIR
+            else:
+                state_dir = DEFAULT_STATE_DIR
         self.state_dir = abspath(expanduser(state_dir))
         debug(f"Gravity state dir: {self.state_dir}")
         self.__configs = {}
@@ -88,6 +92,10 @@ class ConfigManager(object):
                     del config[key]
             state.config_files[config_file] = config
 
+    @property
+    def is_root(self):
+        return os.geteuid() == 0
+
     def get_config(self, conf, defaults=None):
         if conf in self.__configs:
             return self.__configs[conf]
@@ -111,9 +119,13 @@ class ConfigManager(object):
         config.attribs = {}
         config.services = []
         config.__file__ = conf
+        # FIXME: I don't think we use the persisted value of instance_name anymore, this comes straight from the Gravity
+        # config. We might not need it at all, but we also need to validate that it doesn't collide with other
+        # registered instances on every load, in case the admin has changed the instance name since last run.
         config.instance_name = gravity_config.instance_name
         config.config_type = server_section
         config.process_manager = gravity_config.process_manager
+        config.service_command_style = gravity_config.service_command_style
         # FIXME: should this be attribs?
         config.attribs["galaxy_infrastructure_url"] = app_config.get("galaxy_infrastructure_url", "").rstrip("/")
         if gravity_config.tusd.enable and not config.attribs["galaxy_infrastructure_url"]:
@@ -125,6 +137,9 @@ class ConfigManager(object):
         config.attribs["tusd"] = gravity_config.tusd.dict()
         config.attribs["celery"] = gravity_config.celery.dict()
         config.attribs["handlers"] = gravity_config.handlers
+        config.attribs["galaxy_user"] = gravity_config.galaxy_user
+        config.attribs["galaxy_group"] = gravity_config.galaxy_group
+        config.attribs["memory_limit"] = gravity_config.memory_limit
         # Store gravity version, in case we need to convert old setting
         webapp_service_names = []
 
@@ -168,7 +183,10 @@ class ConfigManager(object):
                 config.services.append(service_for_service_type("standalone")(
                     config_type=config.config_type,
                     service_name=handler_settings["service_name"],
-                    environment=handler_settings.get("environment")
+                    environment=handler_settings.get("environment"),
+                    memory_limit=handler_settings.get("memory_limit"),
+                    start_timeout=handler_settings.get("start_timeout"),
+                    stop_timeout=handler_settings.get("stop_timeout")
                 ))
 
         # FIXME: This should imply explicit configuration of the handler assignment method. If not explicitly set, the
@@ -181,20 +199,33 @@ class ConfigManager(object):
         return config
 
     def create_handler_services(self, gravity_config: Settings, config):
+        # we pull push environment from settings to services but the rest of the services pull their env options from
+        # settings directly. this can be a bit confusing but is probably ok since there are 3 ways to configure
+        # handlers, and gravity is only 1 of them.
         expanded_handlers = self.expand_handlers(gravity_config, config)
         for service_name, handler_settings in expanded_handlers.items():
             pools = handler_settings.get('pools')
             environment = handler_settings.get("environment")
+            # TODO: add these to Galaxy docs
+            start_timeout = handler_settings.get("start_timeout")
+            stop_timeout = handler_settings.get("stop_timeout")
+            memory_limit = handler_settings.get("memory_limit")
             config.services.append(
                 service_for_service_type("standalone")(
                     config_type=config.config_type,
                     service_name=service_name,
                     server_pools=pools,
-                    environment=environment
+                    environment=environment,
+                    start_timeout=start_timeout,
+                    stop_timeout=stop_timeout,
+                    memory_limit=memory_limit
                 ))
 
     def create_gxit_services(self, gravity_config: Settings, app_config, config):
-        if app_config.get("interactivetools_enable") and gravity_config.gx_it_proxy.enable:
+        interactivetools_enable = app_config.get("interactivetools_enable")
+        if gravity_config.gx_it_proxy.enable and not interactivetools_enable:
+            exception("To run the gx-it-proxy server you need to set interactivetools_enable in the galaxy section of galaxy.yml")
+        if gravity_config.gx_it_proxy.enable:
             # TODO: resolve against data_dir, or bring in galaxy-config ?
             # CWD in supervisor template is galaxy_root, so this should work for simple cases as is
             gxit_config = gravity_config.gx_it_proxy
@@ -278,13 +309,20 @@ class ConfigManager(object):
         """Indicate if there is only one configured instance"""
         return self.instance_count == 1
 
-    def get_registered_configs(self, instances=None):
+    def get_registered_configs(self, instances=None, process_manager=None):
         """Return the persisted values of all config files registered with the config manager."""
         rval = []
         config_files = self.state.config_files
         for config_file, config in list(config_files.items()):
+            # if ((instances is not None and config["instance_name"] in instances) or instances is None) and (
+            #     (process_manager is not None and config_pm == process_manager) or process_manager is None
+            # ):
+            # TODO: if we add process_manager to the state, then we can filter for it as above instead of after
+            # get_config as below
             if (instances is not None and config["instance_name"] in instances) or instances is None:
-                rval.append(self.get_config(config_file))
+                config = self.get_config(config_file)
+                if (process_manager is not None and config["process_manager"] == process_manager) or process_manager is None:
+                    rval.append(config)
         return rval
 
     def get_registered_config(self, config_file):
@@ -292,6 +330,13 @@ class ConfigManager(object):
         if config_file in self.state.config_files:
             return self.get_config(config_file)
         return None
+
+    def get_configured_service_names(self):
+        rval = set()
+        for config in self.get_registered_configs():
+            for service in config["services"]:
+                rval.add(service["service_name"])
+        return rval
 
     def get_registered_instance_names(self):
         return [c["instance_name"] for c in self.state.config_files.values()]
@@ -328,6 +373,8 @@ class ConfigManager(object):
                 exception(f"Cannot add {config_file}: File is unknown type")
             if conf["instance_name"] is None:
                 conf["instance_name"] = conf["config_type"] + "-" + hashlib.md5(os.urandom(32)).hexdigest()[:12]
+            if conf["instance_name"] in self.get_registered_instance_names():
+                exception(f"Cannot add {config_file}: instance_name '{conf['instance_name']}' already in use")
             conf_data = {}
             for key in ConfigFile.persist_keys:
                 conf_data[key] = conf[key]

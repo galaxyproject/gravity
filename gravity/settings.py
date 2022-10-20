@@ -1,3 +1,4 @@
+import os
 from enum import Enum
 from typing import (
     Any,
@@ -30,6 +31,11 @@ class LogLevel(str, Enum):
 class ProcessManager(str, Enum):
     supervisor = "supervisor"
     systemd = "systemd"
+
+
+class ServiceCommandStyle(str, Enum):
+    gravity = "gravity"
+    direct = "direct"
 
 
 class AppServer(str, Enum):
@@ -71,6 +77,15 @@ without the Galaxy web process being available.
 You can find a list of available hooks at https://github.com/tus/tusd/blob/master/docs/hooks.md#list-of-available-hooks.
 """)
     extra_args: str = Field(default="", description="Extra arguments to pass to tusd command line.")
+    start_timeout: int = Field(10, description="Value of supervisor startsecs, systemd TimeoutStartSec")
+    stop_timeout: int = Field(10, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
+    memory_limit: Optional[int] = Field(
+        None,
+        description="""
+Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
+``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
+``supervisor``.
+""")
     environment: Dict[str, str] = Field(
         default={},
         description="""
@@ -87,6 +102,15 @@ class CelerySettings(BaseModel):
     queues: str = Field("celery,galaxy.internal,galaxy.external", description="Queues to join")
     pool: Pool = Field(Pool.threads, description="Pool implementation")
     extra_args: str = Field(default="", description="Extra arguments to pass to Celery command line.")
+    start_timeout: int = Field(10, description="Value of supervisor startsecs, systemd TimeoutStartSec")
+    stop_timeout: int = Field(10, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
+    memory_limit: Optional[int] = Field(
+        None,
+        description="""
+Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
+``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
+``supervisor``.
+""")
     environment: Dict[str, str] = Field(
         default={},
         description="""
@@ -128,6 +152,15 @@ If you disable the ``preload`` option workers need to have finished booting with
 Use Gunicorn's --preload option to fork workers after loading the Galaxy Application.
 Consumes less memory when multiple processes are configured. Default is ``false`` if using unicornherder, else ``true``.
 """)
+    start_timeout: int = Field(15, description="Value of supervisor startsecs, systemd TimeoutStartSec")
+    stop_timeout: int = Field(65, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
+    memory_limit: Optional[int] = Field(
+        None,
+        description="""
+Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
+``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
+``supervisor``.
+""")
     environment: Dict[str, str] = Field(
         default={},
         description="""
@@ -164,6 +197,15 @@ This is an advanced option that is only needed when proxying to remote interacti
 Rewrite location blocks with proxy port.
 This is an advanced option that is only needed when proxying to remote interactive tool container that cannot be reached through the local network.
 """)
+    start_timeout: int = Field(10, description="Value of supervisor startsecs, systemd TimeoutStartSec")
+    stop_timeout: int = Field(10, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
+    memory_limit: Optional[int] = Field(
+        None,
+        description="""
+Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
+``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
+``supervisor``.
+""")
     environment: Dict[str, str] = Field(
         default={},
         description="""
@@ -183,6 +225,23 @@ class Settings(BaseSettings):
         description="""
 Process manager to use.
 ``supervisor`` is the default process manager.
+``systemd`` is also supported.
+""")
+
+    service_command_style: ServiceCommandStyle = Field(
+        ServiceCommandStyle.gravity,
+        description="""
+What command to write to the process manager configs
+`gravity` (`galaxyctl exec <service-name>`) is the default
+`direct` (each service's actual command) is also supported.
+""")
+
+    memory_limit: Optional[int] = Field(
+        None,
+        description="""
+Memory limit (in GB), processes exceeding the limit will be killed. Default is no limit. If set, this is default value
+for all services. Setting ``memory_limit`` on an individual service overrides this value. Ignored if ``process_manager``
+is ``supervisor``.
 """)
 
     galaxy_root: Optional[str] = Field(
@@ -190,6 +249,18 @@ Process manager to use.
         description="""
 Specify Galaxy's root directory.
 Gravity will attempt to find the root directory, but you can set the directory explicitly with this option.
+""")
+    galaxy_user: Optional[str] = Field(
+        None,
+        description="""
+User to run Galaxy as, required when using the systemd process manager as root.
+Ignored if ``process_manager`` is ``supervisor`` or user-mode (non-root) ``systemd``.
+""")
+    galaxy_group: Optional[str] = Field(
+        None,
+        description="""
+Group to run Galaxy as, optional when using the systemd process manager as root.
+Ignored if ``process_manager`` is ``supervisor`` or user-mode (non-root) ``systemd``.
 """)
     log_dir: Optional[str] = Field(
         None,
@@ -199,7 +270,8 @@ If not specified defaults to ``<state_dir>/log``.
 """)
     virtualenv: Optional[str] = Field(None, description="""
 Set to Galaxy's virtualenv directory.
-If not specified, Gravity assumes all processes are on PATH.
+If not specified, Gravity assumes all processes are on PATH. This option is required in most circumstances when using
+the ``systemd`` process manager.
 """)
     app_server: AppServer = Field(
         AppServer.gunicorn,
@@ -232,6 +304,17 @@ See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defi
     _normalize_gx_it_proxy = validator("gx_it_proxy", allow_reuse=True, pre=True)(none_to_default)
     _normalize_celery = validator("celery", allow_reuse=True, pre=True)(none_to_default)
     _normalize_tusd = validator("tusd", allow_reuse=True, pre=True)(none_to_default)
+
+    # Require galaxy_user if running as root
+    @validator("galaxy_user")
+    def _user_required_if_root(cls, v, values):
+        if os.geteuid() == 0:
+            is_systemd = values["process_manager"] == ProcessManager.systemd
+            if is_systemd and not v:
+                raise ValueError("galaxy_user is required when running as root")
+            elif not is_systemd:
+                raise ValueError("Gravity cannot be run as root unless using the systemd process manager")
+        return v
 
     class Config:
         env_prefix = "gravity_"

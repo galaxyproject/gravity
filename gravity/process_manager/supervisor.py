@@ -41,10 +41,8 @@ serverurl = unix://{DEFAULT_SUPERVISOR_SOCKET_PATH}
 files = supervisord.conf.d/*.d/*.conf supervisord.conf.d/*.conf
 """
 
-# TODO: with more templating you only need one of these
-SUPERVISORD_SERVICE_TEMPLATES = {}
-SUPERVISORD_SERVICE_TEMPLATES["unicornherder"] = """;
-; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
+SUPERVISORD_SERVICE_TEMPLATE = """;
+; This file is maintained by Gravity - CHANGES WILL BE OVERWRITTEN
 ;
 
 [program:{program_name}]
@@ -53,8 +51,8 @@ directory       = {galaxy_root}
 umask           = {galaxy_umask}
 autostart       = true
 autorestart     = true
-startsecs       = 15
-stopwaitsecs    = 65
+startsecs       = {settings[start_timeout]}
+stopwaitsecs    = {settings[stop_timeout]}
 environment     = {environment}
 numprocs        = 1
 stdout_logfile  = {log_file}
@@ -62,117 +60,6 @@ redirect_stderr = true
 {process_name_opt}
 """
 
-SUPERVISORD_SERVICE_TEMPLATES["gunicorn"] = """;
-; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
-;
-
-[program:{program_name}]
-command         = {command}
-directory       = {galaxy_root}
-umask           = {galaxy_umask}
-autostart       = true
-autorestart     = true
-startsecs       = 15
-stopwaitsecs    = 65
-environment     = {environment}
-numprocs        = 1
-stdout_logfile  = {log_file}
-redirect_stderr = true
-{process_name_opt}
-"""
-
-SUPERVISORD_SERVICE_TEMPLATES["celery"] = """;
-; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
-;
-
-[program:{program_name}]
-command         = {command}
-directory       = {galaxy_root}
-umask           = {galaxy_umask}
-autostart       = true
-autorestart     = true
-startsecs       = 10
-stopwaitsecs    = 10
-environment     = {environment}
-numprocs        = 1
-stdout_logfile  = {log_file}
-redirect_stderr = true
-{process_name_opt}
-"""
-
-SUPERVISORD_SERVICE_TEMPLATES["celery-beat"] = """;
-; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
-;
-
-[program:{program_name}]
-command         = {command}
-directory       = {galaxy_root}
-umask           = {galaxy_umask}
-autostart       = true
-autorestart     = true
-startsecs       = 10
-stopwaitsecs    = 10
-environment     = {environment}
-numprocs        = 1
-stdout_logfile  = {log_file}
-redirect_stderr = true
-{process_name_opt}
-"""
-
-SUPERVISORD_SERVICE_TEMPLATES["tusd"] = """;
-; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
-;
-[program:{program_name}]
-command         = {command}
-directory       = {galaxy_root}
-umask           = {galaxy_umask}
-autostart       = true
-autorestart     = true
-startsecs       = 10
-stopwaitsecs    = 10
-environment     = {environment}
-numprocs        = 1
-stdout_logfile  = {log_file}
-redirect_stderr = true
-{process_name_opt}
-"""
-
-SUPERVISORD_SERVICE_TEMPLATES["gx-it-proxy"] = """;
-; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
-;
-
-[program:{program_name}]
-command         = {command}
-directory       = {galaxy_root}
-umask           = {galaxy_umask}
-autostart       = true
-autorestart     = true
-startsecs       = 10
-stopwaitsecs    = 10
-environment     = {environment}
-numprocs        = 1
-stdout_logfile  = {log_file}
-redirect_stderr = true
-{process_name_opt}
-"""
-
-SUPERVISORD_SERVICE_TEMPLATES["standalone"] = """;
-; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
-;
-
-[program:{program_name}]
-command         = {command}
-directory       = {galaxy_root}
-autostart       = true
-autorestart     = true
-startsecs       = 20
-stopwaitsecs    = 65
-environment     = {environment}
-numprocs        = 1
-stdout_logfile  = {log_file}
-redirect_stderr = true
-{process_name_opt}
-"""
 
 SUPERVISORD_GROUP_TEMPLATE = """;
 ; This file is maintained by Galaxy - CHANGES WILL BE OVERWRITTEN
@@ -248,6 +135,12 @@ class SupervisorProcessManager(BaseProcessManager):
         options.realize(args=["-c", self.supervisord_conf_path])
         return supervisorctl.Controller(options).get_supervisor()
 
+    def _service_default_path(self):
+        return "%(ENV_PATH)s"
+
+    def _service_environment_formatter(self, environment, format_vars):
+        return ",".join("{}={}".format(k, shlex.quote(v.format(**format_vars))) for k, v in environment.items())
+
     def terminate(self):
         if self.foreground:
             # if running in foreground, if terminate is called, then supervisord should've already received a SIGINT
@@ -259,90 +152,26 @@ class SupervisorProcessManager(BaseProcessManager):
         else:
             return service["service_name"]
 
-    def __update_service(self, config_file, config, attribs, service, instance_conf_dir, instance_name):
-        if self.use_group:
-            process_name_opt = f"process_name    = {service['service_name']}"
-        else:
-            process_name_opt = ""
-
+    def __update_service(self, config, service, instance_conf_dir, instance_name):
+        attribs = config.attribs
         program_name = self._service_program_name(instance_name, service)
 
-        # used by the "standalone" service type
-        attach_to_pool_opt = ""
-        server_pools = service.get("server_pools")
-        if server_pools:
-            _attach_to_pool_opt = " ".join(f"--attach-to-pool={server_pool}" for server_pool in server_pools)
-            # Insert a single leading space
-            attach_to_pool_opt = f" {_attach_to_pool_opt}"
-
-        virtualenv_dir = attribs.get("virtualenv")
-        virtualenv_bin = f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}' if virtualenv_dir else ""
-        gunicorn_options = attribs["gunicorn"].copy()
-        gunicorn_options["preload"] = "--preload" if gunicorn_options["preload"] else ""
-
-        format_vars = {
+        # supervisor-specific format vars
+        supervisor_format_vars = {
             "log_dir": attribs["log_dir"],
             "log_file": self._service_log_file(attribs["log_dir"], program_name),
-            "config_type": service["config_type"],
-            "server_name": service["service_name"],
-            "attach_to_pool_opt": attach_to_pool_opt,
-            "gunicorn": gunicorn_options,
-            "celery": attribs["celery"],
-            "galaxy_infrastructure_url": attribs["galaxy_infrastructure_url"],
-            "tusd": attribs["tusd"],
-            "gx_it_proxy": attribs["gx-it-proxy"],
-            "galaxy_umask": service.get("umask", "022"),
-            "program_name": program_name,
-            "process_name_opt": process_name_opt,
-            "galaxy_conf": config_file,
-            "galaxy_root": config["galaxy_root"],
-            "virtualenv_bin": virtualenv_bin,
-            "supervisor_state_dir": self.supervisor_state_dir,
-            "state_dir": self.state_dir,
+            "process_name_opt": f"process_name    = {service['service_name']}" if self.use_group else "",
         }
-        format_vars["command_arguments"] = service.get_command_arguments(attribs, format_vars)
-        format_vars["command"] = service.command_template.format(**format_vars)
+
+        format_vars = self._service_format_vars(config, service, program_name, supervisor_format_vars)
+
         conf = join(instance_conf_dir, f"{service['config_type']}_{service['service_type']}_{service['service_name']}.conf")
 
-        # FIXME: this should be done once, not on every service
-        if not exists(attribs["log_dir"]):
-            os.makedirs(attribs["log_dir"])
-
-        template = SUPERVISORD_SERVICE_TEMPLATES.get(service["service_type"])
-        if not template:
-            raise Exception(f"Unknown service type: {service['service_type']}")
-
-        environment = self._service_environment(service, attribs)
-        if virtualenv_bin and service.add_virtualenv_to_path:
-            path = environment.get("PATH", "%(ENV_PATH)s")
-            environment["PATH"] = ":".join([virtualenv_bin, path])
-        format_vars["environment"] = ",".join("{}={}".format(k, shlex.quote(v.format(**format_vars))) for k, v in environment.items())
-
+        template = SUPERVISORD_SERVICE_TEMPLATE
         contents = template.format(**format_vars)
-        service_name = self._service_program_name(instance_name, service)
-        self._update_file(conf, contents, service_name, "service")
+        self._update_file(conf, contents, program_name, "service")
 
         return conf
-
-    def _file_needs_update(self, path, contents):
-        """Update if contents differ"""
-        if os.path.exists(path):
-            # check first whether there are changes
-            with open(path) as fh:
-                existing_contents = fh.read()
-            if existing_contents == contents:
-                return False
-        return True
-
-    def _update_file(self, path, contents, name, file_type):
-        exists = os.path.exists(path)
-        if (exists and self._file_needs_update(path, contents)) or not exists:
-            verb = "Updating" if exists else "Adding"
-            info("%s %s %s", verb, file_type, name)
-            with open(path, "w") as out:
-                out.write(contents)
-        else:
-            debug("No changes to existing config for %s %s at %s", file_type, name, path)
 
     def _process_config(self, config):
         """Perform necessary supervisor config updates as per current Galaxy/Gravity configuration.
@@ -350,8 +179,6 @@ class SupervisorProcessManager(BaseProcessManager):
         Does not call ``supervisorctl update``.
         """
         instance_name = config["instance_name"]
-        attribs = config["attribs"]
-        config_file = config.__file__
         instance_conf_dir = join(self.supervisord_conf_dir, f"{instance_name}.d")
         intended_configs = set()
         try:
@@ -362,7 +189,7 @@ class SupervisorProcessManager(BaseProcessManager):
 
         programs = []
         for service in config["services"]:
-            intended_configs.add(self.__update_service(config_file, config, attribs, service, instance_conf_dir, instance_name))
+            intended_configs.add(self.__update_service(config, service, instance_conf_dir, instance_name))
             programs.append(f"{instance_name}_{service['config_type']}_{service['service_type']}_{service['service_name']}")
 
         # TODO: test group mode
@@ -380,8 +207,14 @@ class SupervisorProcessManager(BaseProcessManager):
             info("Removing service config %s", file)
             os.unlink(file)
 
-    def _remove_invalid_configs(self):
-        valid_names = [c.instance_name for c in self.config_manager.get_registered_configs()]
+        # ensure log dir exists only if configs exist
+        if intended_configs and not exists(config.attribs["log_dir"]):
+            os.makedirs(config.attribs["log_dir"])
+
+    def _remove_invalid_configs(self, valid_configs=None):
+        if not valid_configs:
+            valid_configs = self.config_manager.get_registered_configs(process_manager=self.name)
+        valid_names = [c.instance_name for c in valid_configs]
         valid_instance_dirs = [f"{name}.d" for name in valid_names]
         valid_group_confs = []
         if self.use_group:
@@ -407,7 +240,7 @@ class SupervisorProcessManager(BaseProcessManager):
                 target = f"{config.instance_name}:*" if self.use_group else "all"
                 self.supervisorctl(op, target)
 
-    def __reload_graceful(self, op, configs, service_names):
+    def __reload_graceful(self, configs, service_names):
         self.update(configs=configs)
         for config in configs:
             if service_names:
@@ -439,11 +272,8 @@ class SupervisorProcessManager(BaseProcessManager):
     def restart(self, configs=None, service_names=None):
         self.__start_stop("restart", configs, service_names)
 
-    def reload(self, configs=None, service_names=None):
-        self.__reload_graceful("reload", configs, service_names)
-
     def graceful(self, configs=None, service_names=None):
-        self.__reload_graceful("graceful", configs, service_names)
+        self.__reload_graceful(configs, service_names)
 
     def status(self, configs=None, service_names=None):
         # TODO: create our own formatted output
@@ -460,17 +290,19 @@ class SupervisorProcessManager(BaseProcessManager):
 
     def update(self, configs=None, force=False, **kwargs):
         """Add newly defined servers, remove any that are no longer present"""
-        if force:
+        if force and os.listdir(self.supervisord_conf_dir):
+            info(f"Removing supervisord conf dir due to --force option: {self.supervisord_conf_dir}")
             shutil.rmtree(self.supervisord_conf_dir)
             os.makedirs(self.supervisord_conf_dir)
+        elif not force:
+            self._remove_invalid_configs(valid_configs=configs)
         for config in configs:
             self._process_config(config)
-        self._remove_invalid_configs()
         # only need to update if supervisord is running, otherwise changes will be picked up at next start
         if self.__supervisord_is_running():
             self.supervisorctl("update")
 
-    def supervisorctl(self, *args, **kwargs):
+    def supervisorctl(self, *args):
         if not self.__supervisord_is_running():
             warn("supervisord is not running")
             return

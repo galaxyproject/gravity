@@ -31,7 +31,9 @@ def cli(ctx, foreground, instance, quiet=False):
             pm.follow(instance_names=instance, quiet=quiet)
         elif pm.config_manager.single_instance:
             config = list(pm.config_manager.get_registered_configs())[0]
-            info(f"Log files are in {config.attribs['log_dir']}")
+            if config.process_manager != "systemd":
+                info(f"Log files are in {config.attribs['log_dir']}")
         else:
             for config in pm.config_manager.get_registered_configs(instances=instance or None):
-                info(f"Log files for {config.instance_name} are in {config.attribs['log_dir']}")
+                if config.process_manager != "systemd":
+                    info(f"Log files for {config.instance_name} are in {config.attribs['log_dir']}")
