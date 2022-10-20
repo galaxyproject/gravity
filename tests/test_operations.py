@@ -33,14 +33,14 @@ def test_cmd_deregister(state_dir, galaxy_yml):
     assert 'Deregistered config:' in result.output
 
 
-def wait_for_startup(state_dir, free_port, prefix="/"):
+def wait_for_startup(state_dir, free_port, prefix="/", path="/api/version", log="gunicorn.log"):
     for _ in range(STARTUP_TIMEOUT * 4):
         try:
-            requests.get(f"http://localhost:{free_port}{prefix}api/version").raise_for_status()
+            requests.get(f"http://localhost:{free_port}{prefix.rstrip('/')}{path}").raise_for_status()
             return True
         except Exception:
             time.sleep(0.25)
-    with open(state_dir / "log" / 'gunicorn.log') as fh:
+    with open(state_dir / "log" / log) as fh:
         startup_logs = fh.read()
     return startup_logs
 
@@ -109,6 +109,21 @@ def test_cmd_start_stateless(stateless_state_dir, galaxy_yml, startup_config, fr
     celery_beat_db_exists = wait_for_any_path(celery_beat_db_paths, CELERY_BEAT_TIMEOUT)
     assert celery_beat_db_exists is True, "celery-beat failed to write db. State dir contents:\n" \
         f"{os.listdir(stateless_state_dir)}"
+    result = runner.invoke(galaxyctl, ['--config-file', str(galaxy_yml), 'stop'])
+    assert result.exit_code == 0, result.output
+    assert "All processes stopped, supervisord will exit" in result.output
+
+
+def test_cmd_start_reports(stateless_state_dir, galaxy_yml, reports_config, free_port):
+    galaxy_yml.write(json.dumps(reports_config))
+    runner = CliRunner()
+    result = runner.invoke(galaxyctl, ['--config-file', str(galaxy_yml), 'update'])
+    assert result.exit_code == 0, result.output
+    result = runner.invoke(galaxyctl, ['--config-file', str(galaxy_yml), 'start'])
+    assert re.search(r"reports\s*STARTING", result.output)
+    assert result.exit_code == 0, result.output
+    startup_done = wait_for_startup(stateless_state_dir, free_port, path="/", log="reports.log")
+    assert startup_done is True, f"Startup failed. Application startup logs:\n {startup_done}"
     result = runner.invoke(galaxyctl, ['--config-file', str(galaxy_yml), 'stop'])
     assert result.exit_code == 0, result.output
     assert "All processes stopped, supervisord will exit" in result.output

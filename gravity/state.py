@@ -187,6 +187,28 @@ class GalaxyTUSDService(Service):
                        " -hooks-enabled-events {settings[hooks_enabled_events]}"
 
 
+class GalaxyReportsService(Service):
+    service_type = "reports"
+    service_name = "reports"
+    graceful_method = GracefulMethod.SIGHUP
+    default_environment = {
+        "PYTHONPATH": "lib",
+        "GALAXY_REPORTS_CONFIG": "{settings[config_file]}",
+    }
+    command_arguments = {
+        "url_prefix": "--env SCRIPT_NAME={settings[url_prefix]}",
+    }
+    command_template = "{virtualenv_bin}gunicorn 'galaxy.webapps.reports.fast_factory:factory()'" \
+                       " --timeout {settings[timeout]}" \
+                       " --pythonpath lib" \
+                       " -k uvicorn.workers.UvicornWorker" \
+                       " -b {settings[bind]}" \
+                       " --workers={settings[workers]}" \
+                       " --config python:galaxy.web_stack.gunicorn_config" \
+                       " {command_arguments[url_prefix]}" \
+                       " {settings[extra_args]}"
+
+
 class GalaxyStandaloneService(Service):
     service_type = "standalone"
     service_name = "standalone"
@@ -343,6 +365,7 @@ SERVICE_CLASS_MAP = {
     "celery-beat": GalaxyCeleryBeatService,
     "gx-it-proxy": GalaxyGxItProxyService,
     "tusd": GalaxyTUSDService,
+    "reports": GalaxyReportsService,
     "standalone": GalaxyStandaloneService,
 }
 

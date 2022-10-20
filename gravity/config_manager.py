@@ -145,7 +145,7 @@ class ConfigManager(object):
                 f"Config file appears to be a {server_section} config but contains no {self.gravity_config_section}"
                 f" section, Gravity defaults will be used: {conf}")
         elif self.gravity_config_section not in config_dict and server_section not in config_dict:
-            exception(f"Config file does not look like valid Galaxy, Reports or Gravity configuration file: {conf}")
+            exception(f"Config file does not look like valid Galaxy or Gravity configuration file: {conf}")
 
         app_config = config_dict.get(server_section) or {}
 
@@ -165,6 +165,7 @@ class ConfigManager(object):
         config.attribs["gunicorn"] = gravity_config.gunicorn.dict()
         config.attribs["tusd"] = gravity_config.tusd.dict()
         config.attribs["celery"] = gravity_config.celery.dict()
+        config.attribs["reports"] = gravity_config.reports.dict()
         config.attribs["handlers"] = gravity_config.handlers
         config.attribs["galaxy_user"] = gravity_config.galaxy_user
         config.attribs["galaxy_group"] = gravity_config.galaxy_group
@@ -207,6 +208,14 @@ class ConfigManager(object):
             config.services.append(service_for_service_type("celery-beat")(config_type=config.config_type))
         if gravity_config.tusd.enable:
             config.services.append(service_for_service_type("tusd")(config_type=config.config_type))
+        if gravity_config.reports.enable:
+            reports_config_file = config.attribs["reports"]["config_file"]
+            if not isabs(config.attribs["reports"]["config_file"]):
+                reports_config_file = join(dirname(config.galaxy_config_file), reports_config_file)
+                config.attribs["reports"]["config_file"] = reports_config_file
+            if not exists(reports_config_file):
+                exception(f"Reports enabled but reports config file does not exist: {reports_config_file}")
+            config.services.append(service_for_service_type("reports")(config_type=config.config_type))
 
         if not app_config.get("job_config_file") and app_config.get("job_config"):
             # config embedded directly in Galaxy config

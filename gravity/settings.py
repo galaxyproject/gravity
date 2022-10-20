@@ -169,6 +169,58 @@ names.
 """)
 
 
+class ReportsSettings(BaseModel):
+    enable: bool = Field(False, description="Enable Galaxy Reports server.")
+    config_file: str = Field("reports.yml", description="Path to reports.yml, relative to galaxy.yml if not absolute")
+    bind: str = Field(
+        default="localhost:9001",
+        description="The socket to bind. A string of the form: ``HOST``, ``HOST:PORT``, ``unix:PATH``, ``fd://FD``. An IP is a valid HOST.",
+    )
+    workers: int = Field(
+        default=1,
+        ge=1,
+        description="""
+Controls the number of Galaxy Reports application processes Gunicorn will spawn.
+It is not generally necessary to increase this for the low-traffic Reports server.
+""")
+    timeout: int = Field(
+        default=300,
+        ge=0,
+        description="""
+Gunicorn workers silent for more than this many seconds are killed and restarted.
+Value is a positive number or 0. Setting it to 0 has the effect of infinite timeouts by disabling timeouts for all workers entirely.
+""")
+    url_prefix: Optional[str] = Field(
+        default=None,
+        description="""
+URL prefix to serve from.
+The corresponding nginx configuration is (replace <url_prefix> and <bind> with the values from these options):
+
+location /<url_prefix>/ {
+    proxy_pass http://<bind>/;
+}
+
+If <bind> is a unix socket, you will need a `:` after the socket path but before the trailing slash like so:
+    proxy_pass http://unix:/run/reports.sock:/;
+""")
+    extra_args: str = Field(default="", description="Extra arguments to pass to Gunicorn command line.")
+    start_timeout: int = Field(10, description="Value of supervisor startsecs, systemd TimeoutStartSec")
+    stop_timeout: int = Field(10, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
+    memory_limit: Optional[int] = Field(
+        None,
+        description="""
+Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
+``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
+``supervisor``.
+""")
+    environment: Dict[str, str] = Field(
+        default={},
+        description="""
+Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
+names.
+""")
+
+
 class GxItProxySettings(BaseModel):
     enable: bool = Field(default=False, description="Set to true to start gx-it-proxy")
     ip: str = Field(default="localhost", description="Public-facing IP of the proxy")
@@ -298,6 +350,7 @@ this is hidden from you when running a single instance.""")
 Configuration for tusd server (https://github.com/tus/tusd).
 The ``tusd`` binary must be installed manually and made available on PATH (e.g in galaxy's .venv/bin directory).
 """)
+    reports: ReportsSettings = Field(default={}, description="Configuration for Galaxy Reports.")
     handlers: Dict[str, Dict[str, Any]] = Field(
         default={},
         description="""
@@ -310,6 +363,7 @@ See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defi
     _normalize_gx_it_proxy = validator("gx_it_proxy", allow_reuse=True, pre=True)(none_to_default)
     _normalize_celery = validator("celery", allow_reuse=True, pre=True)(none_to_default)
     _normalize_tusd = validator("tusd", allow_reuse=True, pre=True)(none_to_default)
+    _normalize_reports = validator("reports", allow_reuse=True, pre=True)(none_to_default)
 
     # Require galaxy_user if running as root
     @validator("galaxy_user")

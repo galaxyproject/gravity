@@ -206,6 +206,25 @@ def startup_config(galaxy_virtualenv, free_port):
 
 
 @pytest.fixture()
+def reports_config(galaxy_root_dir, galaxy_virtualenv, free_port):
+    return {
+        'gravity': {
+            'virtualenv': galaxy_virtualenv,
+            'gunicorn': {'enable': False},
+            'celery': {
+                'enable': False,
+                'enable_beat': False,
+            },
+            'reports': {
+                'enable': True,
+                'bind': f'localhost:{free_port}',
+                'config_file': str(galaxy_root_dir / "config" / "reports.yml.sample"),
+            }
+        }
+    }
+
+
+@pytest.fixture()
 def non_default_config():
     return {
         'galaxy': None,
