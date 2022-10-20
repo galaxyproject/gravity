@@ -233,7 +233,7 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
     def _service_environment_formatter(self, environment, format_vars):
         return {k: v.format(**format_vars) for k, v in environment.items()}
 
-    def exec(self, config, service):
+    def exec(self, config, service, no_exec=False):
         service_name = service["service_name"]
 
         # force generation of real commands
@@ -248,8 +248,9 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
         info(f"Working directory: {cwd}")
         info(f"Executing: {print_env} {format_vars['command']}")
 
-        os.chdir(cwd)
-        os.execvpe(cmd[0], cmd, env)
+        if not no_exec:
+            os.chdir(cwd)
+            os.execvpe(cmd[0], cmd, env)
 
 
 class ProcessManagerRouter:
@@ -286,7 +287,7 @@ class ProcessManagerRouter:
                 exception("No provided names are known instance or service names")
         return (instance_names, service_names)
 
-    def exec(self, instance_names=None):
+    def exec(self, instance_names=None, no_exec=False):
         """ """
         instance_names, service_names = self._instance_service_names(instance_names)
 
@@ -307,7 +308,7 @@ class ProcessManagerRouter:
             exception(f"Service '{service_name}' is not configured. Configured service(s): {service_list}")
 
         service = services[0]
-        return self._process_executor.exec(config, service)
+        return self._process_executor.exec(config, service, no_exec=no_exec)
 
     @route
     def follow(self, instance_names=None, quiet=None):
