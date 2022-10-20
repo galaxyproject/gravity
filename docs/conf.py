@@ -22,7 +22,7 @@ release = __version__
 
 master_doc = 'index'
 
-extensions = []
+extensions = ['sphinx.ext.autosectionlabel']
 
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
