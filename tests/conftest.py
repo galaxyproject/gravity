@@ -60,10 +60,11 @@ def galaxy_yml(galaxy_root_dir):
 
 
 @pytest.fixture()
-def state_dir(galaxy_root_dir):
-    directory = os.path.join(galaxy_root_dir, 'database', 'gravity')
+def state_dir(monkeypatch):
+    directory = tempfile.mkdtemp(prefix="gravity_test")
     unit_path = f"/run/user/{os.getuid()}/systemd/user"
-    os.environ['GRAVITY_SYSTEMD_UNIT_PATH'] = unit_path
+    monkeypatch.setenv("GRAVITY_STATE_DIR", directory)
+    monkeypatch.setenv("GRAVITY_SYSTEMD_UNIT_PATH", unit_path)
     try:
         yield Path(directory)
     finally:
@@ -71,15 +72,11 @@ def state_dir(galaxy_root_dir):
             os.kill(int(open(os.path.join(directory, 'supervisor', 'supervisord.pid')).read()), signal.SIGTERM)
         except Exception:
             pass
-        try:
-            shutil.rmtree(directory)
-        except FileNotFoundError:
-            pass
+        shutil.rmtree(directory)
         try:
             list(map(os.unlink, glob.glob(os.path.join(unit_path, "galaxy*"))))
         except Exception:
             pass
-
 
 
 @pytest.fixture

@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from gravity import __version__, config_manager
+from gravity import config_manager
 from gravity.settings import Settings
 from gravity.state import GracefulMethod
 

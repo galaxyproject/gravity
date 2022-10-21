@@ -39,12 +39,12 @@ class ConfigManager(object):
         self.__configs = {}
         self.state_dir = state_dir
 
+        debug(f"Gravity state dir: {state_dir}")
+
         if config_file is not None:
             self.load_config_file(config_file)
         else:
             self.auto_load()
-            #if self.instance_count == 0:
-            #    exception("No known Gravity config files, provide with --config-file ($GRAVITY_CONFIG_FILE)")
 
     @property
     def is_root(self):
@@ -170,14 +170,14 @@ class ConfigManager(object):
                     "Cannot locate Galaxy root directory: set $GALAXY_ROOT_DIR, the Gravity `galaxy_root` option, or "
                     "`root' in the Galaxy config")
 
-        # TODO: document that the default state_dir is data_dir/gravity
+        # TODO: document that the default state_dir is data_dir/gravity and that setting state_dir overrides this
         data_dir = app_config.get("data_dir", "database")
         if not isabs(data_dir):
             data_dir = abspath(join(config.galaxy_root, data_dir))
-        config.state_dir = join(data_dir, "gravity")
+        config.gravity_data_dir = self.state_dir or join(data_dir, "gravity")
 
         if gravity_config.log_dir is None:
-            gravity_config.log_dir = join(config.state_dir, "log")
+            gravity_config.log_dir = join(config.gravity_data_dir, "log")
         config.attribs["log_dir"] = gravity_config.log_dir
 
         if gravity_config.tusd.enable and not config.attribs["galaxy_infrastructure_url"]:

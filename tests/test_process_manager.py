@@ -117,10 +117,10 @@ def service_conf_path(state_dir, process_manager_name, service_name, service_typ
 
 @pytest.mark.parametrize('process_manager_name', ['supervisor', 'systemd'])
 def test_update(galaxy_yml, default_config_manager, process_manager_name):
-    default_config_manager.load_config_file(str(galaxy_yml))
     new_bind = 'localhost:8081'
     galaxy_yml.write(json.dumps(
         {'galaxy': None, 'gravity': {'process_manager': process_manager_name, 'gunicorn': {'bind': new_bind}}}))
+    default_config_manager.load_config_file(str(galaxy_yml))
     with process_manager.process_manager(config_manager=default_config_manager) as pm:
         pm.update()
 
@@ -157,12 +157,11 @@ def test_cleanup(galaxy_yml, default_config_manager, process_manager_name):
     gunicorn_conf_path = service_conf_path(default_config_manager.state_dir, process_manager_name, 'gunicorn')
     celery_conf_path = service_conf_path(default_config_manager.state_dir, process_manager_name, 'celery')
     celery_beat_conf_path = service_conf_path(default_config_manager.state_dir, process_manager_name, 'celery-beat')
-    default_config_manager.remove([str(galaxy_yml)])
     assert gunicorn_conf_path.exists()
     assert celery_conf_path.exists()
     assert celery_beat_conf_path.exists()
     with process_manager.process_manager(config_manager=default_config_manager) as pm:
-        pm.update()
+        pm.update(clean=True)
     assert not gunicorn_conf_path.exists()
     assert not celery_conf_path.exists()
     assert not celery_beat_conf_path.exists()
@@ -170,13 +169,13 @@ def test_cleanup(galaxy_yml, default_config_manager, process_manager_name):
 
 @pytest.mark.parametrize('process_manager_name', ['supervisor', 'systemd'])
 def test_disable_services(galaxy_yml, default_config_manager, process_manager_name):
-    default_config_manager.load_config_file(str(galaxy_yml))
     galaxy_yml.write(json.dumps(
         {'galaxy': None, 'gravity': {
             'process_manager': process_manager_name,
             'gunicorn': {'enable': False},
             'celery': {'enable': False, 'enable_beat': False}}}
     ))
+    default_config_manager.load_config_file(str(galaxy_yml))
     with process_manager.process_manager(config_manager=default_config_manager) as pm:
         pm.update()
     conf_dir = service_conf_dir(default_config_manager.state_dir, process_manager_name)
@@ -244,11 +243,11 @@ def test_static_handlers(default_config_manager, galaxy_yml, job_conf, process_m
         conf_dir = service_conf_dir(default_config_manager.state_dir, process_manager_name)
         handler0_config_path = conf_dir / service_conf_file(process_manager_name, 'handler0', service_type='standalone')
         assert handler0_config_path.exists()
-        assert 'exec handler0' in handler0_config_path.open().read()
+        assert 'exec _default_ handler0' in handler0_config_path.open().read()
         handler1_config_path = conf_dir / service_conf_file(process_manager_name, 'handler1', service_type='standalone')
         assert handler1_config_path.exists()
         handler1_config = handler1_config_path.open().read()
-        assert 'exec handler1' in handler1_config
+        assert 'exec _default_ handler1' in handler1_config
         for handler_name in ('sge_handler', 'special_handler0', 'special_handler1'):
             assert (conf_dir / service_conf_file(process_manager_name, handler_name, service_type='standalone')).exists()
 
@@ -288,10 +287,10 @@ def test_static_handlers_embedded_in_galaxy_yml(default_config_manager, galaxy_y
         conf_dir = service_conf_dir(default_config_manager.state_dir, process_manager_name)
         handler0_config_path = conf_dir / service_conf_file(process_manager_name, 'handler0', service_type='standalone')
         assert handler0_config_path.exists()
-        assert 'exec handler0' in handler0_config_path.open().read()
+        assert 'exec _default_ handler0' in handler0_config_path.open().read()
         handler1_config_path = conf_dir / service_conf_file(process_manager_name, 'handler1', service_type='standalone')
         assert handler1_config_path.exists()
-        assert 'exec handler1' in handler1_config_path.open().read()
+        assert 'exec _default_ handler1' in handler1_config_path.open().read()
         for handler_name in ('sge_handler', 'special_handler0', 'special_handler1'):
             assert (conf_dir / service_conf_file(process_manager_name, handler_name, service_type='standalone')).exists()
 

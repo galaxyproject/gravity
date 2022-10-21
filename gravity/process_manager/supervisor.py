@@ -81,14 +81,13 @@ class SupervisorProcessManager(BaseProcessManager):
     def __init__(self, foreground=False, **kwargs):
         super().__init__(**kwargs)
 
-        if self.config_manager.instance_count > 1:
+        if self.config_manager.state_dir is not None:
             state_dir = self.config_manager.state_dir
-            if not state_dir:
-                state_dir = DEFAULT_STATE_DIR
-                info(f"Supervisor configuration will be stored in {state_dir}, set --state-dir ($GRAVITY_STATE_DIR) "
-                     "to override")
+        elif self.config_manager.instance_count > 1:
+            state_dir = DEFAULT_STATE_DIR
+            info(f"Supervisor configuration will be stored in {state_dir}, set --state-dir ($GRAVITY_STATE_DIR) to override")
         else:
-            state_dir = self.config_manager.get_config().state_dir
+            state_dir = self.config_manager.get_config().gravity_data_dir
 
         self.supervisord_exe = which("supervisord")
         self.supervisor_state_dir = join(state_dir, "supervisor")
@@ -222,9 +221,11 @@ class SupervisorProcessManager(BaseProcessManager):
         if intended_configs and not exists(config.attribs["log_dir"]):
             os.makedirs(config.attribs["log_dir"])
 
-    def _remove_invalid_configs(self, valid_configs=None):
+    def _remove_invalid_configs(self, valid_configs=None, invalid_configs=None):
         if not valid_configs:
             valid_configs = self.config_manager.get_configs(process_manager=self.name)
+        if invalid_configs is not None:
+            valid_configs = [c for c in valid_configs if c not in invalid_configs]
         valid_names = [c.instance_name for c in valid_configs]
         valid_instance_dirs = [f"{name}.d" for name in valid_names]
         valid_group_confs = []
@@ -307,7 +308,7 @@ class SupervisorProcessManager(BaseProcessManager):
             time.sleep(0.5)
         info("supervisord has terminated")
 
-    def update(self, configs=None, force=False, **kwargs):
+    def update(self, configs=None, force=False, clean=False):
         """Add newly defined servers, remove any that are no longer present"""
         if force and os.listdir(self.supervisord_conf_dir):
             info(f"Removing supervisord conf dir due to --force option: {self.supervisord_conf_dir}")
@@ -315,8 +316,11 @@ class SupervisorProcessManager(BaseProcessManager):
             os.makedirs(self.supervisord_conf_dir)
         elif not force:
             self._remove_invalid_configs(valid_configs=configs)
-        for config in configs:
-            self._process_config(config)
+        if clean:
+            self._remove_invalid_configs(invalid_configs=configs)
+        else:
+            for config in configs:
+                self._process_config(config)
         # only need to update if supervisord is running, otherwise changes will be picked up at next start
         if self.__supervisord_is_running():
             self.supervisorctl("update")

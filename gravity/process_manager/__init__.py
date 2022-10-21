@@ -102,7 +102,7 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
             "galaxy_conf": config.galaxy_config_file,
             "galaxy_root": config["galaxy_root"],
             "virtualenv_bin": virtualenv_bin,
-            "state_dir": config["state_dir"],
+            "gravity_data_dir": config["gravity_data_dir"],
         }
         format_vars["settings"] = service.get_settings(attribs, format_vars)
 
@@ -121,14 +121,8 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
                 path = environment.get("PATH", self._service_default_path())
                 environment["PATH"] = ":".join([virtualenv_bin, path])
         else:
-            # setting the config file ensures that there is only one instance and the configstate is ignored
             config_file = shlex.quote(config.__file__)
-            # state_dir is passed so it will be used by `galaxyctl exec` in command templates if we are not stateless,
-            # but not passed if unset so that we don't have to rewrite configs if Galaxy's data_dir changes
-            state_dir_opt = ""
-            if self.config_manager.state_dir:
-                state_dir_opt = f" --state-dir {shlex.quote(str(self.config_manager.state_dir))}"
-            format_vars["command"] = f"galaxyctl --config-file {config_file}{state_dir_opt} exec {program_name}"
+            format_vars["command"] = f"galaxyctl --config-file {config_file} exec {config.instance_name} {program_name}"
             environment = {}
         format_vars["environment"] = self._service_environment_formatter(environment, format_vars)
 
@@ -213,7 +207,7 @@ class BaseProcessManager(BaseProcessExecutionEnvironment, metaclass=ABCMeta):
         """ """
 
     @abstractmethod
-    def update(self, configs=None, service_names=None, force=False):
+    def update(self, configs=None, service_names=None, force=False, clean=False):
         """ """
 
     @abstractmethod
@@ -335,7 +329,7 @@ class ProcessManagerRouter:
         """ """
 
     @route_to_all
-    def update(self, instance_names=None, force=False):
+    def update(self, instance_names=None, force=False, clean=False):
         """ """
 
     @route

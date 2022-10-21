@@ -2,7 +2,6 @@ import json
 import os
 import re
 import time
-from pathlib import Path
 
 import pytest
 import requests
@@ -22,12 +21,12 @@ def wait_for_startup(state_dir, free_port, prefix="/", path="/api/version", log=
     for _ in range(STARTUP_TIMEOUT * 4):
         try:
             requests.get(f"http://localhost:{free_port}{prefix.rstrip('/')}{path}").raise_for_status()
-            return True
+            return True, ""
         except Exception:
             time.sleep(0.25)
     with open(state_dir / "log" / log) as fh:
         startup_logs = fh.read()
-    return startup_logs
+    return False, startup_logs
 
 
 def wait_for_gxit_proxy(state_dir):
@@ -36,9 +35,9 @@ def wait_for_gxit_proxy(state_dir):
         for _ in range(STARTUP_TIMEOUT * 4):
             startup_logs = f"{startup_logs}{fh.read()}"
             if 'Watching path' in startup_logs:
-                return True
+                return True, ""
             time.sleep(0.25)
-    return startup_logs
+    return False, startup_logs
 
 
 def wait_for_any_path(paths, timeout):
@@ -56,8 +55,8 @@ def start_instance(state_dir, galaxy_yml, free_port):
     result = runner.invoke(galaxyctl, ['--config-file', str(galaxy_yml), 'start'])
     assert re.search(r"gunicorn\s*STARTING", result.output)
     assert result.exit_code == 0, result.output
-    startup_done = wait_for_startup(state_dir, free_port)
-    assert startup_done is True, f"Startup failed. Application startup logs:\n {startup_done}"
+    startup_done, startup_logs = wait_for_startup(state_dir, free_port)
+    assert startup_done is True, f"Startup failed. Application startup logs:\n {startup_logs}"
 
 
 def test_cmd_start(state_dir, galaxy_yml, startup_config, free_port):
@@ -84,8 +83,8 @@ def test_cmd_start_reports(state_dir, galaxy_yml, reports_config, free_port):
     result = runner.invoke(galaxyctl, ['--config-file', str(galaxy_yml), 'start'])
     assert re.search(r"reports\s*STARTING", result.output)
     assert result.exit_code == 0, result.output
-    startup_done = wait_for_startup(state_dir, free_port, path="/", log="reports.log")
-    assert startup_done is True, f"Startup failed. Application startup logs:\n {startup_done}"
+    startup_done, startup_logs = wait_for_startup(state_dir, free_port, path="/", log="reports.log")
+    assert startup_done is True, f"Startup failed. Application startup logs:\n {startup_logs}"
     result = runner.invoke(galaxyctl, ['--config-file', str(galaxy_yml), 'stop'])
     assert result.exit_code == 0, result.output
     assert "All processes stopped, supervisord will exit" in result.output
@@ -101,8 +100,8 @@ def test_cmd_start_with_gxit(state_dir, galaxy_yml, gxit_startup_config, free_po
     result = runner.invoke(galaxyctl, ['--config-file', str(galaxy_yml), 'status'])
     assert result.exit_code == 0, f"{result.output}\ngx-it-proxy startup failed. " \
         f"gx-it-proxy startup logs:\n{open(state_dir / 'log' / 'gx-it-proxy.log').read()}"
-    startup_done = wait_for_gxit_proxy(state_dir)
-    assert startup_done is True, f"gx-it-proxy startup failed. gx-it-proxy startup logs:\n {startup_done}"
+    startup_done, startup_logs = wait_for_gxit_proxy(state_dir)
+    assert startup_done is True, f"gx-it-proxy startup failed. gx-it-proxy startup logs:\n {startup_logs}"
 
 
 def test_cmd_restart_with_update(state_dir, galaxy_yml, startup_config, free_port):
@@ -117,8 +116,8 @@ def test_cmd_restart_with_update(state_dir, galaxy_yml, startup_config, free_por
     galaxy_yml.write(json.dumps(startup_config))
     result = runner.invoke(galaxyctl, ['--config-file', str(galaxy_yml), 'restart'])
     assert result.exit_code == 0, result.output
-    startup_done = wait_for_startup(state_dir=state_dir, free_port=free_port, prefix=prefix)
-    assert startup_done is True, f"Startup failed. Application startup logs:\n {startup_done}"
+    startup_done, startup_logs = wait_for_startup(state_dir=state_dir, free_port=free_port, prefix=prefix)
+    assert startup_done is True, f"Startup failed. Application startup logs:\n {startup_logs}"
 
 
 def test_cmd_show(state_dir, galaxy_yml):

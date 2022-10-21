@@ -106,7 +106,7 @@ class GalaxyUnicornHerderService(Service):
     graceful_method = GracefulMethod.SIGHUP
     default_environment = DEFAULT_GALAXY_ENVIRONMENT
     command_arguments = GalaxyGunicornService.command_arguments
-    command_template = "{virtualenv_bin}unicornherder --pidfile {state_dir}/{program_name}.pid --" \
+    command_template = "{virtualenv_bin}unicornherder --" \
                        " 'galaxy.webapps.galaxy.fast_factory:factory()'" \
                        " --timeout {settings[timeout]}" \
                        " --pythonpath lib" \
@@ -147,7 +147,7 @@ class GalaxyCeleryBeatService(Service):
                        " --app galaxy.celery" \
                        " beat" \
                        " --loglevel {settings[loglevel]}" \
-                       " --schedule {state_dir}/" + CELERY_BEAT_DB_FILENAME
+                       " --schedule {gravity_data_dir}/" + CELERY_BEAT_DB_FILENAME
 
 
 class GalaxyGxItProxyService(Service):
@@ -207,7 +207,7 @@ class GalaxyStandaloneService(Service):
     default_start_timeout = 20
     default_stop_timeout = 65
     command_template = "{virtualenv_bin}python ./lib/galaxy/main.py -c {galaxy_conf} --server-name={server_name}" \
-                       " {command_arguments[attach_to_pool]} {command_arguments[pid_file]}"
+                       " {command_arguments[attach_to_pool]}"
 
     def get_environment(self):
         return self.get("environment") or {}
@@ -216,7 +216,6 @@ class GalaxyStandaloneService(Service):
         # full override because standalone doesn't have settings
         command_arguments = {
             "attach_to_pool": "",
-            "pid_file": " --pid-file={state_dir}/{program_name}.pid".format(**format_vars),
         }
         server_pools = self.get("server_pools")
         if server_pools:

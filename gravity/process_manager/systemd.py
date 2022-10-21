@@ -184,7 +184,7 @@ class SystemdProcessManager(BaseProcessManager):
         u_args = [i for sl in list(zip(["-u"] * len(unit_names), unit_names)) for i in sl]
         self.__journalctl("-f", *u_args)
 
-    def _process_config(self, config, **kwargs):
+    def _process_config(self, config, clean=False, **kwargs):
         """ """
         instance_name = config["instance_name"]
         intended_configs = set()
@@ -197,9 +197,12 @@ class SystemdProcessManager(BaseProcessManager):
 
         service_units = []
         for service in config["services"]:
-            conf = self.__update_service(config, service, instance_name)
-            intended_configs.add(conf)
-            service_units.append(os.path.basename(conf))
+            if clean:
+                intended_configs.add(os.path.join(self.__systemd_unit_dir, self.__unit_name(instance_name, service)))
+            else:
+                conf = self.__update_service(config, service, instance_name)
+                intended_configs.add(conf)
+                service_units.append(os.path.basename(conf))
 
         # create systemd target
         target_unit_name = self.__unit_name(instance_name, config, unit_type="target")
@@ -211,18 +214,20 @@ class SystemdProcessManager(BaseProcessManager):
         if self.__use_instance:
             format_vars["systemd_description"] += f" {instance_name}"
         contents = SYSTEMD_TARGET_TEMPLATE.format(**format_vars)
-        updated = self._update_file(target_conf, contents, target_unit_name, "systemd unit")
+        updated = False
+        if not clean:
+            updated = self._update_file(target_conf, contents, target_unit_name, "systemd unit")
         intended_configs.add(target_conf)
         if updated:
             self.__systemctl("enable", target_conf)
 
         return intended_configs
 
-    def _process_configs(self, configs):
+    def _process_configs(self, configs, clean):
         intended_configs = set()
 
         for config in configs:
-            intended_configs = intended_configs | self._process_config(config)
+            intended_configs = intended_configs | self._process_config(config, clean=clean)
 
         # the unit dir might not exist if $GRAVITY_SYSTEMD_UNIT_PATH is set (e.g. for tests), but this is fine if there
         # are no intended configs
@@ -235,7 +240,13 @@ class SystemdProcessManager(BaseProcessManager):
             os.listdir(self.__systemd_unit_dir))
         present_configs = set([os.path.join(self.__systemd_unit_dir, f) for f in _present_configs])
 
-        for file in (present_configs - intended_configs):
+        # if cleaning, then intended configs are actually *unintended* configs
+        if clean:
+            unintended_configs = present_configs & intended_configs
+        else:
+            unintended_configs = present_configs - intended_configs
+
+        for file in unintended_configs:
             unit_name = os.path.basename(file)
             self.__systemctl("disable", "--now", unit_name)
             info("Removing systemd config %s", file)
@@ -287,7 +298,7 @@ class SystemdProcessManager(BaseProcessManager):
             else:
                 raise
 
-    def update(self, configs=None, force=False, **kwargs):
+    def update(self, configs=None, force=False, clean=False):
         """ """
         if force:
             for config in configs:
@@ -300,7 +311,7 @@ class SystemdProcessManager(BaseProcessManager):
                     [self.__systemctl("disable", os.path.basename(u)) for u in units]
                     list(map(os.unlink, units))
                     self._service_changes = True
-        self._process_configs(configs)
+        self._process_configs(configs, clean)
         if self._service_changes:
             self.__systemctl("daemon-reload")
         else:
