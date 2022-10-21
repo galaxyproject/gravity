@@ -257,6 +257,29 @@ commands:
 ``galayxctl follow``                ``journalctl -f -u 'galaxy-*'``
 =================================== ==================================================================
 
+Zero Downtime Restarts
+----------------------
+
+something about unicornherder
+
+e.g. to
+run two gunicorn instances on ports 8080 and 8081:
+  instance_count: 2
+  bind: localhost:808{instance_number}
+
+this looks a little nicer:
+
+  instance_count: 2
+  instance_number_start: 8080
+  bind: localhost:{instance_number}
+
+for unix sockets:
+
+  instance_count: 2
+  bind: unix:/run/gunicorn{instance_number}.sock
+
+service names become ``gunicorn:{instance_number}``
+
 Managing Multiple Galaxies
 --------------------------
 

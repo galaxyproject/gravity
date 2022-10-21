@@ -7,6 +7,7 @@ import os
 import xml.etree.ElementTree as elementtree
 from typing import Union
 
+from pydantic import ValidationError
 from yaml import safe_load
 
 from gravity.settings import Settings
@@ -128,7 +129,11 @@ class ConfigManager(object):
 
     def __load_config(self, gravity_config_dict, app_config):
         defaults = {}
-        gravity_config = Settings(**recursive_update(defaults, gravity_config_dict))
+        try:
+            gravity_config = Settings(**recursive_update(defaults, gravity_config_dict))
+        except ValidationError as exc:
+            # suppress the traceback and just report the error
+            exception(exc)
 
         if gravity_config.instance_name in self.__configs:
             error(

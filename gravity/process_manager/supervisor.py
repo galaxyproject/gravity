@@ -45,7 +45,7 @@ SUPERVISORD_SERVICE_TEMPLATE = """;
 ; This file is maintained by Gravity - CHANGES WILL BE OVERWRITTEN
 ;
 
-[program:{program_name}]
+[program:{supervisor_program_name}]
 command         = {command}
 directory       = {galaxy_root}
 umask           = {galaxy_umask}
@@ -54,10 +54,11 @@ autorestart     = true
 startsecs       = {settings[start_timeout]}
 stopwaitsecs    = {settings[stop_timeout]}
 environment     = {environment}
-numprocs        = 1
+numprocs        = {service_instance_count}
+numprocs_start  = {service_instance_number_start}
+process_name    = {supervisor_process_name}
 stdout_logfile  = {log_file}
 redirect_stderr = true
-{process_name_opt}
 """
 
 
@@ -147,34 +148,60 @@ class SupervisorProcessManager(BaseProcessManager):
     def _service_environment_formatter(self, environment, format_vars):
         return ",".join("{}={}".format(k, shlex.quote(v.format(**format_vars))) for k, v in environment.items())
 
-    def terminate(self):
-        if self.foreground:
-            # if running in foreground, if terminate is called, then supervisord should've already received a SIGINT
-            self.__supervisord_popen and self.__supervisord_popen.wait()
-
-    def _service_program_name(self, instance_name, service):
+    def __supervisor_config_program_name(self, instance_name, service):
         if self._use_instance_name:
             return f"{instance_name}_{service.config_type}_{service.service_type}_{service.service_name}"
         else:
             return service.service_name
 
+    def __supervisor_program_names(self, config, service_names):
+        instance_name = None
+        if self._use_instance_name:
+            instance_name = config.instance_name
+        services = [s for s in config.services if s["service_name"] in service_names]
+        program_names = []
+        for service in services:
+            service_name = service["service_name"]
+            instance_count = service.settings.get("instance_count", 1)
+            instance_number_start = service.settings.get("instance_number_start", 0)
+            program_names.extend(
+                supervisor_program_names(service_name, instance_count, instance_number_start, instance_name=instance_name))
+        return program_names
+
+    def terminate(self):
+        if self.foreground:
+            # if running in foreground, if terminate is called, then supervisord should've already received a SIGINT
+            self.__supervisord_popen and self.__supervisord_popen.wait()
+
     def __update_service(self, config, service, instance_conf_dir, instance_name):
-        program_name = self._service_program_name(instance_name, service)
+        # FIXME: follow needs this as well
+        process_name = "%(program_name)s"
+        if self._use_instance_name:
+            process_name = service["service_name"]
+        instance_count = service.settings.get("instance_count", 1)
+        if service.supports_multiple_instances and instance_count > 1:
+            if self._use_instance_name:
+                process_name = f"{service['service_name']}%(process_num)d"
+            else:
+                process_name = "%(process_num)d"
 
         # supervisor-specific format vars
         supervisor_format_vars = {
             "log_dir": config.log_dir,
-            "log_file": self._service_log_file(config.log_dir, program_name),
-            "process_name_opt": f"process_name    = {service.service_name}" if self._use_instance_name else "",
+            "log_file": self._service_log_file(config.log_dir, process_name),
+            "instance_number": "%(process_num)d",
+            "supervisor_program_name": self.__supervisor_config_program_name(instance_name, service),
+            "supervisor_process_name": process_name,
         }
 
-        format_vars = self._service_format_vars(config, service, program_name, supervisor_format_vars)
+        format_vars = self._service_format_vars(config, service, supervisor_format_vars)
 
         conf = join(instance_conf_dir, f"{service.config_type}_{service.service_type}_{service.service_name}.conf")
 
         template = SUPERVISORD_SERVICE_TEMPLATE
         contents = template.format(**format_vars)
-        self._update_file(conf, contents, program_name, "service")
+        name = service["service_name"] if not self._use_instance_name else f"{instance_name}:{service['service_name']}"
+        self._update_file(conf, contents, name, "service")
 
         return conf
 
@@ -236,15 +263,15 @@ class SupervisorProcessManager(BaseProcessManager):
                 shutil.rmtree(path)
 
     def __start_stop(self, op, configs, service_names):
+        targets = []
         for config in configs:
             if service_names:
-                services = [s for s in config.services if s.service_name in service_names]
-                for service in services:
-                    program_name = self._service_program_name(config.instance_name, service)
-                    self.supervisorctl(op, program_name)
+                targets.extend(self.__supervisor_program_names(config, service_names))
+            elif self._use_instance_name:
+                targets.append(f"{config.instance_name}:*")
             else:
-                target = f"{config.instance_name}:*" if self._use_instance_name else "all"
-                self.supervisorctl(op, target)
+                targets.append("all")
+        self.supervisorctl(op, *targets)
 
     def __reload_graceful(self, configs, service_names):
         for config in configs:
@@ -253,11 +280,27 @@ class SupervisorProcessManager(BaseProcessManager):
             else:
                 services = config.services
             for service in services:
-                program_name = self._service_program_name(config.instance_name, service)
-                if service.graceful_method == GracefulMethod.SIGHUP:
-                    self.supervisorctl("signal", "SIGHUP", program_name)
+                program_names = self.__supervisor_program_names(config, [service.service_name])
+                graceful_method = service.graceful_method
+                if graceful_method == GracefulMethod.SIGHUP:
+                    self.supervisorctl("signal", "SIGHUP", *program_name)
+                elif graceful_method == GracefulMethod.ROUND_ROBIN:
+                    self.__round_robin(config, service, program_names)
                 else:
-                    self.supervisorctl("restart", program_name)
+                    self.supervisorctl("restart", *program_names)
+
+    def __round_robin(self, config, service, program_names):
+        debug(f"#### ROUND ROBIN! {service['service_name']}")
+        for instance_number, program_name in enumerate(program_names):
+            # FIXME: no, you should not be pulling the instance number out like this, not even valid when the start > 0
+            # really just need to do store format vars or formatted vars
+            format_vars = self._service_format_vars(config, service, {"instance_number": instance_number})
+            self.supervisorctl("restart", program_name)
+            while not service.is_ready(config.attribs, format_vars):
+                import time
+                time.sleep(1)
+                debug("#### SLEP")
+            # gonna need a timeout here
 
     def start(self, configs=None, service_names=None):
         self.__supervisord()
@@ -335,3 +378,19 @@ class SupervisorProcessManager(BaseProcessManager):
                 raise
 
     pm = supervisorctl
+
+
+def supervisor_program_names(service_name, instance_count, instance_number_start, instance_name=None):
+    # this is what supervisor turns the service name into depending on groups and numprocs
+    if instance_count > 1 and instance_name is not None:
+        return [f"{instance_name}:{service_name}{i + instance_number_start}" for i in range(0, instance_count)]
+
+    if instance_count > 1:
+        program_names = [f"{service_name}:{i + instance_number_start}" for i in range(0, instance_count)]
+    else:
+        program_names = [service_name]
+
+    if instance_name is not None:
+        return [f"{instance_name}:{program_name}" for program_name in program_names]
+    else:
+        return program_names

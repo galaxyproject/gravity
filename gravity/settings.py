@@ -128,6 +128,20 @@ names.
 
 class GunicornSettings(BaseModel):
     enable: bool = Field(True, description="Enable Galaxy gunicorn server.")
+    instance_count: int = Field(
+        default=1,
+        ge=1,
+        description="""
+The number of gunicorn processes to spawn.
+If set to > 1, then Gravity will perform zero downtime rolling restarts on ``galaxyctl graceful``, but the ``bind``
+option **must** contain a template value ``{instance_number}`` that will be templated by the instance number.
+""")
+    instance_number_start: int = Field(
+        default=0,
+        ge=0,
+        description="""
+The starting value of ``instance_number`` when ``instance_count`` is > 1.
+""")
     bind: str = Field(
         default="localhost:8080",
         description="The socket to bind. A string of the form: ``HOST``, ``HOST:PORT``, ``unix:PATH``, ``fd://FD``. An IP is a valid HOST.",
@@ -172,6 +186,12 @@ Memory limit (in GB). If the service exceeds the limit, it will be killed. Defau
 Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
 names.
 """)
+
+    @validator("bind", always=True)
+    def _instance_number_in_bind_required_if_instance_count(cls, v, values):
+        if values["instance_count"] > 1 and '{instance_number}' not in v:
+            raise ValueError("'bind' must contain '{instance_number}' when 'instance_count' > 1")
+        return v
 
 
 class ReportsSettings(BaseModel):

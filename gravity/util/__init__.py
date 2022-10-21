@@ -4,9 +4,12 @@ import collections.abc
 import copy
 import os
 import sys
-import yaml
 
 import jsonref
+# FIXME: add to requirements
+import requests
+import yaml
+
 from gravity.settings import Settings
 
 
@@ -87,3 +90,13 @@ def process_property(key, value, depth=0):
             value_sep = " "
         description = f"{description}\n{extra_white_space}{comment}{key}:{value_sep}{default}\n"
     return description
+
+
+def http_check(bind, path):
+    scheme = 'http'
+    if bind.startswith('unix:'):
+        raise NotImplementedError("TODO: https://github.com/msabramo/requests-unixsocket")
+    try:
+        requests.get(f"{scheme}://{bind}{path}").raise_for_status()
+    except requests.exceptions.HTTPError:
+        raise

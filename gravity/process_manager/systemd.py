@@ -105,6 +105,9 @@ class SystemdProcessManager(BaseProcessManager):
     def _service_environment_formatter(self, environment, format_vars):
         return "\n".join("Environment={}={}".format(k, shlex.quote(v.format(**format_vars))) for k, v in environment.items())
 
+    def _service_name(self, instance_name, service):
+        return service["service_name"]
+
     def terminate(self):
         # this is used to stop a foreground supervisord in the supervisor PM, so it is a no-op here
         pass
@@ -161,7 +164,7 @@ class SystemdProcessManager(BaseProcessManager):
             if config.galaxy_group is not None:
                 systemd_format_vars["systemd_user_group"] += f"\nGroup={config.galaxy_group}"
 
-        format_vars = self._service_format_vars(config, service, program_name, systemd_format_vars)
+        format_vars = self._service_format_vars(config, service, systemd_format_vars)
 
         if not format_vars["command"].startswith("/"):
             format_vars["command"] = f"{format_vars['virtualenv_bin']}{format_vars['command']}"

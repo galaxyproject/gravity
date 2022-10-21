@@ -81,7 +81,7 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
     def _service_program_name(self, instance_name, service):
         return f"{instance_name}_{service.config_type}_{service.service_type}_{service.service_name}"
 
-    def _service_format_vars(self, config, service, program_name, pm_format_vars):
+    def _service_format_vars(self, config, service, pm_format_vars):
         virtualenv_dir = config.virtualenv
         virtualenv_bin = f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}' if virtualenv_dir else ""
 
@@ -96,7 +96,11 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
             "virtualenv_bin": virtualenv_bin,
             "gravity_data_dir": config.gravity_data_dir,
         }
-        format_vars["settings"] = service.settings
+        service_settings = service.settings
+        instance_count = service_settings.get("instance_count", 1)
+        format_vars["settings"] = service_settings
+        format_vars["service_instance_count"] = instance_count
+        format_vars["service_instance_number_start"] = service_settings.get("instance_number_start", 0)
 
         # update here from PM overrides
         format_vars.update(pm_format_vars)
@@ -118,7 +122,10 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
             galaxyctl = sys.argv[0]
             if not galaxyctl.endswith("galaxyctl"):
                 warn(f"Unable to determine galaxyctl command, sys.argv[0] is: {galaxyctl}")
-            format_vars["command"] = f"{galaxyctl} --config-file {config_file} exec {config.instance_name} {service.service_name}"
+            instance_number_opt = ""
+            if instance_count > 1:
+                instance_number_opt = f" --service-instance {pm_format_vars['instance_number']}"
+            format_vars["command"] = f"{galaxyctl} --config-file {config_file} exec{instance_number_opt {config.instance_name} {service.service_name}"
             environment = {}
         format_vars["environment"] = self._service_environment_formatter(environment, format_vars)
 
@@ -228,12 +235,25 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
     def _service_environment_formatter(self, environment, format_vars):
         return {k: v.format(**format_vars) for k, v in environment.items()}
 
-    def exec(self, config, service, no_exec=False):
+    def exec(self, config, service, service_instance_number=None, no_exec=False):
         service_name = service.service_name
+
+        # if this is an instance of a service, we need to ensure that instance_number is formatted in as needed
+        exec_format_vars = {}
+        service_settings = service.get_settings(config.attribs, {})
+        instance_count = service_settings.get("instance_count", 1)
+        if service.supports_multiple_instances and instance_count > 1:
+            msg = f"Cannot exec '{service_name}': This service is configured to use multiple instances and "
+            if service_instance_number is None:
+                exception(msg + "--service-instance was not set")
+            start = service_settings["instance_number_start"]
+            if service_instance_number not in range(start, start + instance_count):
+                exception(msg + "--service-instance is out of range")
+            exec_format_vars = {"instance_number": service_instance_number}
 
         # force generation of real commands
         config.service_command_style = ServiceCommandStyle.direct
-        format_vars = self._service_format_vars(config, service, service_name, {})
+        format_vars = self._service_format_vars(config, service, exec_format_vars)
         print_env = ' '.join('{}={}'.format(k, shlex.quote(v)) for k, v in format_vars["environment"].items())
 
         cmd = shlex.split(format_vars["command"])
@@ -282,7 +302,7 @@ class ProcessManagerRouter:
                 exception("No provided names are known instance or service names")
         return (instance_names, service_names)
 
-    def exec(self, instance_names=None, no_exec=False):
+    def exec(self, instance_names=None, service_instance_number=None, no_exec=False):
         """ """
         instance_names, service_names = self._instance_service_names(instance_names)
 
@@ -303,7 +323,7 @@ class ProcessManagerRouter:
             exception(f"Service '{service_name}' is not configured. Configured service(s): {service_list}")
 
         service = services[0]
-        return self._process_executor.exec(config, service, no_exec=no_exec)
+        return self._process_executor.exec(config, service, service_instance_number=service_instance_number, no_exec=no_exec)
 
     @route
     def follow(self, instance_names=None, quiet=None):

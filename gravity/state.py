@@ -15,7 +15,7 @@ from gravity.settings import (
     ProcessManager,
     ServiceCommandStyle,
 )
-from gravity.util import classproperty
+from gravity.util import classproperty, http_check
 
 
 DEFAULT_GALAXY_ENVIRONMENT = {
@@ -34,6 +34,7 @@ def relative_to_galaxy_root(cls, v, values):
 class GracefulMethod(str, enum.Enum):
     DEFAULT = "default"
     SIGHUP = "sighup"
+    ROUND_ROBIN = "round_robin"
 
 
 class ConfigFile(BaseModel):
@@ -103,6 +104,9 @@ class Service(BaseModel):
 
     config_type: str = None
 
+    # FIXME: remove
+    supports_multiple_instances = False
+
     _default_environment: Dict[str, str] = {}
     _settings_from: Optional[str] = None
     _graceful_method: GracefulMethod = GracefulMethod.DEFAULT
@@ -163,9 +167,11 @@ class Service(BaseModel):
         rval = {}
         for setting, value in self.settings.items():
             if setting in self.command_arguments:
-                # FIXME: this truthiness testing of value is probably not the best
                 if value:
-                    rval[setting] = self.command_arguments[setting].format(**format_vars)
+                    # recursively format until there are no more template placeholders left
+                    rval[setting] = self.command_arguments[setting]
+                    while "{" in rval[setting]:
+                        rval[setting] = rval[setting].format(**format_vars)
                 else:
                     rval[setting] = ""
             else:
@@ -182,18 +188,23 @@ class GalaxyGunicornService(Service):
     _service_type = "gunicorn"
     service_name = "gunicorn"
     _default_environment = DEFAULT_GALAXY_ENVIRONMENT
-    _command_arguments = {
-        "preload": "--preload"
+    command_arguments = {
+        "preload": "--preload",
+        # templates {instance_number}
+        "bind": "{settings[bind]}",
     }
     _command_template = "{virtualenv_bin}gunicorn 'galaxy.webapps.galaxy.fast_factory:factory()'" \
                         " --timeout {settings[timeout]}" \
                         " --pythonpath lib" \
                         " -k galaxy.webapps.galaxy.workers.Worker" \
-                        " -b {settings[bind]}" \
+                        " -b {command_arguments[bind]}" \
                         " --workers={settings[workers]}" \
                         " --config python:galaxy.web_stack.gunicorn_config" \
                         " {command_arguments[preload]}" \
                         " {settings[extra_args]}"
+
+    # FIXME: remove
+    supports_multiple_instances = True
 
     @validator("service_settings")
     def _normalize_settings(cls, v, values):
@@ -205,7 +216,11 @@ class GalaxyGunicornService(Service):
 
     @property
     def graceful_method(self):
-        if self.settings.get("preload"):
+        # we could technically still SIGHUP rather than SIGTERM/exec() if not using --preload but that's going to be the
+        # non-standard case so probably not worth the effort.
+        if self.settings.get("instance_count", 1) > 1:
+            return GracefulMethod.ROUND_ROBIN
+        elif self.settings.get("preload"):
             return GracefulMethod.DEFAULT
         else:
             return GracefulMethod.SIGHUP
@@ -218,6 +233,14 @@ class GalaxyGunicornService(Service):
             environment["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
         environment.update(self.settings.get("environment", {}))
         return environment
+
+    def is_ready(self, attribs, format_vars):
+        bind = self.get_command_arguments(attribs, format_vars)["bind"]
+        gravity.io.debug(f"#### BIND! {bind}")
+        http_check(bind, "/api/version")
+        gravity.io.debug(f"#### CHECK OK! {bind}")
+        return True
+        
 
 
 class GalaxyUnicornHerderService(Service):
