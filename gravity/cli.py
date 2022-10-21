@@ -15,10 +15,7 @@ CONTEXT_SETTINGS = {
 }
 
 COMMAND_ALIASES = {
-    "list": "configs",
-    "add": "register",
-    "remove": "deregister",
-    "forget": "deregister",
+    "configs": "list",
     "get": "show",
     "reload": "graceful",
     "supervisorctl": "pm",
@@ -73,8 +70,7 @@ def galaxy(ctx, debug, config_file, state_dir, quiet):
     """Run Galaxy server in the foreground"""
     set_debug(debug)
     ctx.cm_kwargs = {
-        "config_file": config_file,
-        "state_dir": state_dir
+        "config_file": config_file
     }
     mod = __import__("gravity.commands.cmd_start", None, None, ["cli"])
     return ctx.invoke(mod.cli, foreground=True, quiet=quiet)
@@ -89,6 +85,5 @@ def galaxyctl(ctx, debug, config_file, state_dir):
     """Manage Galaxy server configurations and processes."""
     set_debug(debug)
     ctx.cm_kwargs = {
-        "config_file": config_file,
-        "state_dir": state_dir
+        "config_file": config_file
     }

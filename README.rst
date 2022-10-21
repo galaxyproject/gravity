@@ -88,12 +88,12 @@ The simplest way to use Gravity is to activate Galaxy's virtualenv, which will p
       stop        Stop configured services.
       update      Update process manager from config changes.
 
-If you run ``galaxy`` or ``galaxyctl`` from the root of a Galaxy source checkout and do not specify either the config
-file or state dir options, ``config/galaxy.yml`` or ``config/galaxy.yml.sample`` will be automatically used. However,
-it's better to explicitly point Gravity at your Galaxy configuration file with the ``--config-file`` option or
-``$GRAVITY_CONFIG_FILE`` (or ``$GALAXY_CONFIG_FILE``, as set by Galaxy's ``run.sh`` script) environment variable to
-point to your Galaxy config file. Once a Galaxy configuration file has been registered with Gravity, it doesn't matter
-where you call ``galaxy`` or ``galaxyctl`` from:
+If you run ``galaxy`` or ``galaxyctl`` from the root of a Galaxy source checkout and do not specify the config file
+option, ``config/galaxy.yml`` or ``config/galaxy.yml.sample`` will be automatically used. However, it's better to
+explicitly point Gravity at your Galaxy configuration file with the ``--config-file`` option or ``$GRAVITY_CONFIG_FILE``
+(or ``$GALAXY_CONFIG_FILE``, as set by Galaxy's ``run.sh`` script) environment variable to point to your Galaxy config
+file. Once a Galaxy configuration file has been registered with Gravity, it doesn't matter where you call ``galaxy`` or
+``galaxyctl`` from:
 
 .. code:: console
 
@@ -157,9 +157,6 @@ When running as a daemon, the ``stop`` subcommand stops your Galaxy server:
     celery: stopped
     All processes stopped, supervisord will exit
     Shut down
-
-Older versions of Gravity stored a considerable amount of *config state* in a file called ``configstate.yaml`` that is
-no longer needed unless you are using a standalone Gravity to manage multiple Galaxy instances on a single server.
 
 Using systemd
 -------------
@@ -236,6 +233,10 @@ commands:
 
 Managing Multiple Galaxies
 --------------------------
+
+
+FIXME:
+
 
 In order to manage multiple Galaxy instances on the same host, you must use the ``--state-dir`` option (or
 ``$GRAVITY_STATE_DIR``) rather than ``--config-file``, since this allows Gravity to maintain a list of known Galaxy
@@ -594,14 +595,13 @@ When using dynamically defined handlers, be sure to explicitly set the `job hand
 Configuration and State
 -----------------------
 
-Previous versions of Gravity maintained a significant amount of "state" information about known Galaxy instances in
-``$GRAVITY_STATE_DIR/configstate.yaml``, but this is no longer necessary in the case of Gravity managing a single Galaxy
-instance, and very little of it is still persisted even when managing multiple Galaxy instances.
+Older versions of Gravity stored a considerable amount of *config state* in ``$GRAVITY_STATE_DIR/configstate.yaml``. As
+of version 1.0.0, Gravity does not store state information, and this file can be removed.
 
-Although the single instance mode no longer uses the config state file, it does still use a state directory for storing
-supervisor configs, the default log directory (if ``log_dir`` is unchanged), and the celery-beat database. This
-directory defaults to ``<galaxy_root>/database/gravity/`` by way of the ``data_dir`` option in the ``galaxy`` section of
-``galaxy.yml`` (which defaults to ``<galaxy_root>/database/``).
+Although Gravity no longer uses the config state file, it does still use a state directory for storing supervisor
+configs, the default log directory (if ``log_dir`` is unchanged), and the celery-beat database. This directory defaults
+to ``<galaxy_root>/database/gravity/`` by way of the ``data_dir`` option in the ``galaxy`` section of ``galaxy.yml``
+(which defaults to ``<galaxy_root>/database/``).
 
 Subcommands
 ===========
@@ -647,13 +647,12 @@ update
 Figure out what has changed in configs, which could be:
 
 -  changes to the Gravity configuration options in ``galaxy.yml``
--  adding or removing handlers in ``job_conf.xml``
+-  adding or removing handlers in ``job_conf.yml`` or ``job_conf.xml``
 
 This may cause service restarts if there are any changes.
 
-Any needed changes to supervisor configs will be performed and then ``supervisorctl update`` will be called.
-
-``update`` is called automatically for the ``start``, ``stop``, ``restart``, and ``graceful`` subcommands.
+Any needed changes to supervisor or systemd configs will be performed and then ``supervisorctl update`` or ``systemctl
+daemon-reload`` will be called.
 
 shutdown
 --------
@@ -667,37 +666,15 @@ follow
 Follow (e.g. using ``tail -f`` (supervisor) or ``journalctl -f`` (systemd)) log files of all Galaxy services, or a
 subset (if named as arguments).
 
-register
---------
-
-Register a Galaxy server config (``galaxy.yml``) with Gravity. Does not update or start. Run ``galaxyctl update`` after
-registering to apply changes.
-
 list
 ----
 
-List config files registered with the process manager.
-
-deregister
-----------
-
-Deregister a Galaxy server config, Gravity will no longer manage this Galaxy instance. Run ``galaxyctl update`` after
-deregistering to apply changes.
-
-instances
----------
-
-List known (configured) Galaxy instances and services.
+List config files known to Gravity.
 
 show
 ----
 
-Show stored configuration details for the named config file.
-
-rename
-------
-
-If your ``galaxy.yml`` has moved, you can update its path in Gravity's saved state with this command.
+Show Gravity configuration details for a Galaxy instance.
 
 pm
 --

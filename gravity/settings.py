@@ -7,6 +7,8 @@ from typing import (
 )
 from pydantic import BaseModel, BaseSettings, Extra, Field, validator
 
+DEFAULT_INSTANCE_NAME = "_default_"
+
 
 def none_to_default(cls, v, field):
     if all(
@@ -339,7 +341,7 @@ Select the application server.
 ``unicornherder`` is a production-oriented manager for (G)unicorn servers that automates zero-downtime Galaxy server restarts,
 similar to uWSGI Zerg Mode used in the past.
 """)
-    instance_name: str = Field(default="_default_", description="""Override the default instance name.
+    instance_name: str = Field(default=DEFAULT_INSTANCE_NAME, description="""Override the default instance name.
 this is hidden from you when running a single instance.""")
     gunicorn: GunicornSettings = Field(default={}, description="Configuration for Gunicorn.")
     celery: CelerySettings = Field(default={}, description="Configuration for Celery Processes.")

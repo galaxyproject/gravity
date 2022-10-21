@@ -309,7 +309,7 @@ class SystemdProcessManager(BaseProcessManager):
     def shutdown(self):
         """ """
         if self.__use_instance:
-            configs = self.config_manager.get_registered_configs(process_manager=self.name)
+            configs = self.config_manager.get_configs(process_manager=self.name)
             self.__systemctl("stop", *[f"galaxy-{c.instance_name}.target" for c in configs])
         else:
             self.__systemctl("stop", "galaxy.target")

@@ -42,10 +42,5 @@ def required_config_arg(name="config", exists=False, nargs=None):
         return click.argument(name, nargs=nargs, type=arg_type)
 
 
-def required_instance_arg():
-    return click.argument("instance", nargs=-1)
-
-
-# TODO: this should replace required_instance_arg in most cases
 def instances_services_arg():
     return click.argument("instances_services", metavar="[INSTANCES] [SERVICES]", nargs=-1)

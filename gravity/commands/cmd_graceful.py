@@ -5,14 +5,15 @@ from gravity import process_manager
 
 
 @click.command("graceful")
-@options.required_instance_arg()
+@options.instances_services_arg()
 @click.pass_context
-def cli(ctx, instance):
+def cli(ctx, instance_services):
     """Gracefully reload configured services.
 
-    If INSTANCE matches an instance name, all services configured for the instance are restarted.
+    If no INSTANCES or SERVICES are provided, all configured services of all configured instances are gracefully
+    reloaded.
 
-    If INSTANCE does not match an instance name, it is assumed to be a service and only the listed service(s) are
-    restarted."""
+    Specifying INSTANCES and SERVICES limits the operation to only the provided instance name(s) and/or service(s).
+    """
     with process_manager.process_manager(**ctx.parent.cm_kwargs) as pm:
-        pm.graceful(instance_names=instance)
+        pm.graceful(instance_names=instance_services)

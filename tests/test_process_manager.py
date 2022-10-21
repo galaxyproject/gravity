@@ -117,11 +117,11 @@ def service_conf_path(state_dir, process_manager_name, service_name, service_typ
 
 @pytest.mark.parametrize('process_manager_name', ['supervisor', 'systemd'])
 def test_update(galaxy_yml, default_config_manager, process_manager_name):
-    default_config_manager.add([str(galaxy_yml)])
+    default_config_manager.load_config_file(str(galaxy_yml))
     new_bind = 'localhost:8081'
     galaxy_yml.write(json.dumps(
         {'galaxy': None, 'gravity': {'process_manager': process_manager_name, 'gunicorn': {'bind': new_bind}}}))
-    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
+    with process_manager.process_manager(config_manager=default_config_manager) as pm:
         pm.update()
 
 
@@ -143,10 +143,10 @@ def test_update_force(galaxy_yml, default_config_manager, process_manager_name):
     gunicorn_conf_path = service_conf_path(default_config_manager.state_dir, process_manager_name, 'gunicorn')
     assert gunicorn_conf_path.exists()
     update_time = gunicorn_conf_path.stat().st_mtime
-    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
+    with process_manager.process_manager(config_manager=default_config_manager) as pm:
         pm.update()
     assert gunicorn_conf_path.stat().st_mtime == update_time
-    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
+    with process_manager.process_manager(config_manager=default_config_manager) as pm:
         pm.update(force=True)
     assert gunicorn_conf_path.stat().st_mtime != update_time
 
@@ -161,7 +161,7 @@ def test_cleanup(galaxy_yml, default_config_manager, process_manager_name):
     assert gunicorn_conf_path.exists()
     assert celery_conf_path.exists()
     assert celery_beat_conf_path.exists()
-    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
+    with process_manager.process_manager(config_manager=default_config_manager) as pm:
         pm.update()
     assert not gunicorn_conf_path.exists()
     assert not celery_conf_path.exists()
@@ -170,14 +170,14 @@ def test_cleanup(galaxy_yml, default_config_manager, process_manager_name):
 
 @pytest.mark.parametrize('process_manager_name', ['supervisor', 'systemd'])
 def test_disable_services(galaxy_yml, default_config_manager, process_manager_name):
-    default_config_manager.add([str(galaxy_yml)])
+    default_config_manager.load_config_file(str(galaxy_yml))
     galaxy_yml.write(json.dumps(
         {'galaxy': None, 'gravity': {
             'process_manager': process_manager_name,
             'gunicorn': {'enable': False},
             'celery': {'enable': False, 'enable_beat': False}}}
     ))
-    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
+    with process_manager.process_manager(config_manager=default_config_manager) as pm:
         pm.update()
     conf_dir = service_conf_dir(default_config_manager.state_dir, process_manager_name)
     gunicorn_conf_path = conf_dir / service_conf_file(process_manager_name, 'gunicorn')
@@ -192,8 +192,8 @@ def test_disable_services(galaxy_yml, default_config_manager, process_manager_na
 @pytest.mark.parametrize('process_manager_name', ['supervisor', 'systemd'])
 def test_dynamic_handlers(default_config_manager, galaxy_yml, job_conf, process_manager_name):
     galaxy_yml.write(DYNAMIC_HANDLER_CONFIG % {"process_manager_name": process_manager_name})
-    default_config_manager.add([str(galaxy_yml)])
-    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
+    default_config_manager.load_config_file(str(galaxy_yml))
+    with process_manager.process_manager(config_manager=default_config_manager) as pm:
         pm.update()
         conf_dir = service_conf_dir(default_config_manager.state_dir, process_manager_name)
         handler_config_paths = [conf_dir / service_conf_file(
@@ -221,8 +221,8 @@ def test_no_static_handlers(default_config_manager, galaxy_yml, job_conf, proces
         config_fh.write(json.dumps({
             'gravity': {'process_manager': process_manager_name},
             'galaxy': {'job_config_file': str(job_conf)}}))
-    default_config_manager.add([str(galaxy_yml)])
-    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
+    default_config_manager.load_config_file(str(galaxy_yml))
+    with process_manager.process_manager(config_manager=default_config_manager) as pm:
         pm.update()
         handler_config_path = service_conf_path(
             default_config_manager.state_dir,
@@ -238,8 +238,8 @@ def test_static_handlers(default_config_manager, galaxy_yml, job_conf, process_m
         config_fh.write(json.dumps({
             'gravity': {'process_manager': process_manager_name},
             'galaxy': {'job_config_file': str(job_conf)}}))
-    default_config_manager.add([str(galaxy_yml)])
-    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
+    default_config_manager.load_config_file(str(galaxy_yml))
+    with process_manager.process_manager(config_manager=default_config_manager) as pm:
         pm.update()
         conf_dir = service_conf_dir(default_config_manager.state_dir, process_manager_name)
         handler0_config_path = conf_dir / service_conf_file(process_manager_name, 'handler0', service_type='standalone')
@@ -260,8 +260,8 @@ def test_static_handlers_direct(default_config_manager, galaxy_yml, job_conf, pr
         config_fh.write(json.dumps({
             'gravity': {'process_manager': process_manager_name, 'service_command_style': 'direct'},
             'galaxy': {'job_config_file': str(job_conf)}}))
-    default_config_manager.add([str(galaxy_yml)])
-    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
+    default_config_manager.load_config_file(str(galaxy_yml))
+    with process_manager.process_manager(config_manager=default_config_manager) as pm:
         pm.update()
         conf_dir = service_conf_dir(default_config_manager.state_dir, process_manager_name)
         handler0_config_path = conf_dir / service_conf_file(process_manager_name, 'handler0', service_type='standalone')
@@ -282,8 +282,8 @@ def test_static_handlers_embedded_in_galaxy_yml(default_config_manager, galaxy_y
         config_fh.write(json.dumps({
             'gravity': {'process_manager': process_manager_name},
             'galaxy': {'job_config': safe_load(JOB_CONF_YAML_STATIC_HANDLERS)}}))
-    default_config_manager.add([str(galaxy_yml)])
-    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
+    default_config_manager.load_config_file(str(galaxy_yml))
+    with process_manager.process_manager(config_manager=default_config_manager) as pm:
         pm.update()
         conf_dir = service_conf_dir(default_config_manager.state_dir, process_manager_name)
         handler0_config_path = conf_dir / service_conf_file(process_manager_name, 'handler0', service_type='standalone')
@@ -299,8 +299,8 @@ def test_static_handlers_embedded_in_galaxy_yml(default_config_manager, galaxy_y
 @pytest.mark.parametrize('process_manager_name', ['supervisor', 'systemd'])
 def test_gxit_handler(default_config_manager, galaxy_yml, gxit_config, process_manager_name):
     galaxy_yml.write(json.dumps(gxit_config))
-    default_config_manager.add([str(galaxy_yml)])
-    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
+    default_config_manager.load_config_file(str(galaxy_yml))
+    with process_manager.process_manager(config_manager=default_config_manager) as pm:
         pm.update()
         gxit_config_path = service_conf_path(default_config_manager.state_dir, process_manager_name, 'gx-it-proxy')
         assert gxit_config_path.exists()
@@ -312,8 +312,8 @@ def test_gxit_handler(default_config_manager, galaxy_yml, gxit_config, process_m
 @pytest.mark.parametrize('process_manager_name', ['supervisor', 'systemd'])
 def test_tusd_process(default_config_manager, galaxy_yml, tusd_config, process_manager_name):
     galaxy_yml.write(json.dumps(tusd_config))
-    default_config_manager.add([str(galaxy_yml)])
-    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
+    default_config_manager.load_config_file(str(galaxy_yml))
+    with process_manager.process_manager(config_manager=default_config_manager) as pm:
         pm.update()
         tusd_config_path = service_conf_path(default_config_manager.state_dir, process_manager_name, 'tusd')
         assert tusd_config_path.exists()
@@ -327,8 +327,8 @@ def test_default_memory_limit(galaxy_yml, default_config_manager):
             'process_manager': process_manager_name,
             'memory_limit': 2,
             'handlers': {'handler': {}}}}))
-    default_config_manager.add([str(galaxy_yml)])
-    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
+    default_config_manager.load_config_file(str(galaxy_yml))
+    with process_manager.process_manager(config_manager=default_config_manager) as pm:
         pm.update()
     conf_dir = service_conf_dir(default_config_manager.state_dir, process_manager_name)
     gunicorn_conf_path = conf_dir / service_conf_file(process_manager_name, 'gunicorn')
@@ -345,8 +345,8 @@ def test_service_memory_limit(galaxy_yml, default_config_manager):
             'process_manager': process_manager_name,
             'gunicorn': {'memory_limit': 4},
             'handlers': {'handler': {}}}}))
-    default_config_manager.add([str(galaxy_yml)])
-    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
+    default_config_manager.load_config_file(str(galaxy_yml))
+    with process_manager.process_manager(config_manager=default_config_manager) as pm:
         pm.update()
     conf_dir = service_conf_dir(default_config_manager.state_dir, process_manager_name)
     gunicorn_conf_path = conf_dir / service_conf_file(process_manager_name, 'gunicorn')
@@ -364,8 +364,8 @@ def test_override_memory_limit(galaxy_yml, default_config_manager):
             'memory_limit': 2,
             'gunicorn': {'memory_limit': 4},
             'handlers': {'handler': {}}}}))
-    default_config_manager.add([str(galaxy_yml)])
-    with process_manager.process_manager(state_dir=default_config_manager.state_dir) as pm:
+    default_config_manager.load_config_file(str(galaxy_yml))
+    with process_manager.process_manager(config_manager=default_config_manager) as pm:
         pm.update()
     conf_dir = service_conf_dir(default_config_manager.state_dir, process_manager_name)
     gunicorn_conf_path = conf_dir / service_conf_file(process_manager_name, 'gunicorn')

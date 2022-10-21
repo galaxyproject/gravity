@@ -1,25 +1,19 @@
 """ Galaxy Process Management superclass and utilities
 """
 import contextlib
-import errno
-import hashlib
 import logging
 import os
-import shutil
 import xml.etree.ElementTree as elementtree
 from os import pardir
-from os.path import abspath, dirname, exists, expanduser, isabs, join
+from os.path import abspath, dirname, exists, isabs, join
 from typing import Union
 
-import packaging.version
 from yaml import safe_load
 
 from gravity.settings import Settings
-from gravity.io import debug, error, exception, info, warn
+from gravity.io import debug, error, exception, warn
 from gravity.state import (
     ConfigFile,
-    GravityStateDict,
-    GravityStateFile,
     service_for_service_type,
 )
 from gravity.util import recursive_update
@@ -32,134 +26,125 @@ if "XDG_CONFIG_HOME" in os.environ:
 
 
 @contextlib.contextmanager
-def config_manager(state_dir=None, config_file=None):
-    yield ConfigManager(state_dir=state_dir, config_file=config_file)
+def config_manager(config_file=None, state_dir=None):
+    yield ConfigManager(config_file=config_file, state_dir=state_dir)
 
 
 class ConfigManager(object):
     galaxy_server_config_section = "galaxy"
     gravity_config_section = "gravity"
+    app_config_file_option = "galaxy_config_file"
 
-    def __init__(self, state_dir=None, config_file=None):
+    def __init__(self, config_file=None, state_dir=None):
         self.__configs = {}
         self.state_dir = state_dir
-        self.config_state_path = None
 
         if config_file is not None:
-            # if a config file is passed, we can operate in stateless mode
-            self.__state = GravityStateDict()
-            self.add([config_file], quiet=True)
-            debug(f"Gravity config file: {config_file}")
-        elif state_dir is not None:
-            # otherwise we need to keep track of what config files are known
-            self.__state = GravityStateFile
-            self.config_state_path = join(self.state_dir, "configstate.yaml")
-            debug(f"Gravity state dir: {self.state_dir}")
-            try:
-                os.makedirs(self.state_dir)
-            except OSError as exc:
-                if exc.errno != errno.EEXIST:
-                    raise
-            self.__convert_config()
+            self.load_config_file(config_file)
         else:
-            # or attempt to just run statelessly from galaxy source
-            self.__state = GravityStateDict()
-            self.auto_register(quiet=True)
-            if self.instance_count == 0:
-                exception(
-                    "No known Gravity config files, provide with with --config-file ($GRAVITY_CONFIG_FILE) or set"
-                    " --state-dir ($GRAVITY_STATE_DIR) and register one with `galaxyctl register`")
-
-    def __copy_config(self, old_path):
-        with self.__state.open(old_path) as state:
-            state.set_name(self.config_state_path)
-        # copies on __exit__
-
-    def __backup_config(self, backup_ext):
-        backup_path = f"{self.config_state_path}.{backup_ext}"
-        info(f"Previous Gravity config state saved in: {backup_path}")
-        shutil.copy(self.config_state_path, backup_path)
-
-    def __convert_config(self):
-        # the gravity version has been included in the configstate since 0.10.0, but it was previously a configfile
-        # attrib, which doesn't really make sense, and 1.0.0 removes persisted configfile attribs anyway
-        state_version = self.state.get("gravity_version")
-        debug(f"Gravity state version: {state_version}")
-        if not state_version or (packaging.version.parse(state_version) < packaging.version.parse("1.0.0")):
-            # this hardcoded versioning suffices for now, might have to get fancier in the future
-            with self.state as state:
-                self.__convert_config_1_0(state)
-
-    def __convert_config_1_0(self, state):
-        info("Converting Gravity config state to 1.0 format, this will only occur once")
-        self.__backup_config("pre-1.0")
-        for config_file, config in state.config_files.items():
-            try:
-                config.galaxy_root = config.attribs["galaxy_root"]
-            except KeyError:
-                warn(f"Unable to read 'galaxy_root' from attribs: {config.attribs}")
-            for key in list(config.keys()):
-                if key not in ConfigFile.persist_keys:
-                    del config[key]
-            state.config_files[config_file] = config
+            self.auto_load()
+            #if self.instance_count == 0:
+            #    exception("No known Gravity config files, provide with --config-file ($GRAVITY_CONFIG_FILE)")
 
     @property
     def is_root(self):
         return os.geteuid() == 0
 
-    def get_config(self, conf, defaults=None):
-        if conf in self.__configs:
-            return self.__configs[conf]
+    def load_config_file(self, config_file):
+        with open(config_file) as config_fh:
+            try:
+                config_dict = safe_load(config_fh)
+            except Exception as exc:
+                # this should always be a parse error, access errors will be caught by click
+                error(f"Failed to parse config: {config_file}")
+                exception(exc)
 
-        defaults = defaults or {}
+        if type(config_dict) is not dict:
+            exception(f"Config file does not look like valid Galaxy or Gravity configuration file: {config_file}")
+
+        gravity_config_dict = config_dict.get(self.gravity_config_section) or {}
+
+        if type(gravity_config_dict) is list:
+            self.__load_config_list(config_file, config_dict)
+            return
+
+        app_config = None
         server_section = self.galaxy_server_config_section
-        with open(conf) as config_fh:
-            config_dict = safe_load(config_fh)
-        _gravity_config = config_dict.get(self.gravity_config_section) or {}
-        gravity_config = Settings(**recursive_update(defaults, _gravity_config))
+        if self.gravity_config_section in config_dict and server_section not in config_dict:
+            app_config_file = config_dict[self.gravity_config_section].get(self.app_config_file_option)
+            if app_config_file:
+                app_config = self.__load_app_config_file(config_file, app_config_file)
+            else:
+                warn(
+                    f"Config file appears to be a Gravity config but contains no {server_section} section, "
+                    f"Galaxy defaults will be used: {config_file}")
+        elif self.gravity_config_section not in config_dict and server_section in config_dict:
+            warn(
+                f"Config file appears to be a Galaxy config but contains no {self.gravity_config_section} section, "
+                f"Gravity defaults will be used: {config_file}")
+        elif self.gravity_config_section not in config_dict and server_section not in config_dict:
+            exception(f"Config file does not look like valid Galaxy or Gravity configuration file: {config_file}")
+
+        app_config = app_config or config_dict.get(server_section) or {}
+        gravity_config_dict["__file__"] = config_file
+        self.__load_config(gravity_config_dict, app_config)
+
+    def __load_app_config_file(self, gravity_config_file, app_config_file):
+        server_section = self.galaxy_server_config_section
+        if not isabs(app_config_file):
+            app_config_file = join(dirname(gravity_config_file), app_config_file)
+        try:
+            with open(app_config_file) as config_fh:
+                _app_config_dict = safe_load(config_fh)
+                if server_section not in _app_config_dict:
+                    # we let a missing galaxy config slide in other scenarios but if you set the option to something
+                    # that doesn't contain a galaxy section that's almost surely a mistake
+                    exception(f"Galaxy config file does not contain a {server_section} section: {app_config_file}")
+            app_config = _app_config_dict[server_section] or {}
+            app_config["__file__"] = app_config_file
+            return app_config
+        except Exception as exc:
+            exception(exc)
+
+    def __load_config_list(self, config_file, config_dict):
+        try:
+            assert self.galaxy_server_config_section not in config_dict, (
+                "Multiple Gravity configurations in a shared Galaxy configuration file is ambiguous, set "
+                f"`{self.app_config_file_option}` and remove the Galaxy configuration: {config_file}"
+            )
+            for gravity_config_dict in config_dict[self.gravity_config_section]:
+                assert "galaxy_config_file" in gravity_config_dict, (
+                    "The `{self.app_config_file_option}` option must be set when multiple Gravity configurations are "
+                    f"present: {config_file}"
+                )
+                app_config = self.__load_app_config_file(config_file, gravity_config_dict[self.app_config_file_option])
+                gravity_config_dict["__file__"] = config_file
+                self.__load_config(gravity_config_dict, app_config)
+        except AssertionError as exc:
+            exception(exc)
+
+    def __load_config(self, gravity_config_dict, app_config):
+        defaults = {}
+        gravity_config = Settings(**recursive_update(defaults, gravity_config_dict))
 
         config = ConfigFile()
         config.attribs = {}
         config.services = []
 
-        config.__file__ = config.galaxy_config_file = conf
+        config.__file__ = gravity_config_dict["__file__"]
+        config.galaxy_config_file = app_config.get("__file__", config.__file__)
 
-        if (self.gravity_config_section in config_dict and server_section not in config_dict
-                and gravity_config.galaxy_config_file):
-            config.galaxy_config_file = gravity_config.galaxy_config_file
-            if not isabs(config.galaxy_config_file):
-                config.galaxy_config_file = join(dirname(config.__file__), config.galaxy_config_file)
-            with open(config.galaxy_config_file) as config_fh:
-                _app_config_dict = safe_load(config_fh)
-                if server_section not in _app_config_dict:
-                    # we let this slide in other scenarios but if you set the option to something that doesn't contain a
-                    # galaxy section that's almost surely a mistake
-                    exception(f"Config file does not contain a {server_section} section: {config.galaxy_config_file}")
-                config_dict[server_section] = _app_config_dict[server_section]
-        elif self.gravity_config_section in config_dict and server_section not in config_dict:
-            warn(
-                f"Config file appears to be a Gravity config but contains no {server_section}"
-                f" section, Galaxy defaults will be used (hint: did you forget to set `galaxy_config_file`?: {conf}")
-        elif self.gravity_config_section not in config_dict and server_section in config_dict:
-            warn(
-                f"Config file appears to be a {server_section} config but contains no {self.gravity_config_section}"
-                f" section, Gravity defaults will be used: {conf}")
-        elif self.gravity_config_section not in config_dict and server_section not in config_dict:
-            exception(f"Config file does not look like valid Galaxy or Gravity configuration file: {conf}")
+        if gravity_config.instance_name in self.__configs:
+            error(
+                f"Galaxy instance {gravity_config.instance_name} already loaded from file: "
+                f"{self.__configs[gravity_config.instance_name].__file__}")
+            exception(f"Duplicate instance name {gravity_config.instance_name}, instance names must be unique")
 
-        app_config = config_dict.get(server_section) or {}
-
-        # FIXME: I don't think we use the persisted value of instance_name anymore, this comes straight from the Gravity
-        # config. We might not need it at all, but we also need to validate that it doesn't collide with other
-        # registered instances on every load, in case the admin has changed the instance name since last run.
         config.instance_name = gravity_config.instance_name
-        config.config_type = server_section
+        config.config_type = self.galaxy_server_config_section
         config.process_manager = gravity_config.process_manager
         config.service_command_style = gravity_config.service_command_style
-        # FIXME: should this be attribs?
         config.attribs["galaxy_infrastructure_url"] = app_config.get("galaxy_infrastructure_url", "").rstrip("/")
-        if gravity_config.tusd.enable and not config.attribs["galaxy_infrastructure_url"]:
-            exception("To run the tusd server you need to set galaxy_infrastructure_url in the galaxy section of galaxy.yml")
         config.attribs["app_server"] = gravity_config.app_server
         config.attribs["virtualenv"] = gravity_config.virtualenv
         config.attribs["gunicorn"] = gravity_config.gunicorn.dict()
@@ -170,34 +155,33 @@ class ConfigManager(object):
         config.attribs["galaxy_user"] = gravity_config.galaxy_user
         config.attribs["galaxy_group"] = gravity_config.galaxy_group
         config.attribs["memory_limit"] = gravity_config.memory_limit
-        # Store gravity version, in case we need to convert old setting
-        webapp_service_names = []
 
-        # shortcut for galaxy configs in the standard locations -- explicit arg ?
-        config["galaxy_root"] = app_config.get("root") or gravity_config.galaxy_root
-        if config["galaxy_root"] is None:
+        # shortcut for galaxy configs in the standard locations
+        config.galaxy_root = gravity_config.galaxy_root or app_config.get("root")
+        if config.galaxy_root is None:
             if os.environ.get("GALAXY_ROOT_DIR"):
-                config["galaxy_root"] = abspath(os.environ["GALAXY_ROOT_DIR"])
-            elif exists(join(dirname(conf), pardir, "lib", "galaxy")):
-                config["galaxy_root"] = abspath(join(dirname(conf), pardir))
-            elif conf.endswith(join('galaxy', 'config', 'sample', 'galaxy.yml.sample')):
-                config["galaxy_root"] = abspath(join(dirname(conf), pardir, pardir, pardir, pardir))
+                config.galaxy_root = abspath(os.environ["GALAXY_ROOT_DIR"])
+            elif exists(join(dirname(config.galaxy_config_file), pardir, "lib", "galaxy")):
+                config.galaxy_root = abspath(join(dirname(config.galaxy_config_file), pardir))
+            elif config.galaxy_config_file.endswith(join("galaxy", "config", "sample", "galaxy.yml.sample")):
+                config.galaxy_root = abspath(join(dirname(config.galaxy_config_file), pardir, pardir, pardir, pardir))
             else:
-                exception(f"Cannot locate Galaxy root directory: set $GALAXY_ROOT_DIR or `root' in the `galaxy' section of {conf}")
+                exception(
+                    "Cannot locate Galaxy root directory: set $GALAXY_ROOT_DIR, the Gravity `galaxy_root` option, or "
+                    "`root' in the Galaxy config")
 
-        # FIXME: document that the default state_dir is data_dir/gravity
-        if self.state_dir is None:
-            data_dir = app_config.get("data_dir", "database")
-            if not isabs(data_dir):
-                data_dir = abspath(join(config["galaxy_root"], data_dir))
-            config.state_dir = join(data_dir, "gravity")
-        else:
-            config.state_dir = self.state_dir
+        # TODO: document that the default state_dir is data_dir/gravity
+        data_dir = app_config.get("data_dir", "database")
+        if not isabs(data_dir):
+            data_dir = abspath(join(config.galaxy_root, data_dir))
+        config.state_dir = join(data_dir, "gravity")
 
         if gravity_config.log_dir is None:
             gravity_config.log_dir = join(config.state_dir, "log")
         config.attribs["log_dir"] = gravity_config.log_dir
 
+        if gravity_config.tusd.enable and not config.attribs["galaxy_infrastructure_url"]:
+            exception("To run the tusd server you need to set galaxy_infrastructure_url in the galaxy section of galaxy.yml")
         if gravity_config.gunicorn.enable:
             if config.attribs["gunicorn"]["preload"] is None:
                 config.attribs["gunicorn"]["preload"] = config.attribs["app_server"] != "unicornherder"
@@ -230,7 +214,7 @@ class ConfigManager(object):
                 if not exists(job_config):
                     job_config = None
         if config.config_type == "galaxy" and job_config:
-            for handler_settings in [x for x in ConfigManager.get_job_config(job_config) if x["service_name"] not in webapp_service_names]:
+            for handler_settings in ConfigManager.get_job_config(job_config):
                 config.services.append(service_for_service_type("standalone")(
                     config_type=config.config_type,
                     service_name=handler_settings["service_name"],
@@ -246,7 +230,8 @@ class ConfigManager(object):
         # see how this is determined.
         self.create_handler_services(gravity_config, config)
         self.create_gxit_services(gravity_config, app_config, config)
-        self.__configs[conf] = config
+        self.__configs[config.instance_name] = config
+        debug(f"Loaded instance {config.instance_name} from Gravity config file: {config.__file__}")
         return config
 
     def create_handler_services(self, gravity_config: Settings, config):
@@ -331,69 +316,56 @@ class ConfigManager(object):
                 })
         return rval
 
-    def _register_config_file(self, key, val):
-        """Persist a newly added config file, or update (overwrite) the value
-        of a previously persisted config.
-        """
-        with self.state as state:
-            state.config_files[key] = val
-
-    def _deregister_config_file(self, key):
-        """Deregister a previously registered config file.  The caller should
-        ensure that it was previously registered.
-        """
-        with self.state as state:
-            del state.config_files[key]
-
-    @property
-    def state(self):
-        """Public property to access persisted config state"""
-        return self.__state.open(self.config_state_path)
-
     @property
     def instance_count(self):
         """The number of configured instances"""
-        return len(self.state.config_files)
+        return len(self.__configs)
 
     @property
     def single_instance(self):
         """Indicate if there is only one configured instance"""
         return self.instance_count == 1
 
-    def get_registered_configs(self, instances=None, process_manager=None):
+    def is_loaded(self, config_file):
+        return config_file in self.get_configured_files()
+
+    def get_configs(self, instances=None, process_manager=None):
         """Return the persisted values of all config files registered with the config manager."""
         rval = []
-        config_files = self.state.config_files
-        for config_file, config in list(config_files.items()):
-            # if ((instances is not None and config["instance_name"] in instances) or instances is None) and (
-            #     (process_manager is not None and config_pm == process_manager) or process_manager is None
-            # ):
-            # TODO: if we add process_manager to the state, then we can filter for it as above instead of after
-            # get_config as below
-            if (instances is not None and config["instance_name"] in instances) or instances is None:
-                config = self.get_config(config_file)
-                if (process_manager is not None and config["process_manager"] == process_manager) or process_manager is None:
-                    rval.append(config)
+        for instance_name, config in list(self.__configs.items()):
+            if ((instances is not None and instance_name in instances) or instances is None) and (
+                (process_manager is not None and config["process_manager"] == process_manager) or process_manager is None
+            ):
+                rval.append(config)
         return rval
 
-    def get_registered_config(self, config_file):
-        """Return the persisted value of the named config file."""
-        if config_file in self.state.config_files:
-            return self.get_config(config_file)
-        return None
+    def get_config(self, instance_name=None):
+        if instance_name is None:
+            if self.instance_count > 1:
+                exception("An instance name is required when more than one instance is configured")
+            elif self.instance_count == 0:
+                exception("No configured Galaxy instances")
+            instance_name = list(self.__configs.keys())[0]
+        try:
+            return self.__configs[instance_name]
+        except KeyError:
+            exception(f"Unknown instance name: {instance_name}")
 
     def get_configured_service_names(self):
         rval = set()
-        for config in self.get_registered_configs():
+        for config in self.get_configs():
             for service in config["services"]:
                 rval.add(service["service_name"])
         return rval
 
-    def get_registered_instance_names(self):
-        return [c["instance_name"] for c in self.state.config_files.values()]
+    def get_configured_instance_names(self):
+        return list(self.__configs.keys())
 
-    def auto_register(self, quiet=False):
-        """Attempt to automatically register a config file if none are registered."""
+    def get_configured_files(self):
+        return list(c["__file__"] for c in self.__configs.values())
+
+    def auto_load(self):
+        """Attempt to automatically load a config file if none are loaded."""
         if self.instance_count == 0:
             if os.environ.get("GALAXY_CONFIG_FILE"):
                 configs = [os.environ["GALAXY_CONFIG_FILE"]]
@@ -401,67 +373,5 @@ class ConfigManager(object):
                 configs = (os.path.join("config", "galaxy.yml"), os.path.join("config", "galaxy.yml.sample"))
             for config in configs:
                 if exists(config):
-                    # This should always be the case if instance_count == 0
-                    if not self.is_registered(abspath(config)):
-                        self.add([config], quiet=quiet)
+                    self.load_config_file(abspath(config))
                     return
-
-    def is_registered(self, config_file):
-        return config_file in self.state.config_files
-
-    def add(self, config_files, galaxy_root=None, quiet=False):
-        """Public method to add (register) config file(s)."""
-        for config_file in config_files:
-            config_file = abspath(expanduser(config_file))
-            if self.is_registered(config_file):
-                warn("%s is already registered", config_file)
-                continue
-            defaults = None
-            if galaxy_root is not None:
-                defaults = {"galaxy_root": galaxy_root}
-            conf = self.get_config(config_file, defaults=defaults)
-            if conf is None:
-                exception(f"Cannot add {config_file}: File is unknown type")
-            if conf["instance_name"] is None:
-                conf["instance_name"] = conf["config_type"] + "-" + hashlib.md5(os.urandom(32)).hexdigest()[:12]
-            if conf["instance_name"] in self.get_registered_instance_names():
-                exception(f"Cannot add {config_file}: instance_name '{conf['instance_name']}' already in use")
-            conf_data = {}
-            for key in ConfigFile.persist_keys:
-                conf_data[key] = conf[key]
-            self._register_config_file(config_file, conf_data)
-            msg = f"Registered {conf['config_type']} config: {config_file}"
-            if quiet:
-                debug(msg)
-            else:
-                info(msg)
-
-    def rename(self, old, new):
-        if not self.is_registered(old):
-            error("%s is not registered", old)
-            return
-        conf = self.get_config(new)
-        if conf is None:
-            exception(f"Cannot add {new}: File is unknown type")
-        with self.state as state:
-            state.config_files[new] = state.config_files.pop(old)
-        info("Reregistered config %s as %s", old, new)
-
-    def remove(self, config_files):
-        # FIXME: paths are checked by click now
-        # allow the arg to be instance names
-        configs_by_instance = self.get_registered_configs(instances=config_files)
-        if configs_by_instance:
-            supplied_config_files = []
-            config_files = list(configs_by_instance.keys())
-        else:
-            supplied_config_files = [abspath(cf) for cf in config_files]
-            config_files = []
-        for config_file in supplied_config_files:
-            if not self.is_registered(config_file):
-                warn("%s is not registered", config_file)
-            else:
-                config_files.append(config_file)
-        for config_file in config_files:
-            self._deregister_config_file(config_file)
-            info("Deregistered config: %s", config_file)

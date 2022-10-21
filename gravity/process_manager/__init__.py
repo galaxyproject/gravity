@@ -34,7 +34,7 @@ def _route(func, all_process_managers=False):
         configs_by_pm = {}
         pm_names = self.process_managers.keys()
         instance_names, service_names = self._instance_service_names(instance_names)
-        configs = self.config_manager.get_registered_configs(instances=instance_names or None)
+        configs = self.config_manager.get_configs(instances=instance_names or None)
         for config in configs:
             try:
                 configs_by_pm[config.process_manager].append(config)
@@ -175,7 +175,7 @@ class BaseProcessManager(BaseProcessExecutionEnvironment, metaclass=ABCMeta):
             tail_popen.wait()
         else:
             if not configs:
-                configs = self.config_manager.get_registered_configs()
+                configs = self.config_manager.get_configs()
             for config in configs:
                 log_dir = config.attribs["log_dir"]
                 if not service_names:
@@ -254,8 +254,8 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
 
 
 class ProcessManagerRouter:
-    def __init__(self, state_dir=None, config_file=None, **kwargs):
-        self.config_manager = ConfigManager(state_dir=state_dir, config_file=config_file)
+    def __init__(self, state_dir=None, config_file=None, config_manager=None, **kwargs):
+        self.config_manager = config_manager or ConfigManager(state_dir=state_dir, config_file=config_file)
         self._load_pm_modules(**kwargs)
         self._process_executor = ProcessExecutor(config_manager=self.config_manager)
 
@@ -273,11 +273,11 @@ class ProcessManagerRouter:
     def _instance_service_names(self, names):
         instance_names = []
         service_names = []
-        registered_instance_names = self.config_manager.get_registered_instance_names()
+        configured_instance_names = self.config_manager.get_configured_instance_names()
         configured_service_names = self.config_manager.get_configured_service_names()
         if names:
             for name in names:
-                if name in registered_instance_names:
+                if name in configured_instance_names:
                     instance_names.append(name)
                 elif name in configured_service_names | VALID_SERVICE_NAMES:
                     service_names.append(name)
@@ -296,7 +296,7 @@ class ProcessManagerRouter:
         elif len(instance_names) != 1:
             exception("Only zero or one instance name can be provided")
 
-        config = self.config_manager.get_registered_configs(instances=instance_names)[0]
+        config = self.config_manager.get_configs(instances=instance_names)[0]
         service_list = ", ".join(s["service_name"] for s in config["services"])
 
         if len(service_names) != 1:

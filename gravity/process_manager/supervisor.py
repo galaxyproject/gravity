@@ -6,9 +6,9 @@ import shlex
 import shutil
 import subprocess
 import time
-from os.path import exists, join
+from os.path import exists, expanduser, join
 
-from gravity.io import debug, error, exception, info, warn
+from gravity.io import debug, error, info, warn
 from gravity.process_manager import BaseProcessManager
 from gravity.settings import ProcessManager
 from gravity.state import GracefulMethod
@@ -69,6 +69,10 @@ SUPERVISORD_GROUP_TEMPLATE = """;
 programs = {programs}
 """
 
+DEFAULT_STATE_DIR = expanduser(join("~", ".config", "galaxy-gravity"))
+if "XDG_CONFIG_HOME" in os.environ:
+    DEFAULT_STATE_DIR = join(os.environ["XDG_CONFIG_HOME"], "galaxy-gravity")
+
 
 class SupervisorProcessManager(BaseProcessManager):
 
@@ -77,14 +81,14 @@ class SupervisorProcessManager(BaseProcessManager):
     def __init__(self, foreground=False, **kwargs):
         super().__init__(**kwargs)
 
-        if not self.config_manager.state_dir:
-            if not self.config_manager.single_instance:
-                # it shouldn't be possible to have the global state_dir as None and multiple instances configured
-                exception("Cannot configure multiple instances without setting a Gravity state dir")
-            else:
-                state_dir = self.config_manager.get_registered_configs()[0].state_dir
-        else:
+        if self.config_manager.instance_count > 1:
             state_dir = self.config_manager.state_dir
+            if not state_dir:
+                state_dir = DEFAULT_STATE_DIR
+                info(f"Supervisor configuration will be stored in {state_dir}, set --state-dir ($GRAVITY_STATE_DIR) "
+                     "to override")
+        else:
+            state_dir = self.config_manager.get_config().state_dir
 
         self.supervisord_exe = which("supervisord")
         self.supervisor_state_dir = join(state_dir, "supervisor")
@@ -220,7 +224,7 @@ class SupervisorProcessManager(BaseProcessManager):
 
     def _remove_invalid_configs(self, valid_configs=None):
         if not valid_configs:
-            valid_configs = self.config_manager.get_registered_configs(process_manager=self.name)
+            valid_configs = self.config_manager.get_configs(process_manager=self.name)
         valid_names = [c.instance_name for c in valid_configs]
         valid_instance_dirs = [f"{name}.d" for name in valid_names]
         valid_group_confs = []
