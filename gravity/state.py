@@ -234,8 +234,8 @@ class GalaxyGunicornService(Service):
         environment.update(self.settings.get("environment", {}))
         return environment
 
-    def is_ready(self, attribs, format_vars):
-        bind = self.get_command_arguments(attribs, format_vars)["bind"]
+    def is_ready(self, format_vars):
+        bind = self.get_command_arguments(format_vars)["bind"]
         gravity.io.debug(f"#### BIND! {bind}")
         http_check(bind, "/api/version")
         gravity.io.debug(f"#### CHECK OK! {bind}")

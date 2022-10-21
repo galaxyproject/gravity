@@ -37,6 +37,10 @@ def _route(func, all_process_managers=False):
         instance_names, service_names = self._instance_service_names(instance_names)
         configs = self.config_manager.get_configs(instances=instance_names or None)
         for config in configs:
+            for service in config.services:
+                # ensure all services have format vars set before passed to the routed function - maybe this is
+                # inefficient though? could add a "route_with_format_vars" if needed
+                service.format_vars = self.process_managers[config.process_manager].service_format_vars(config, service)
             try:
                 configs_by_pm[config.process_manager].append(config)
             except KeyError:
@@ -96,11 +100,10 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
             "virtualenv_bin": virtualenv_bin,
             "gravity_data_dir": config.gravity_data_dir,
         }
-        service_settings = service.settings
-        instance_count = service_settings.get("instance_count", 1)
-        format_vars["settings"] = service_settings
+        instance_count = service.settings.get("instance_count", 1)
+        format_vars["settings"] = service.settings
         format_vars["service_instance_count"] = instance_count
-        format_vars["service_instance_number_start"] = service_settings.get("instance_number_start", 0)
+        format_vars["service_instance_number_start"] = service.settings.get("instance_number_start", 0)
 
         # update here from PM overrides
         format_vars.update(pm_format_vars)
@@ -128,6 +131,8 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
             format_vars["command"] = f"{galaxyctl} --config-file {config_file} exec{instance_number_opt {config.instance_name} {service.service_name}"
             environment = {}
         format_vars["environment"] = self._service_environment_formatter(environment, format_vars)
+
+        service.format_vars = format_vars
 
         return format_vars
 
@@ -166,6 +171,7 @@ class BaseProcessManager(BaseProcessExecutionEnvironment, metaclass=ABCMeta):
             return False
 
     def follow(self, configs=None, service_names=None, quiet=False):
+        # FIXME: broken
         # supervisor has a built-in tail command but it only works on a single log file. `galaxyctl supervisorctl tail
         # ...` can be used if desired, though
         if not self.tail:
@@ -240,7 +246,7 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
 
         # if this is an instance of a service, we need to ensure that instance_number is formatted in as needed
         exec_format_vars = {}
-        service_settings = service.get_settings(config.attribs, {})
+        service_settings = service.get_settings()
         instance_count = service_settings.get("instance_count", 1)
         if service.supports_multiple_instances and instance_count > 1:
             msg = f"Cannot exec '{service_name}': This service is configured to use multiple instances and "
