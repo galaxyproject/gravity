@@ -1,5 +1,6 @@
 import json
 import os
+import time
 import string
 from pathlib import Path
 
@@ -148,6 +149,12 @@ def test_update_force(galaxy_yml, default_config_manager, process_manager_name):
     assert gunicorn_conf_path.stat().st_mtime == update_time
     with process_manager.process_manager(config_manager=default_config_manager) as pm:
         pm.update(force=True)
+    for i in range(0, 10):
+        # this sprodically returns the old mtime if run immediately after removal, seems there is some kind of attribute
+        # caching somewhere?
+        if gunicorn_conf_path.stat().st_mtime != update_time:
+            break
+        time.sleep(0.25)
     assert gunicorn_conf_path.stat().st_mtime != update_time
 
 
