@@ -102,10 +102,6 @@ class SupervisorProcessManager(BaseProcessManager):
             os.makedirs(self.supervisord_conf_dir)
 
     @property
-    def use_group(self):
-        return not self.config_manager.single_instance
-
-    @property
     def log_file(self):
         return join(self.supervisor_state_dir, "supervisord.log")
 
@@ -157,7 +153,7 @@ class SupervisorProcessManager(BaseProcessManager):
             self.__supervisord_popen and self.__supervisord_popen.wait()
 
     def _service_program_name(self, instance_name, service):
-        if self.use_group:
+        if self._use_instance_name:
             return f"{instance_name}_{service['config_type']}_{service['service_type']}_{service['service_name']}"
         else:
             return service["service_name"]
@@ -170,7 +166,7 @@ class SupervisorProcessManager(BaseProcessManager):
         supervisor_format_vars = {
             "log_dir": attribs["log_dir"],
             "log_file": self._service_log_file(attribs["log_dir"], program_name),
-            "process_name_opt": f"process_name    = {service['service_name']}" if self.use_group else "",
+            "process_name_opt": f"process_name    = {service['service_name']}" if self._use_instance_name else "",
         }
 
         format_vars = self._service_format_vars(config, service, program_name, supervisor_format_vars)
@@ -204,7 +200,7 @@ class SupervisorProcessManager(BaseProcessManager):
 
         # TODO: test group mode
         group_conf = join(self.supervisord_conf_dir, f"group_{instance_name}.conf")
-        if self.use_group:
+        if self._use_instance_name:
             format_vars = {"instance_name": instance_name, "programs": ",".join(programs)}
             contents = SUPERVISORD_GROUP_TEMPLATE.format(**format_vars)
             self._update_file(group_conf, contents, instance_name, "supervisor group")
@@ -229,7 +225,7 @@ class SupervisorProcessManager(BaseProcessManager):
         valid_names = [c.instance_name for c in valid_configs]
         valid_instance_dirs = [f"{name}.d" for name in valid_names]
         valid_group_confs = []
-        if self.use_group:
+        if self._use_instance_name:
             valid_group_confs = [f"group_{name}.conf" for name in valid_names]
         for entry in os.listdir(self.supervisord_conf_dir):
             path = join(self.supervisord_conf_dir, entry)
@@ -248,7 +244,7 @@ class SupervisorProcessManager(BaseProcessManager):
                     program_name = self._service_program_name(config.instance_name, service)
                     self.supervisorctl(op, program_name)
             else:
-                target = f"{config.instance_name}:*" if self.use_group else "all"
+                target = f"{config.instance_name}:*" if self._use_instance_name else "all"
                 self.supervisorctl(op, target)
 
     def __reload_graceful(self, configs, service_names):

@@ -12,7 +12,7 @@ from functools import partial, wraps
 
 from gravity.config_manager import ConfigManager
 from gravity.io import debug, exception, info, warn
-from gravity.settings import ServiceCommandStyle
+from gravity.settings import DEFAULT_INSTANCE_NAME, ServiceCommandStyle
 from gravity.state import VALID_SERVICE_NAMES
 from gravity.util import which
 
@@ -133,6 +133,11 @@ class BaseProcessManager(BaseProcessExecutionEnvironment, metaclass=ABCMeta):
     def __init__(self, *args, foreground=False, **kwargs):
         super().__init__(*args, **kwargs)
         self._service_changes = None
+
+    @property
+    def _use_instance_name(self):
+        return ((not self.config_manager.single_instance)
+                or self.config_manager.get_config().instance_name != DEFAULT_INSTANCE_NAME)
 
     def _file_needs_update(self, path, contents):
         """Update if contents differ"""

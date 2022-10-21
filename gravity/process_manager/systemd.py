@@ -72,10 +72,6 @@ class SystemdProcessManager(BaseProcessManager):
             unit_path = "/etc/systemd/system" if not self.user_mode else os.path.expanduser("~/.config/systemd/user")
         return unit_path
 
-    @property
-    def __use_instance(self):
-        return not self.config_manager.single_instance
-
     def __systemctl(self, *args, ignore_rc=None, capture=False, **kwargs):
         args = list(args)
         call = subprocess.check_call
@@ -115,7 +111,7 @@ class SystemdProcessManager(BaseProcessManager):
 
     def __unit_name(self, instance_name, service, unit_type="service"):
         unit_name = f"{service['config_type']}"
-        if self.__use_instance:
+        if self._use_instance_name:
             unit_name += f"-{instance_name}"
         if unit_type == "service":
             unit_name += f"-{service['service_name']}"
@@ -139,7 +135,7 @@ class SystemdProcessManager(BaseProcessManager):
         elif not virtualenv_dir:
             exception("The `virtualenv` Gravity config option must be set when using the systemd process manager")
 
-        if self.__use_instance:
+        if self._use_instance_name:
             description = f"{config['config_type'].capitalize()} {instance_name} {program_name}"
         else:
             description = f"{config['config_type'].capitalize()} {program_name}"
@@ -211,7 +207,7 @@ class SystemdProcessManager(BaseProcessManager):
             "systemd_description": config["config_type"].capitalize(),
             "systemd_target_wants": " ".join(service_units),
         }
-        if self.__use_instance:
+        if self._use_instance_name:
             format_vars["systemd_description"] += f" {instance_name}"
         contents = SYSTEMD_TARGET_TEMPLATE.format(**format_vars)
         updated = False
@@ -319,7 +315,7 @@ class SystemdProcessManager(BaseProcessManager):
 
     def shutdown(self):
         """ """
-        if self.__use_instance:
+        if self._use_instance_name:
             configs = self.config_manager.get_configs(process_manager=self.name)
             self.__systemctl("stop", *[f"galaxy-{c.instance_name}.target" for c in configs])
         else:
