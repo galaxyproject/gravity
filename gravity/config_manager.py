@@ -1,6 +1,7 @@
 """ Galaxy Process Management superclass and utilities
 """
 import contextlib
+import glob
 import logging
 import os
 import xml.etree.ElementTree as elementtree
@@ -41,8 +42,9 @@ class ConfigManager(object):
 
         debug(f"Gravity state dir: {state_dir}")
 
-        if config_file is not None:
-            self.load_config_file(config_file)
+        if config_file:
+            for cf in config_file:
+                self.load_config_file(cf)
         else:
             self.auto_load()
 
@@ -366,12 +368,23 @@ class ConfigManager(object):
 
     def auto_load(self):
         """Attempt to automatically load a config file if none are loaded."""
-        if self.instance_count == 0:
-            if os.environ.get("GALAXY_CONFIG_FILE"):
-                configs = [os.environ["GALAXY_CONFIG_FILE"]]
-            else:
-                configs = (os.path.join("config", "galaxy.yml"), os.path.join("config", "galaxy.yml.sample"))
-            for config in configs:
-                if exists(config):
-                    self.load_config_file(abspath(config))
+        load_all = False
+        if self.instance_count != 0:
+            return
+        if os.environ.get("GALAXY_CONFIG_FILE"):
+            configs = [os.environ["GALAXY_CONFIG_FILE"]]
+        elif self.is_root:
+            load_all = True
+            configs = (
+                "/etc/galaxy/gravity.yml",
+                "/etc/galaxy/galaxy.yml",
+                *glob.glob("/etc/galaxy/gravity.d/*.yml"),
+                *glob.glob("/etc/galaxy/gravity.d/*.yaml"),
+            )
+        else:
+            configs = (os.path.join("config", "galaxy.yml"), os.path.join("config", "galaxy.yml.sample"))
+        for config in configs:
+            if exists(config):
+                self.load_config_file(abspath(config))
+                if not load_all:
                     return

@@ -275,11 +275,11 @@ class Settings(BaseSettings):
     """
 
     process_manager: ProcessManager = Field(
-        ProcessManager.supervisor,
+        None,
         description="""
 Process manager to use.
-``supervisor`` is the default process manager.
-``systemd`` is also supported.
+``supervisor`` is the default process manager when Gravity is invoked as a non-root user.
+``systemd`` is the default when Gravity is invoked as root.
 """)
 
     service_command_style: ServiceCommandStyle = Field(
@@ -376,6 +376,15 @@ See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defi
                 raise ValueError("galaxy_user is required when running as root")
             elif not is_systemd:
                 raise ValueError("Gravity cannot be run as root unless using the systemd process manager")
+        return v
+
+    @validator("process_manager")
+    def _process_manager_systemd_if_root(cls, v, values):
+        if v is None:
+            if os.geteuid() == 0:
+                v = ProcessManager.systemd.value
+            else:
+                v = ProcessManager.supervisor.value
         return v
 
     class Config:

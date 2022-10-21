@@ -236,7 +236,7 @@ class SystemdProcessManager(BaseProcessManager):
 
         # FIXME: should use config_type, but that's per-service
         _present_configs = filter(
-            lambda f: f.startswith("galaxy-") and (f.endswith(".service") or f.endswith(".target")),
+            lambda f: (f.startswith("galaxy-") and (f.endswith(".service") or f.endswith(".target")) or f == "galaxy.target"),
             os.listdir(self.__systemd_unit_dir))
         present_configs = set([os.path.join(self.__systemd_unit_dir, f) for f in _present_configs])
 

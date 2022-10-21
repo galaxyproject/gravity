@@ -18,6 +18,7 @@ def config_file_option():
         "-c",
         "--config-file",
         type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+        multiple=True,
         help="Gravity (or Galaxy) config file to operate on. Can also be set with $GRAVITY_CONFIG_FILE or $GALAXY_CONFIG_FILE",
     )
 
