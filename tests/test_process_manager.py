@@ -146,15 +146,12 @@ def test_update_force(galaxy_yml, default_config_manager, process_manager_name):
     update_time = gunicorn_conf_path.stat().st_mtime
     with process_manager.process_manager(config_manager=default_config_manager) as pm:
         pm.update()
+    # the linux kernel time cache is only updated on timer interrupts, in my testing that's around 4ms but can be larger
+    # depending on many factors, so introduce a healthy delay to ensure the rewrite happens after the next interrupt
+    time.sleep(0.1)
     assert gunicorn_conf_path.stat().st_mtime == update_time
     with process_manager.process_manager(config_manager=default_config_manager) as pm:
         pm.update(force=True)
-    for i in range(0, 10):
-        # this sprodically returns the old mtime if run immediately after removal, seems there is some kind of attribute
-        # caching somewhere?
-        if gunicorn_conf_path.stat().st_mtime != update_time:
-            break
-        time.sleep(0.25)
     assert gunicorn_conf_path.stat().st_mtime != update_time
 
 
