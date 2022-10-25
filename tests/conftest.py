@@ -73,10 +73,15 @@ def state_dir(monkeypatch):
         except Exception:
             pass
         shutil.rmtree(directory)
-        try:
-            list(map(os.unlink, glob.glob(os.path.join(unit_path, "galaxy*"))))
-        except Exception:
-            pass
+        unit_paths = glob.glob(os.path.join(unit_path, "galaxy*"))
+        if unit_paths:
+            units = list(map(os.path.basename, unit_paths))
+            try:
+                subprocess.check_call(["systemctl", "--user", "stop", *units])
+                list(map(os.unlink, unit_paths))
+                subprocess.check_call(["systemctl", "--user", "daemon-reload"])
+            except Exception:
+                subprocess.check_call(["systemctl", "--user", "list-units", "--all", "galaxy*"])
 
 
 @pytest.fixture
@@ -114,6 +119,7 @@ another_free_port = free_port
 def startup_config(galaxy_virtualenv, free_port):
     return {
         'gravity': {
+            'service_command_style': 'direct',
             'virtualenv': galaxy_virtualenv,
             'gunicorn': {
                 'bind': f'localhost:{free_port}'}
@@ -128,6 +134,7 @@ def startup_config(galaxy_virtualenv, free_port):
 def reports_config(galaxy_root_dir, galaxy_virtualenv, free_port):
     return {
         'gravity': {
+            'service_command_style': 'direct',
             'virtualenv': galaxy_virtualenv,
             'gunicorn': {'enable': False},
             'celery': {
@@ -148,6 +155,7 @@ def non_default_config():
     return {
         'galaxy': None,
         'gravity': {
+            'service_command_style': 'direct',
             'gunicorn': {
                 'bind': 'localhost:8081',
                 'environment': {'FOO': 'foo'}

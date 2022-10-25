@@ -110,23 +110,22 @@ class SystemdProcessManager(BaseProcessManager):
         pass
 
     def __unit_name(self, instance_name, service, unit_type="service"):
-        unit_name = f"{service['config_type']}"
+        unit_name = f"{service.config_type}"
         if self._use_instance_name:
             unit_name += f"-{instance_name}"
         if unit_type == "service":
-            unit_name += f"-{service['service_name']}"
+            unit_name += f"-{service.service_name}"
         unit_name += f".{unit_type}"
         return unit_name
 
     def __update_service(self, config, service, instance_name):
-        attribs = config.attribs
-        program_name = service["service_name"]
+        program_name = service.service_name
         unit_name = self.__unit_name(instance_name, service)
 
         # under supervisor we expect that gravity is installed in the galaxy venv and the venv is active when gravity
         # runs, but under systemd this is not the case. we do assume $VIRTUAL_ENV is the galaxy venv if running as an
         # unprivileged user, though.
-        virtualenv_dir = attribs.get("virtualenv")
+        virtualenv_dir = config.virtualenv
         environ_virtual_env = os.environ.get("VIRTUAL_ENV")
         if not virtualenv_dir and self.user_mode and environ_virtual_env:
             warn(f"Assuming Galaxy virtualenv is value of $VIRTUAL_ENV: {environ_virtual_env}")
@@ -136,33 +135,33 @@ class SystemdProcessManager(BaseProcessManager):
             exception("The `virtualenv` Gravity config option must be set when using the systemd process manager")
 
         if self._use_instance_name:
-            description = f"{config['config_type'].capitalize()} {instance_name} {program_name}"
+            description = f"{config.config_type.capitalize()} {instance_name} {program_name}"
         else:
-            description = f"{config['config_type'].capitalize()} {program_name}"
+            description = f"{config.config_type.capitalize()} {program_name}"
+
+        memory_limit = service.settings.get("memory_limit") or config.memory_limit
+        if memory_limit:
+            memory_limit = f"MemoryLimit={memory_limit}G"
+
+        exec_reload = None
+        if service.graceful_method == GracefulMethod.SIGHUP:
+            exec_reload = "ExecReload=/bin/kill -HUP $MAINPID"
 
         # systemd-specific format vars
         systemd_format_vars = {
             "virtualenv_bin": f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}' if virtualenv_dir else "",
             "systemd_user_group": "",
-            "systemd_exec_reload": "",
-            "systemd_memory_limit": "",
+            "systemd_exec_reload": exec_reload or "",
+            "systemd_memory_limit": memory_limit or "",
             "systemd_description": description,
             "systemd_target": self.__unit_name(instance_name, config, unit_type="target"),
         }
         if not self.user_mode:
-            systemd_format_vars["systemd_user_group"] = f"User={attribs['galaxy_user']}"
-            if attribs["galaxy_group"] is not None:
-                systemd_format_vars["systemd_user_group"] += f"\nGroup={attribs['galaxy_group']}"
-
-        if service.get_graceful_method(attribs) == GracefulMethod.SIGHUP:
-            systemd_format_vars["systemd_exec_reload"] = "ExecReload=/bin/kill -HUP $MAINPID"
+            systemd_format_vars["systemd_user_group"] = f"User={config.galaxy_user}"
+            if config.galaxy_group is not None:
+                systemd_format_vars["systemd_user_group"] += f"\nGroup={config.galaxy_group}"
 
         format_vars = self._service_format_vars(config, service, program_name, systemd_format_vars)
-
-        # this is done after the superclass formatting since it accesses service settings
-        memory_limit = format_vars["settings"].get("memory_limit") or attribs["memory_limit"]
-        if memory_limit:
-            format_vars["systemd_memory_limit"] = f"MemoryLimit={memory_limit}G"
 
         if not format_vars["command"].startswith("/"):
             format_vars["command"] = f"{format_vars['virtualenv_bin']}{format_vars['command']}"
@@ -182,7 +181,7 @@ class SystemdProcessManager(BaseProcessManager):
 
     def _process_config(self, config, clean=False, **kwargs):
         """ """
-        instance_name = config["instance_name"]
+        instance_name = config.instance_name
         intended_configs = set()
 
         try:
@@ -192,7 +191,7 @@ class SystemdProcessManager(BaseProcessManager):
                 raise
 
         service_units = []
-        for service in config["services"]:
+        for service in config.services:
             if clean:
                 intended_configs.add(os.path.join(self.__systemd_unit_dir, self.__unit_name(instance_name, service)))
             else:
@@ -204,7 +203,7 @@ class SystemdProcessManager(BaseProcessManager):
         target_unit_name = self.__unit_name(instance_name, config, unit_type="target")
         target_conf = os.path.join(self.__systemd_unit_dir, target_unit_name)
         format_vars = {
-            "systemd_description": config["config_type"].capitalize(),
+            "systemd_description": config.config_type.capitalize(),
             "systemd_target_wants": " ".join(service_units),
         }
         if self._use_instance_name:
@@ -258,7 +257,7 @@ class SystemdProcessManager(BaseProcessManager):
                 if not include_services:
                     services = []
             elif service_names:
-                services = [s for s in config.services if s["service_name"] in service_names]
+                services = [s for s in config.services if s.service_name in service_names]
             unit_names.extend([self.__unit_name(config.instance_name, s) for s in services])
         return unit_names
 

@@ -1,11 +1,21 @@
 """ Classes to represent and manipulate gravity's stored configuration and
 state data.
 """
+from __future__ import annotations
 import enum
 import os
 import sys
+from typing import Any, Dict, List, Optional
 
-from gravity.util import AttributeDict
+from pydantic import BaseModel, validator
+
+import gravity.io
+from gravity.settings import (
+    AppServer,
+    ProcessManager,
+    ServiceCommandStyle,
+)
+from gravity.util import classproperty
 
 
 DEFAULT_GALAXY_ENVIRONMENT = {
@@ -15,43 +25,143 @@ DEFAULT_GALAXY_ENVIRONMENT = {
 CELERY_BEAT_DB_FILENAME = "celery-beat-schedule"
 
 
-class GracefulMethod(enum.Enum):
-    DEFAULT = 0
-    SIGHUP = 1
+def relative_to_galaxy_root(cls, v, values):
+    if not os.path.isabs(v):
+        v = os.path.abspath(os.path.join(values["galaxy_root"], v))
+    return v
 
 
-class Service(AttributeDict):
-    service_type = "service"
-    service_name = "_default_"
-    environment_from = None
-    settings_from = None
-    default_environment = {}
-    add_virtualenv_to_path = False
-    graceful_method = GracefulMethod.DEFAULT
-    command_arguments = {}
+class GracefulMethod(str, enum.Enum):
+    DEFAULT = "default"
+    SIGHUP = "sighup"
+
+
+class ConfigFile(BaseModel):
+    config_type: str
+    gravity_config_file: str
+    galaxy_config_file: str
+    instance_name: str
+    process_manager: ProcessManager
+    service_command_style: ServiceCommandStyle
+    app_server: AppServer
+    virtualenv: Optional[str]
+    galaxy_infrastructure_url: str
+    galaxy_root: Optional[str]
+    galaxy_user: Optional[str]
+    galaxy_group: Optional[str]
+    umask: Optional[str]
+    memory_limit: Optional[int]
+    gravity_data_dir: str
+    log_dir: str
+    services: List[Service] = []
+
+    @property
+    def galaxy_version(self):
+        galaxy_version_file = os.path.join(self.galaxy_root, "lib", "galaxy", "version.py")
+        with open(galaxy_version_file) as fh:
+            locs = {}
+            exec(fh.read(), {}, locs)
+            return locs["VERSION"]
+
+    @validator("galaxy_root")
+    def _galaxy_root_required(cls, v, values):
+        if v is None:
+            galaxy_config_file = values["galaxy_config_file"]
+            if os.environ.get("GALAXY_ROOT_DIR"):
+                v = os.path.abspath(os.environ["GALAXY_ROOT_DIR"])
+            elif os.path.exists(os.path.join(os.path.dirname(galaxy_config_file), os.pardir, "lib", "galaxy")):
+                v = os.path.abspath(os.path.join(os.path.dirname(galaxy_config_file), os.pardir))
+            elif galaxy_config_file.endswith(os.path.join("galaxy", "config", "sample", "galaxy.yml.sample")):
+                v = os.path.abspath(os.path.join(os.path.dirname(galaxy_config_file), os.pardir, os.pardir, os.pardir, os.pardir))
+            else:
+                gravity.io.exception(
+                    "Cannot locate Galaxy root directory: set $GALAXY_ROOT_DIR, the Gravity `galaxy_root` option, or "
+                    "`root' in the Galaxy config")
+        return v
+
+    _validate_gravity_data_dir = validator("gravity_data_dir", allow_reuse=True)(relative_to_galaxy_root)
+    _validate_log_dir = validator("log_dir", allow_reuse=True)(relative_to_galaxy_root)
+
+    def get_service(self, service_name):
+        return [s for s in self.services if s.service_name == service_name][0]
+
+    # this worked for me until it didn't, so we set exclude on the Service instead
+    # def dict(self, *args, **kwargs):
+    #     exclude = kwargs.pop("exclude", None) or {}
+    #     exclude["services"] = {-1: {"config", "service_settings"}}
+    #     return super().dict(*args, exclude=exclude, **kwargs)
+
+
+class Service(BaseModel):
+    config: ConfigFile
+    # unfortunately as a class attribute this is now excluded from dict()
+    _service_type: str = "service"
+    service_name: str = "_default_"
+    service_settings: Dict[str, Any]
+
+    settings: Dict[str, Any] = {}
+
+    config_type: str = None
+
+    _default_environment: Dict[str, str] = {}
+    _settings_from: Optional[str] = None
+    _graceful_method: GracefulMethod = GracefulMethod.DEFAULT
+    _add_virtualenv_to_path = False
+    _command_arguments: Dict[str, str] = {}
+    _command_template: str = None
 
     def __init__(self, *args, **kwargs):
-        super(Service, self).__init__(*args, **kwargs)
-        if "service_type" not in kwargs:
-            self["service_type"] = self.__class__.service_type
-        if "service_name" not in kwargs:
-            self["service_name"] = self.__class__.service_name
+        super().__init__(*args, **kwargs)
+        self.config_type = self.config.config_type
+        # this ensures it's included in dict()
+        self.settings = self.service_settings[self.settings_from].copy()
+
+    # these are class "properties" because they are accessed by validators
+    @classproperty
+    def service_type(cls):
+        return cls._service_type
+
+    @classproperty
+    def settings_from(cls):
+        return cls._settings_from or cls.service_type
+
+    @classproperty
+    def default_environment(cls):
+        return cls._default_environment.copy()
+
+    # @property
+    # def settings(self):
+    #     return self.service_settings[self.settings_from].copy()
+
+    @property
+    def environment(self):
+        environment = self.default_environment
+        environment.update(self.settings.get("environment") or {})
+        return environment
+
+    @property
+    def graceful_method(self):
+        return self._graceful_method
+
+    @property
+    def add_virtualenv_to_path(self):
+        return self._add_virtualenv_to_path
+
+    @property
+    def command_arguments(self):
+        return self._command_arguments
+
+    @property
+    def command_template(self):
+        return self._command_template
 
     def __eq__(self, other):
-        return self["config_type"] == other["config_type"] and self["service_type"] == other["service_type"] and self["service_name"] == other["service_name"]
+        return self.config_type == other.config_type and self.service_type == other.service_type and self.service_name == other.service_name
 
-    def full_match(self, other):
-        return set(self.keys()) == set(other.keys()) and all([self[k] == other[k] for k in self if not k.startswith("_")])
-
-    def get_graceful_method(self, attribs):
-        return self.graceful_method
-
-    def get_environment(self):
-        return self.default_environment.copy()
-
-    def get_command_arguments(self, attribs, format_vars):
+    def get_command_arguments(self, format_vars):
+        """Convert settings into their command line arguments."""
         rval = {}
-        for setting, value in attribs.get(self.settings_from or self.service_type, {}).items():
+        for setting, value in self.settings.items():
             if setting in self.command_arguments:
                 # FIXME: this truthiness testing of value is probably not the best
                 if value:
@@ -62,215 +172,206 @@ class Service(AttributeDict):
                 rval[setting] = value
         return rval
 
-    def get_settings(self, attribs, format_vars):
-        return attribs[self.settings_from or self.service_type].copy()
+    def dict(self, *args, **kwargs):
+        exclude = kwargs.pop("exclude", None) or {}
+        exclude = {"config", "service_settings"}
+        return super().dict(*args, exclude=exclude, **kwargs)
 
 
 class GalaxyGunicornService(Service):
-    service_type = "gunicorn"
+    _service_type = "gunicorn"
     service_name = "gunicorn"
-    default_environment = DEFAULT_GALAXY_ENVIRONMENT
-    command_arguments = {
+    _default_environment = DEFAULT_GALAXY_ENVIRONMENT
+    _command_arguments = {
         "preload": "--preload"
     }
-    command_template = "{virtualenv_bin}gunicorn 'galaxy.webapps.galaxy.fast_factory:factory()'" \
-                       " --timeout {settings[timeout]}" \
-                       " --pythonpath lib" \
-                       " -k galaxy.webapps.galaxy.workers.Worker" \
-                       " -b {settings[bind]}" \
-                       " --workers={settings[workers]}" \
-                       " --config python:galaxy.web_stack.gunicorn_config" \
-                       " {command_arguments[preload]}" \
-                       " {settings[extra_args]}"
+    _command_template = "{virtualenv_bin}gunicorn 'galaxy.webapps.galaxy.fast_factory:factory()'" \
+                        " --timeout {settings[timeout]}" \
+                        " --pythonpath lib" \
+                        " -k galaxy.webapps.galaxy.workers.Worker" \
+                        " -b {settings[bind]}" \
+                        " --workers={settings[workers]}" \
+                        " --config python:galaxy.web_stack.gunicorn_config" \
+                        " {command_arguments[preload]}" \
+                        " {settings[extra_args]}"
 
-    # TODO: services should maybe have access to settings or attribs, and should maybe template their own command lines
-    def get_graceful_method(self, attribs):
-        if attribs["gunicorn"].get("preload"):
+    @validator("service_settings")
+    def _normalize_settings(cls, v, values):
+        # TODO: should be copy?
+        settings = v[cls.settings_from]
+        if settings["preload"] is None:
+            settings["preload"] = True
+        return v
+
+    @property
+    def graceful_method(self):
+        if self.settings.get("preload"):
             return GracefulMethod.DEFAULT
         else:
             return GracefulMethod.SIGHUP
 
-    def get_environment(self):
+    @property
+    def environment(self):
         # Works around https://github.com/galaxyproject/galaxy/issues/11821
-        environment = self.default_environment.copy()
+        environment = self.default_environment
         if sys.platform == 'darwin':
             environment["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
+        environment.update(self.settings.get("environment", {}))
         return environment
 
 
 class GalaxyUnicornHerderService(Service):
-    service_type = "unicornherder"
+    _service_type = "unicornherder"
     service_name = "unicornherder"
-    environment_from = "gunicorn"
-    settings_from = "gunicorn"
-    graceful_method = GracefulMethod.SIGHUP
-    default_environment = DEFAULT_GALAXY_ENVIRONMENT
-    command_arguments = GalaxyGunicornService.command_arguments
-    command_template = "{virtualenv_bin}unicornherder --" \
-                       " 'galaxy.webapps.galaxy.fast_factory:factory()'" \
-                       " --timeout {settings[timeout]}" \
-                       " --pythonpath lib" \
-                       " -k galaxy.webapps.galaxy.workers.Worker" \
-                       " -b {settings[bind]}" \
-                       " --workers={settings[workers]}" \
-                       " --config python:galaxy.web_stack.gunicorn_config" \
-                       " {command_arguments[preload]}" \
-                       " {settings[extra_args]}"
+    _settings_from = "gunicorn"
+    _graceful_method = GracefulMethod.SIGHUP
+    _default_environment = DEFAULT_GALAXY_ENVIRONMENT
+    _command_template = "{virtualenv_bin}unicornherder --" \
+                        " 'galaxy.webapps.galaxy.fast_factory:factory()'" \
+                        " --timeout {settings[timeout]}" \
+                        " --pythonpath lib" \
+                        " -k galaxy.webapps.galaxy.workers.Worker" \
+                        " -b {settings[bind]}" \
+                        " --workers={settings[workers]}" \
+                        " --config python:galaxy.web_stack.gunicorn_config" \
+                        " {command_arguments[preload]}" \
+                        " {settings[extra_args]}"
 
-    def get_environment(self):
-        environment = self.default_environment.copy()
-        if sys.platform == 'darwin':
-            environment["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
-        environment["GALAXY_CONFIG_LOG_DESTINATION"] = "{log_dir}/gunicorn.log"
-        return environment
+    @validator("service_settings")
+    def _normalize_settings(cls, v, values):
+        # TODO: should be copy?
+        settings = v[cls.settings_from]
+        if settings["preload"] is None:
+            settings["preload"] = False
+        return v
+
+    environment = GalaxyGunicornService.environment
+    command_arguments = GalaxyGunicornService.command_arguments
 
 
 class GalaxyCeleryService(Service):
-    service_type = "celery"
+    _service_type = "celery"
     service_name = "celery"
-    default_environment = DEFAULT_GALAXY_ENVIRONMENT
-    command_template = "{virtualenv_bin}celery" \
-                       " --app galaxy.celery worker" \
-                       " --concurrency {settings[concurrency]}" \
-                       " --loglevel {settings[loglevel]}" \
-                       " --pool {settings[pool]}" \
-                       " --queues {settings[queues]}" \
-                       " {settings[extra_args]}"
+    _default_environment = DEFAULT_GALAXY_ENVIRONMENT
+    _command_template = "{virtualenv_bin}celery" \
+                        " --app galaxy.celery worker" \
+                        " --concurrency {settings[concurrency]}" \
+                        " --loglevel {settings[loglevel]}" \
+                        " --pool {settings[pool]}" \
+                        " --queues {settings[queues]}" \
+                        " {settings[extra_args]}"
 
 
 class GalaxyCeleryBeatService(Service):
-    service_type = "celery-beat"
+    _service_type = "celery-beat"
     service_name = "celery-beat"
-    settings_from = "celery"
-    default_environment = DEFAULT_GALAXY_ENVIRONMENT
-    command_template = "{virtualenv_bin}celery" \
-                       " --app galaxy.celery" \
-                       " beat" \
-                       " --loglevel {settings[loglevel]}" \
-                       " --schedule {gravity_data_dir}/" + CELERY_BEAT_DB_FILENAME
+    _settings_from = "celery"
+    _default_environment = DEFAULT_GALAXY_ENVIRONMENT
+    _command_template = "{virtualenv_bin}celery" \
+                        " --app galaxy.celery" \
+                        " beat" \
+                        " --loglevel {settings[loglevel]}" \
+                        " --schedule {gravity_data_dir}/" + CELERY_BEAT_DB_FILENAME
 
 
 class GalaxyGxItProxyService(Service):
-    service_type = "gx-it-proxy"
+    _service_type = "gx-it-proxy"
     service_name = "gx-it-proxy"
-    default_environment = {
+    _default_environment = {
         "npm_config_yes": "true",
     }
     # the npx shebang is $!/usr/bin/env node, so $PATH has to be correct
-    add_virtualenv_to_path = True
-    command_arguments = {
+    _add_virtualenv_to_path = True
+    _command_arguments = {
+        "verbose": "--verbose",
         "forward_ip": "--forwardIP {settings[forward_ip]}",
         "forward_port": "--forwardPort {settings[forward_port]}",
         "reverse_proxy": "--reverseProxy",
     }
-    command_template = "{virtualenv_bin}npx gx-it-proxy --ip {settings[ip]} --port {settings[port]}" \
-                       " --sessions {settings[sessions]} {settings[verbose]}" \
-                       " {command_arguments[forward_ip]} {command_arguments[forward_port]}" \
-                       " {command_arguments[reverse_proxy]}"
+    _command_template = "{virtualenv_bin}npx gx-it-proxy --ip {settings[ip]} --port {settings[port]}" \
+                        " --sessions {settings[sessions]} {command_arguments[verbose]}" \
+                        " {command_arguments[forward_ip]} {command_arguments[forward_port]}" \
+                        " {command_arguments[reverse_proxy]}"
 
 
 class GalaxyTUSDService(Service):
-    service_type = "tusd"
+    _service_type = "tusd"
     service_name = "tusd"
-    command_template = "{settings[tusd_path]} -host={settings[host]} -port={settings[port]}" \
-                       " -upload-dir={settings[upload_dir]}" \
-                       " -hooks-http={galaxy_infrastructure_url}/api/upload/hooks" \
-                       " -hooks-http-forward-headers=X-Api-Key,Cookie {settings[extra_args]}" \
-                       " -hooks-enabled-events {settings[hooks_enabled_events]}"
+    _command_template = "{settings[tusd_path]} -host={settings[host]} -port={settings[port]}" \
+                        " -upload-dir={settings[upload_dir]}" \
+                        " -hooks-http={galaxy_infrastructure_url}/api/upload/hooks" \
+                        " -hooks-http-forward-headers=X-Api-Key,Cookie {settings[extra_args]}" \
+                        " -hooks-enabled-events {settings[hooks_enabled_events]}"
+
+    @validator("service_settings")
+    def _validate_settings(cls, v, values):
+        if not values["config"].galaxy_infrastructure_url:
+            gravity.io.exception("To run the tusd server you need to set galaxy_infrastructure_url in the galaxy section of galaxy.yml")
+        return v
 
 
 class GalaxyReportsService(Service):
-    service_type = "reports"
+    _service_type = "reports"
     service_name = "reports"
-    graceful_method = GracefulMethod.SIGHUP
-    default_environment = {
+    _graceful_method = GracefulMethod.SIGHUP
+    _default_environment = {
         "PYTHONPATH": "lib",
         "GALAXY_REPORTS_CONFIG": "{settings[config_file]}",
     }
-    command_arguments = {
+    _command_arguments = {
         "url_prefix": "--env SCRIPT_NAME={settings[url_prefix]}",
     }
-    command_template = "{virtualenv_bin}gunicorn 'galaxy.webapps.reports.fast_factory:factory()'" \
-                       " --timeout {settings[timeout]}" \
-                       " --pythonpath lib" \
-                       " -k uvicorn.workers.UvicornWorker" \
-                       " -b {settings[bind]}" \
-                       " --workers={settings[workers]}" \
-                       " --config python:galaxy.web_stack.gunicorn_config" \
-                       " {command_arguments[url_prefix]}" \
-                       " {settings[extra_args]}"
+    _command_template = "{virtualenv_bin}gunicorn 'galaxy.webapps.reports.fast_factory:factory()'" \
+                        " --timeout {settings[timeout]}" \
+                        " --pythonpath lib" \
+                        " -k uvicorn.workers.UvicornWorker" \
+                        " -b {settings[bind]}" \
+                        " --workers={settings[workers]}" \
+                        " --config python:galaxy.web_stack.gunicorn_config" \
+                        " {command_arguments[url_prefix]}" \
+                        " {settings[extra_args]}"
+
+    @validator("service_settings")
+    def _validate_settings(cls, v, values):
+        settings = v[cls.settings_from]
+        reports_config_file = settings["config_file"]
+        if not os.path.isabs(reports_config_file):
+            reports_config_file = os.path.join(os.path.dirname(values["config"]["galaxy_config_file"]), reports_config_file)
+        if not os.path.exists(reports_config_file):
+            gravity.io.exception(f"Reports enabled but reports config file does not exist: {reports_config_file}")
+        settings["config_file"] = reports_config_file
+        return v
 
 
 class GalaxyStandaloneService(Service):
-    service_type = "standalone"
+    _service_type = "standalone"
     service_name = "standalone"
-    default_start_timeout = 20
-    default_stop_timeout = 65
-    command_template = "{virtualenv_bin}python ./lib/galaxy/main.py -c {galaxy_conf} --server-name={server_name}" \
-                       " {command_arguments[attach_to_pool]}"
+    # TODO: add these to Galaxy docs, test that they are settable in all the ways they should be
+    _default_settings = {
+        "start_timeout": 20,
+        "stop_timeout": 65,
+    }
+    _command_template = "{virtualenv_bin}python ./lib/galaxy/main.py -c {galaxy_conf} --server-name={server_name}" \
+                        " {command_arguments[attach_to_pool]}"
 
-    def get_environment(self):
-        return self.get("environment") or {}
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # overwrite the default method of setting settings, we need to include defaults sinc standalone does not have
+        # gravity settings
+        self.settings = self._default_settings.copy()
+        self.settings.update(self.service_settings[self.settings_from])
 
-    def get_command_arguments(self, attribs, format_vars):
-        # full override because standalone doesn't have settings
+    def get_command_arguments(self, format_vars):
+        # full override to do the join
         command_arguments = {
             "attach_to_pool": "",
         }
-        server_pools = self.get("server_pools")
+        server_pools = self.settings.get("server_pools")
         if server_pools:
             _attach_to_pool = " ".join(f"--attach-to-pool={server_pool}" for server_pool in server_pools)
             # Insert a single leading space
             command_arguments["attach_to_pool"] = f" {_attach_to_pool}"
         return command_arguments
-
-    def get_settings(self, attribs, format_vars):
-        return {
-            "start_timeout": self.start_timeout or self.default_start_timeout,
-            "stop_timeout": self.stop_timeout or self.default_stop_timeout,
-        }
-
-
-class ConfigFile(AttributeDict):
-    persist_keys = (
-        "config_type",
-        "instance_name",
-        "galaxy_root",
-    )
-
-    def __init__(self, *args, **kwargs):
-        super(ConfigFile, self).__init__(*args, **kwargs)
-        services = []
-        for service in self.get("services", []):
-            service_class = SERVICE_CLASS_MAP.get(service["service_type"], Service)
-            services.append(service_class(**service))
-        self.services = services
-
-    @property
-    def defaults(self):
-        return {
-            "process_manager": self["process_manager"],
-            "instance_name": self["instance_name"],
-            "galaxy_root": self["galaxy_root"],
-            "log_dir": self["attribs"]["log_dir"],
-            "gunicorn":  self.gunicorn_config,
-        }
-
-    @property
-    def gunicorn_config(self):
-        # We used to store bind_address and bind_port instead of a gunicorn config key, so restore from here
-        gunicorn = self["attribs"].get("gunicorn")
-        if not gunicorn and 'bind_address' in self["attribs"]:
-            return {'bind': f'{self["attribs"]["bind_address"]}:{self["attribs"]["bind_port"]}'}
-        return gunicorn
-
-    @property
-    def galaxy_version(self):
-        galaxy_version_file = os.path.join(self["galaxy_root"], "lib", "galaxy", "version.py")
-        with open(galaxy_version_file) as fh:
-            locs = {}
-            exec(fh.read(), {}, locs)
-            return locs["VERSION"]
 
 
 def service_for_service_type(service_type):

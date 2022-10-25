@@ -36,8 +36,8 @@ def cli(ctx, instances_services, foreground, quiet=False):
         elif pm.config_manager.single_instance:
             config = pm.config_manager.get_config()
             if config.process_manager != "systemd":
-                info(f"Log files are in {config.attribs['log_dir']}")
+                info(f"Log files are in {config.log_dir}")
         else:
             for config in pm.config_manager.get_configs(instances=instances_services or None):
                 if config.process_manager != "systemd":
-                    info(f"Log files for {config.instance_name} are in {config.attribs['log_dir']}")
+                    info(f"Log files for {config.instance_name} are in {config.log_dir}")

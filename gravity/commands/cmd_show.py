@@ -1,4 +1,4 @@
-import sys
+import json
 
 import click
 
@@ -17,4 +17,4 @@ def cli(ctx, instance):
     """
     with config_manager.config_manager(**ctx.parent.cm_kwargs) as cm:
         config_data = cm.get_config(instance_name=instance)
-        config_data.dump(sys.stdout)
+        click.echo(json.dumps(config_data.dict(), indent=4))

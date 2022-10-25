@@ -7,6 +7,7 @@ import inspect
 import os
 import shlex
 import subprocess
+import sys
 from abc import ABCMeta, abstractmethod
 from functools import partial, wraps
 
@@ -78,51 +79,46 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
         return os.path.join(log_dir, program_name + ".log")
 
     def _service_program_name(self, instance_name, service):
-        return f"{instance_name}_{service['config_type']}_{service['service_type']}_{service['service_name']}"
-
-    def _service_environment(self, service, attribs):
-        environment = service.get_environment()
-        environment_from = service.environment_from
-        if not environment_from:
-            environment_from = service.service_type
-        environment.update(attribs.get(environment_from, {}).get("environment", {}))
-        return environment
+        return f"{instance_name}_{service.config_type}_{service.service_type}_{service.service_name}"
 
     def _service_format_vars(self, config, service, program_name, pm_format_vars):
-        attribs = config.attribs
-        virtualenv_dir = attribs.get("virtualenv")
+        virtualenv_dir = config.virtualenv
         virtualenv_bin = f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}' if virtualenv_dir else ""
 
         format_vars = {
-            "config_type": service["config_type"],
-            "server_name": service["service_name"],
+            "config_type": service.config_type,
+            "server_name": service.service_name,
             "program_name": program_name,
-            "galaxy_infrastructure_url": attribs["galaxy_infrastructure_url"],
-            "galaxy_umask": service.get("umask", "022"),
+            "galaxy_infrastructure_url": config.galaxy_infrastructure_url,
+            "galaxy_umask": service.settings.get("umask") or config.umask,
             "galaxy_conf": config.galaxy_config_file,
-            "galaxy_root": config["galaxy_root"],
+            "galaxy_root": config.galaxy_root,
             "virtualenv_bin": virtualenv_bin,
-            "gravity_data_dir": config["gravity_data_dir"],
+            "gravity_data_dir": config.gravity_data_dir,
         }
-        format_vars["settings"] = service.get_settings(attribs, format_vars)
+        format_vars["settings"] = service.settings
 
         # update here from PM overrides
         format_vars.update(pm_format_vars)
 
         # template the command template
         if config.service_command_style == ServiceCommandStyle.direct:
-            format_vars["command_arguments"] = service.get_command_arguments(attribs, format_vars)
+            format_vars["command_arguments"] = service.get_command_arguments(format_vars)
             format_vars["command"] = service.command_template.format(**format_vars)
 
             # template env vars
-            environment = self._service_environment(service, attribs)
+            environment = service.environment
             virtualenv_bin = format_vars["virtualenv_bin"]  # could have been changed by pm_format_vars
             if virtualenv_bin and service.add_virtualenv_to_path:
                 path = environment.get("PATH", self._service_default_path())
                 environment["PATH"] = ":".join([virtualenv_bin, path])
         else:
-            config_file = shlex.quote(config.__file__)
-            format_vars["command"] = f"galaxyctl --config-file {config_file} exec {config.instance_name} {program_name}"
+            config_file = shlex.quote(config.gravity_config_file)
+            # is there a click way to do this?
+            galaxyctl = sys.argv[0]
+            if not galaxyctl.endswith("galaxyctl"):
+                exception(f"Unable to determine galaxyctl command, sys.argv[0] is: {galaxyctl}")
+            format_vars["command"] = f"{galaxyctl} --config-file {config_file} exec {config.instance_name} {program_name}"
             environment = {}
         format_vars["environment"] = self._service_environment_formatter(environment, format_vars)
 
@@ -176,7 +172,7 @@ class BaseProcessManager(BaseProcessExecutionEnvironment, metaclass=ABCMeta):
             if not configs:
                 configs = self.config_manager.get_configs()
             for config in configs:
-                log_dir = config.attribs["log_dir"]
+                log_dir = config.log_dir
                 if not service_names:
                     for service in config.services:
                         program_name = self._service_program_name(config.instance_name, service)
@@ -233,7 +229,7 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
         return {k: v.format(**format_vars) for k, v in environment.items()}
 
     def exec(self, config, service, no_exec=False):
-        service_name = service["service_name"]
+        service_name = service.service_name
 
         # force generation of real commands
         config.service_command_style = ServiceCommandStyle.direct
@@ -296,13 +292,13 @@ class ProcessManagerRouter:
             exception("Only zero or one instance name can be provided")
 
         config = self.config_manager.get_configs(instances=instance_names)[0]
-        service_list = ", ".join(s["service_name"] for s in config["services"])
+        service_list = ", ".join(s.service_name for s in config.services)
 
         if len(service_names) != 1:
             exception(f"Exactly one service name must be provided. Configured service(s): {service_list}")
 
         service_name = service_names[0]
-        services = [s for s in config["services"] if s["service_name"] == service_name]
+        services = [s for s in config.services if s.service_name == service_name]
         if not services:
             exception(f"Service '{service_name}' is not configured. Configured service(s): {service_list}")
 

@@ -5,8 +5,6 @@ import glob
 import logging
 import os
 import xml.etree.ElementTree as elementtree
-from os import pardir
-from os.path import abspath, dirname, exists, isabs, join
 from typing import Union
 
 from yaml import safe_load
@@ -23,7 +21,7 @@ log = logging.getLogger(__name__)
 
 DEFAULT_JOB_CONFIG_FILE = "config/job_conf.xml"
 if "XDG_CONFIG_HOME" in os.environ:
-    DEFAULT_STATE_DIR = join(os.environ["XDG_CONFIG_HOME"], "galaxy-gravity")
+    DEFAULT_STATE_DIR = os.path.join(os.environ["XDG_CONFIG_HOME"], "galaxy-gravity")
 
 
 @contextlib.contextmanager
@@ -38,7 +36,10 @@ class ConfigManager(object):
 
     def __init__(self, config_file=None, state_dir=None):
         self.__configs = {}
-        self.state_dir = state_dir
+        self.state_dir = None
+        if state_dir is not None:
+            # convert from pathlib.Path
+            self.state_dir = str(state_dir)
 
         debug(f"Gravity state dir: {state_dir}")
 
@@ -93,8 +94,8 @@ class ConfigManager(object):
 
     def __load_app_config_file(self, gravity_config_file, app_config_file):
         server_section = self.galaxy_server_config_section
-        if not isabs(app_config_file):
-            app_config_file = join(dirname(gravity_config_file), app_config_file)
+        if not os.path.isabs(app_config_file):
+            app_config_file = os.path.join(os.path.dirname(gravity_config_file), app_config_file)
         try:
             with open(app_config_file) as config_fh:
                 _app_config_dict = safe_load(config_fh)
@@ -129,101 +130,78 @@ class ConfigManager(object):
         defaults = {}
         gravity_config = Settings(**recursive_update(defaults, gravity_config_dict))
 
-        config = ConfigFile()
-        config.attribs = {}
-        config.services = []
-
-        config.__file__ = gravity_config_dict["__file__"]
-        config.galaxy_config_file = app_config.get("__file__", config.__file__)
-
         if gravity_config.instance_name in self.__configs:
             error(
                 f"Galaxy instance {gravity_config.instance_name} already loaded from file: "
-                f"{self.__configs[gravity_config.instance_name].__file__}")
+                f"{self.__configs[gravity_config.instance_name].gravity_config_file}")
             exception(f"Duplicate instance name {gravity_config.instance_name}, instance names must be unique")
 
-        config.instance_name = gravity_config.instance_name
-        config.config_type = self.galaxy_server_config_section
-        config.process_manager = gravity_config.process_manager
-        config.service_command_style = gravity_config.service_command_style
-        config.attribs["galaxy_infrastructure_url"] = app_config.get("galaxy_infrastructure_url", "").rstrip("/")
-        config.attribs["app_server"] = gravity_config.app_server
-        config.attribs["virtualenv"] = gravity_config.virtualenv
-        config.attribs["gunicorn"] = gravity_config.gunicorn.dict()
-        config.attribs["tusd"] = gravity_config.tusd.dict()
-        config.attribs["celery"] = gravity_config.celery.dict()
-        config.attribs["reports"] = gravity_config.reports.dict()
-        config.attribs["handlers"] = gravity_config.handlers
-        config.attribs["galaxy_user"] = gravity_config.galaxy_user
-        config.attribs["galaxy_group"] = gravity_config.galaxy_group
-        config.attribs["memory_limit"] = gravity_config.memory_limit
+        gravity_config_file = gravity_config_dict["__file__"]
+        galaxy_config_file = app_config.get("__file__", gravity_config_file)
 
-        # shortcut for galaxy configs in the standard locations
-        config.galaxy_root = gravity_config.galaxy_root or app_config.get("root")
-        if config.galaxy_root is None:
-            if os.environ.get("GALAXY_ROOT_DIR"):
-                config.galaxy_root = abspath(os.environ["GALAXY_ROOT_DIR"])
-            elif exists(join(dirname(config.galaxy_config_file), pardir, "lib", "galaxy")):
-                config.galaxy_root = abspath(join(dirname(config.galaxy_config_file), pardir))
-            elif config.galaxy_config_file.endswith(join("galaxy", "config", "sample", "galaxy.yml.sample")):
-                config.galaxy_root = abspath(join(dirname(config.galaxy_config_file), pardir, pardir, pardir, pardir))
-            else:
-                exception(
-                    "Cannot locate Galaxy root directory: set $GALAXY_ROOT_DIR, the Gravity `galaxy_root` option, or "
-                    "`root' in the Galaxy config")
+        service_settings = {}
+        service_settings["gunicorn"] = gravity_config.gunicorn.dict()
+        service_settings["tusd"] = gravity_config.tusd.dict()
+        service_settings["celery"] = gravity_config.celery.dict()
+        service_settings["reports"] = gravity_config.reports.dict()
+
+        galaxy_root = gravity_config.galaxy_root or app_config.get("root")
 
         # TODO: document that the default state_dir is data_dir/gravity and that setting state_dir overrides this
-        data_dir = app_config.get("data_dir", "database")
-        if not isabs(data_dir):
-            data_dir = abspath(join(config.galaxy_root, data_dir))
-        config.gravity_data_dir = self.state_dir or join(data_dir, "gravity")
+        gravity_data_dir = self.state_dir or os.path.join(app_config.get("data_dir", "database"), "gravity")
+        log_dir = gravity_config.log_dir or os.path.join(gravity_data_dir, "log")
 
-        if gravity_config.log_dir is None:
-            gravity_config.log_dir = join(config.gravity_data_dir, "log")
-        config.attribs["log_dir"] = gravity_config.log_dir
+        config = ConfigFile(
+            config_type=self.galaxy_server_config_section,
+            gravity_config_file=gravity_config_file,
+            galaxy_config_file=galaxy_config_file,
+            instance_name=gravity_config.instance_name,
+            process_manager=gravity_config.process_manager,
+            service_command_style=gravity_config.service_command_style,
+            app_server=gravity_config.app_server,
+            virtualenv=gravity_config.virtualenv,
+            galaxy_infrastructure_url=app_config.get("galaxy_infrastructure_url", "").rstrip("/"),
+            galaxy_root=galaxy_root,
+            galaxy_user=gravity_config.galaxy_user,
+            galaxy_group=gravity_config.galaxy_group,
+            umask=gravity_config.umask,
+            memory_limit=gravity_config.memory_limit,
+            gravity_data_dir=gravity_data_dir,
+            log_dir=log_dir,
+        )
 
-        if gravity_config.tusd.enable and not config.attribs["galaxy_infrastructure_url"]:
-            exception("To run the tusd server you need to set galaxy_infrastructure_url in the galaxy section of galaxy.yml")
+        service_kwargs = {
+            "config": config,
+            "service_settings": service_settings,
+        }
+
         if gravity_config.gunicorn.enable:
-            if config.attribs["gunicorn"]["preload"] is None:
-                config.attribs["gunicorn"]["preload"] = config.attribs["app_server"] != "unicornherder"
-            config.services.append(service_for_service_type(config.attribs["app_server"])(config_type=config.config_type))
+            config.services.append(service_for_service_type(config.app_server)(**service_kwargs))
         if gravity_config.celery.enable:
-            config.services.append(service_for_service_type("celery")(config_type=config.config_type))
+            config.services.append(service_for_service_type("celery")(**service_kwargs))
         if gravity_config.celery.enable_beat:
-            config.services.append(service_for_service_type("celery-beat")(config_type=config.config_type))
+            config.services.append(service_for_service_type("celery-beat")(**service_kwargs))
         if gravity_config.tusd.enable:
-            config.services.append(service_for_service_type("tusd")(config_type=config.config_type))
+            config.services.append(service_for_service_type("tusd")(**service_kwargs))
         if gravity_config.reports.enable:
-            reports_config_file = config.attribs["reports"]["config_file"]
-            if not isabs(config.attribs["reports"]["config_file"]):
-                reports_config_file = join(dirname(config.galaxy_config_file), reports_config_file)
-                config.attribs["reports"]["config_file"] = reports_config_file
-            if not exists(reports_config_file):
-                exception(f"Reports enabled but reports config file does not exist: {reports_config_file}")
-            config.services.append(service_for_service_type("reports")(config_type=config.config_type))
+            config.services.append(service_for_service_type("reports")(**service_kwargs))
 
         if not app_config.get("job_config_file") and app_config.get("job_config"):
             # config embedded directly in Galaxy config
             job_config = app_config["job_config"]
         else:
             # If this is a Galaxy config, parse job_conf.xml for any *static* standalone handlers
-            # TODO: use galaxy config parsing ?
             job_config = app_config.get("job_config_file", DEFAULT_JOB_CONFIG_FILE)
-            if not isabs(job_config):
-                # FIXME: relative to root
-                job_config = abspath(join(config["galaxy_root"], job_config))
-                if not exists(job_config):
+            if not os.path.isabs(job_config):
+                job_config = os.path.abspath(os.path.join(os.path.dirname(config.galaxy_config_file), job_config))
+                if not os.path.exists(job_config):
                     job_config = None
         if config.config_type == "galaxy" and job_config:
             for handler_settings in ConfigManager.get_job_config(job_config):
                 config.services.append(service_for_service_type("standalone")(
-                    config_type=config.config_type,
-                    service_name=handler_settings["service_name"],
-                    environment=handler_settings.get("environment"),
-                    memory_limit=handler_settings.get("memory_limit"),
-                    start_timeout=handler_settings.get("start_timeout"),
-                    stop_timeout=handler_settings.get("stop_timeout")
+                    config=config,
+                    service_name=handler_settings.pop("service_name"),
+                    service_settings={"standalone": handler_settings},
                 ))
 
         # FIXME: This should imply explicit configuration of the handler assignment method. If not explicitly set, the
@@ -233,7 +211,7 @@ class ConfigManager(object):
         self.create_handler_services(gravity_config, config)
         self.create_gxit_services(gravity_config, app_config, config)
         self.__configs[config.instance_name] = config
-        debug(f"Loaded instance {config.instance_name} from Gravity config file: {config.__file__}")
+        debug(f"Loaded instance {config.instance_name} from Gravity config file: {config.gravity_config_file}")
         return config
 
     def create_handler_services(self, gravity_config: Settings, config):
@@ -242,21 +220,13 @@ class ConfigManager(object):
         # handlers, and gravity is only 1 of them.
         expanded_handlers = self.expand_handlers(gravity_config, config)
         for service_name, handler_settings in expanded_handlers.items():
-            pools = handler_settings.get('pools')
-            environment = handler_settings.get("environment")
-            # TODO: add these to Galaxy docs
-            start_timeout = handler_settings.get("start_timeout")
-            stop_timeout = handler_settings.get("stop_timeout")
-            memory_limit = handler_settings.get("memory_limit")
+            if "pools" in handler_settings:
+                handler_settings["server_pools"] = handler_settings.pop("pools")
             config.services.append(
                 service_for_service_type("standalone")(
-                    config_type=config.config_type,
+                    config=config,
                     service_name=service_name,
-                    server_pools=pools,
-                    environment=environment,
-                    start_timeout=start_timeout,
-                    stop_timeout=stop_timeout,
-                    memory_limit=memory_limit
+                    service_settings={"standalone": handler_settings},
                 ))
 
     def create_gxit_services(self, gravity_config: Settings, app_config, config):
@@ -268,9 +238,9 @@ class ConfigManager(object):
             # CWD in supervisor template is galaxy_root, so this should work for simple cases as is
             gxit_config = gravity_config.gx_it_proxy
             gxit_config.sessions = app_config.get("interactivetools_map", gxit_config.sessions)
-            gxit_config.verbose = '--verbose' if gxit_config.verbose else ''
-            config.services.append(service_for_service_type("gx-it-proxy")(config_type=config.config_type))
-        config.attribs["gx-it-proxy"] = gravity_config.gx_it_proxy.dict()
+            # technically the tusd service doesn't have access to the rest of the settings like other services do, but it doesn't need it
+            service_kwargs = dict(config=config, service_settings={"gx-it-proxy": gravity_config.gx_it_proxy.dict()})
+            config.services.append(service_for_service_type("gx-it-proxy")(**service_kwargs))
 
     @staticmethod
     def expand_handlers(gravity_config: Settings, config):
@@ -336,7 +306,7 @@ class ConfigManager(object):
         rval = []
         for instance_name, config in list(self.__configs.items()):
             if ((instances is not None and instance_name in instances) or instances is None) and (
-                (process_manager is not None and config["process_manager"] == process_manager) or process_manager is None
+                (process_manager is not None and config.process_manager == process_manager) or process_manager is None
             ):
                 rval.append(config)
         return rval
@@ -356,15 +326,15 @@ class ConfigManager(object):
     def get_configured_service_names(self):
         rval = set()
         for config in self.get_configs():
-            for service in config["services"]:
-                rval.add(service["service_name"])
+            for service in config.services:
+                rval.add(service.service_name)
         return rval
 
     def get_configured_instance_names(self):
         return list(self.__configs.keys())
 
     def get_configured_files(self):
-        return list(c["__file__"] for c in self.__configs.values())
+        return list(c.gravity_config_file for c in self.__configs.values())
 
     def auto_load(self):
         """Attempt to automatically load a config file if none are loaded."""
@@ -384,7 +354,7 @@ class ConfigManager(object):
         else:
             configs = (os.path.join("config", "galaxy.yml"), os.path.join("config", "galaxy.yml.sample"))
         for config in configs:
-            if exists(config):
-                self.load_config_file(abspath(config))
+            if os.path.exists(config):
+                self.load_config_file(os.path.abspath(config))
                 if not load_all:
                     return

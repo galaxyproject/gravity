@@ -79,6 +79,7 @@ without the Galaxy web process being available.
 You can find a list of available hooks at https://github.com/tus/tusd/blob/master/docs/hooks.md#list-of-available-hooks.
 """)
     extra_args: str = Field(default="", description="Extra arguments to pass to tusd command line.")
+    umask: Optional[str] = Field(None, description="umask under which service should be executed")
     start_timeout: int = Field(10, description="Value of supervisor startsecs, systemd TimeoutStartSec")
     stop_timeout: int = Field(10, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
     memory_limit: Optional[int] = Field(
@@ -104,6 +105,7 @@ class CelerySettings(BaseModel):
     queues: str = Field("celery,galaxy.internal,galaxy.external", description="Queues to join")
     pool: Pool = Field(Pool.threads, description="Pool implementation")
     extra_args: str = Field(default="", description="Extra arguments to pass to Celery command line.")
+    umask: Optional[str] = Field(None, description="umask under which service should be executed")
     start_timeout: int = Field(10, description="Value of supervisor startsecs, systemd TimeoutStartSec")
     stop_timeout: int = Field(10, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
     memory_limit: Optional[int] = Field(
@@ -154,6 +156,7 @@ If you disable the ``preload`` option workers need to have finished booting with
 Use Gunicorn's --preload option to fork workers after loading the Galaxy Application.
 Consumes less memory when multiple processes are configured. Default is ``false`` if using unicornherder, else ``true``.
 """)
+    umask: Optional[str] = Field(None, description="umask under which service should be executed")
     start_timeout: int = Field(15, description="Value of supervisor startsecs, systemd TimeoutStartSec")
     stop_timeout: int = Field(65, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
     memory_limit: Optional[int] = Field(
@@ -206,6 +209,7 @@ If <bind> is a unix socket, you will need a ``:`` after the socket path but befo
     proxy_pass http://unix:/run/reports.sock:/;
 """)
     extra_args: str = Field(default="", description="Extra arguments to pass to Gunicorn command line.")
+    umask: Optional[str] = Field(None, description="umask under which service should be executed")
     start_timeout: int = Field(10, description="Value of supervisor startsecs, systemd TimeoutStartSec")
     stop_timeout: int = Field(10, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
     memory_limit: Optional[int] = Field(
@@ -251,6 +255,7 @@ This is an advanced option that is only needed when proxying to remote interacti
 Rewrite location blocks with proxy port.
 This is an advanced option that is only needed when proxying to remote interactive tool container that cannot be reached through the local network.
 """)
+    umask: Optional[str] = Field(None, description="umask under which service should be executed")
     start_timeout: int = Field(10, description="Value of supervisor startsecs, systemd TimeoutStartSec")
     stop_timeout: int = Field(10, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
     memory_limit: Optional[int] = Field(
@@ -288,6 +293,10 @@ Process manager to use.
 What command to write to the process manager configs
 `gravity` (`galaxyctl exec <service-name>`) is the default
 `direct` (each service's actual command) is also supported.
+""")
+
+    umask: str = Field("022", description="""
+umask under which services should be executed. Setting ``umask`` on an individual service overrides this value.
 """)
 
     memory_limit: Optional[int] = Field(

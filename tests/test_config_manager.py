@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from gravity import config_manager
 from gravity.settings import Settings
 from gravity.state import GracefulMethod
@@ -10,21 +12,23 @@ def test_load_defaults(galaxy_yml, galaxy_root_dir, state_dir, default_config_ma
     default_config_manager.load_config_file(str(galaxy_yml))
     config = default_config_manager.get_config()
     default_settings = Settings()
-    assert config['config_type'] == 'galaxy'
-    assert config['instance_name'] == default_settings.instance_name
-    assert config['services'] != []
-    attributes = config['attribs']
-    assert attributes['app_server'] == 'gunicorn'
-    assert Path(attributes['log_dir']) == Path(state_dir) / 'log'
-    assert Path(config['galaxy_root']) == galaxy_root_dir
-    gunicorn_attributes = attributes['gunicorn']
-    assert gunicorn_attributes['bind'] == default_settings.gunicorn.bind
-    assert gunicorn_attributes['workers'] == default_settings.gunicorn.workers
-    assert gunicorn_attributes['timeout'] == default_settings.gunicorn.timeout
-    assert gunicorn_attributes['extra_args'] == default_settings.gunicorn.extra_args
-    assert gunicorn_attributes['preload'] is True
-    assert attributes['celery'] == default_settings.celery.dict()
-    assert attributes["tusd"] == default_settings.tusd.dict()
+    assert config.config_type == 'galaxy'
+    assert config.process_manager == 'supervisor'
+    assert config.instance_name == default_settings.instance_name
+    assert config.services != []
+    assert config.app_server == 'gunicorn'
+    assert Path(config.log_dir) == Path(state_dir) / 'log'
+    assert Path(config.galaxy_root) == galaxy_root_dir
+    gunicorn_settings = config.get_service('gunicorn').settings
+    assert gunicorn_settings['bind'] == default_settings.gunicorn.bind
+    assert gunicorn_settings['workers'] == default_settings.gunicorn.workers
+    assert gunicorn_settings['timeout'] == default_settings.gunicorn.timeout
+    assert gunicorn_settings['extra_args'] == default_settings.gunicorn.extra_args
+    assert gunicorn_settings['preload'] is True
+    celery_settings = config.get_service('celery').settings
+    assert celery_settings == default_settings.celery.dict()
+    with pytest.raises(IndexError):
+        config.get_service('tusd')
 
 
 def test_preload_default(galaxy_yml, default_config_manager):
@@ -37,8 +41,8 @@ def test_preload_default(galaxy_yml, default_config_manager):
     }))
     default_config_manager.load_config_file(str(galaxy_yml))
     config = default_config_manager.get_config()
-    gunicorn_attributes = config['attribs']['gunicorn']
-    assert gunicorn_attributes['preload'] is False
+    unicornherder_settings = config.get_service('unicornherder').settings
+    assert unicornherder_settings['preload'] is False
 
 
 def test_load_non_default(galaxy_yml, default_config_manager, non_default_config):
@@ -46,13 +50,13 @@ def test_load_non_default(galaxy_yml, default_config_manager, non_default_config
         galaxy_yml.write(json.dumps(non_default_config))
         default_config_manager.load_config_file(str(galaxy_yml))
     config = default_config_manager.get_config()
-    gunicorn_attributes = config['attribs']['gunicorn']
-    assert gunicorn_attributes['bind'] == non_default_config['gravity']['gunicorn']['bind']
-    assert gunicorn_attributes['environment'] == non_default_config['gravity']['gunicorn']['environment']
+    gunicorn_settings = config.get_service('gunicorn').settings
+    assert gunicorn_settings['bind'] == non_default_config['gravity']['gunicorn']['bind']
+    assert gunicorn_settings['environment'] == non_default_config['gravity']['gunicorn']['environment']
     default_settings = Settings()
-    assert gunicorn_attributes['workers'] == default_settings.gunicorn.workers
-    celery_attributes = config['attribs']['celery']
-    assert celery_attributes['concurrency'] == non_default_config['gravity']['celery']['concurrency']
+    assert gunicorn_settings['workers'] == default_settings.gunicorn.workers
+    celery_settings = config.get_service('celery').settings
+    assert celery_settings['concurrency'] == non_default_config['gravity']['celery']['concurrency']
 
 
 def test_split_config(galaxy_yml, galaxy_root_dir, default_config_manager, non_default_config):
@@ -63,7 +67,7 @@ def test_split_config(galaxy_yml, galaxy_root_dir, default_config_manager, non_d
     default_config_manager.load_config_file(str(galaxy_yml))
     test_load_non_default(galaxy_yml, default_config_manager, non_default_config)
     config = default_config_manager.get_config()
-    assert config.__file__ == str(galaxy_yml)
+    assert config.gravity_config_file == str(galaxy_yml)
     assert config.galaxy_config_file == default_config_file
 
 
@@ -91,8 +95,7 @@ def test_auto_load_root_dir(galaxy_root_dir, monkeypatch):
 def test_gunicorn_graceful_method_preload(galaxy_yml, default_config_manager):
     default_config_manager.load_config_file(str(galaxy_yml))
     config = default_config_manager.get_config()
-    gunicorn_service = [s for s in config["services"] if s["service_name"] == "gunicorn"][0]
-    graceful_method = gunicorn_service.get_graceful_method(config["attribs"])
+    graceful_method = config.get_service('gunicorn').graceful_method
     assert graceful_method == GracefulMethod.DEFAULT
 
 
@@ -103,8 +106,7 @@ def test_gunicorn_graceful_method_no_preload(galaxy_yml, default_config_manager)
     ))
     default_config_manager.load_config_file(str(galaxy_yml))
     config = default_config_manager.get_config()
-    gunicorn_service = [s for s in config["services"] if s["service_name"] == "gunicorn"][0]
-    graceful_method = gunicorn_service.get_graceful_method(config["attribs"])
+    graceful_method = config.get_service('gunicorn').graceful_method
     assert graceful_method == GracefulMethod.SIGHUP
 
 

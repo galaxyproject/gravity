@@ -378,4 +378,58 @@ def test_override_memory_limit(galaxy_yml, default_config_manager):
     assert 'MemoryLimit=2G' in handler0_config_path.open().read()
 
 
+def test_default_umask(galaxy_yml, default_config_manager):
+    process_manager_name = 'systemd'
+    galaxy_yml.write(json.dumps(
+        {'galaxy': None, 'gravity': {
+            'process_manager': process_manager_name,
+            'handlers': {'handler': {}}}}))
+    default_config_manager.load_config_file(str(galaxy_yml))
+    with process_manager.process_manager(config_manager=default_config_manager) as pm:
+        pm.update()
+    conf_dir = service_conf_dir(default_config_manager.state_dir, process_manager_name)
+    gunicorn_conf_path = conf_dir / service_conf_file(process_manager_name, 'gunicorn')
+    assert 'UMask=022' in gunicorn_conf_path.open().read()
+    handler0_config_path = conf_dir / service_conf_file(process_manager_name, 'handler_0', service_type='standalone')
+    assert handler0_config_path.exists(), os.listdir(conf_dir)
+    assert 'UMask=022' in handler0_config_path.open().read()
+
+
+def test_service_umask(galaxy_yml, default_config_manager):
+    process_manager_name = 'systemd'
+    galaxy_yml.write(json.dumps(
+        {'galaxy': None, 'gravity': {
+            'process_manager': process_manager_name,
+            'gunicorn': {'umask': "077"},
+            'handlers': {'handler': {}}}}))
+    default_config_manager.load_config_file(str(galaxy_yml))
+    with process_manager.process_manager(config_manager=default_config_manager) as pm:
+        pm.update()
+    conf_dir = service_conf_dir(default_config_manager.state_dir, process_manager_name)
+    gunicorn_conf_path = conf_dir / service_conf_file(process_manager_name, 'gunicorn')
+    assert 'UMask=077' in gunicorn_conf_path.open().read()
+    handler0_config_path = conf_dir / service_conf_file(process_manager_name, 'handler_0', service_type='standalone')
+    assert handler0_config_path.exists(), os.listdir(conf_dir)
+    assert 'UMask=022' in handler0_config_path.open().read()
+
+
+def test_override_umask(galaxy_yml, default_config_manager):
+    process_manager_name = 'systemd'
+    galaxy_yml.write(json.dumps(
+        {'galaxy': None, 'gravity': {
+            'process_manager': process_manager_name,
+            'umask': "027",
+            'gunicorn': {'umask': "077"},
+            'handlers': {'handler': {}}}}))
+    default_config_manager.load_config_file(str(galaxy_yml))
+    with process_manager.process_manager(config_manager=default_config_manager) as pm:
+        pm.update()
+    conf_dir = service_conf_dir(default_config_manager.state_dir, process_manager_name)
+    gunicorn_conf_path = conf_dir / service_conf_file(process_manager_name, 'gunicorn')
+    assert 'UMask=077' in gunicorn_conf_path.open().read()
+    handler0_config_path = conf_dir / service_conf_file(process_manager_name, 'handler_0', service_type='standalone')
+    assert handler0_config_path.exists(), os.listdir(conf_dir)
+    assert 'UMask=027' in handler0_config_path.open().read()
+
+
 # TODO: test switching PMs in between invocations, test multiple instances

@@ -154,24 +154,23 @@ class SupervisorProcessManager(BaseProcessManager):
 
     def _service_program_name(self, instance_name, service):
         if self._use_instance_name:
-            return f"{instance_name}_{service['config_type']}_{service['service_type']}_{service['service_name']}"
+            return f"{instance_name}_{service.config_type}_{service.service_type}_{service.service_name}"
         else:
-            return service["service_name"]
+            return service.service_name
 
     def __update_service(self, config, service, instance_conf_dir, instance_name):
-        attribs = config.attribs
         program_name = self._service_program_name(instance_name, service)
 
         # supervisor-specific format vars
         supervisor_format_vars = {
-            "log_dir": attribs["log_dir"],
-            "log_file": self._service_log_file(attribs["log_dir"], program_name),
-            "process_name_opt": f"process_name    = {service['service_name']}" if self._use_instance_name else "",
+            "log_dir": config.log_dir,
+            "log_file": self._service_log_file(config.log_dir, program_name),
+            "process_name_opt": f"process_name    = {service.service_name}" if self._use_instance_name else "",
         }
 
         format_vars = self._service_format_vars(config, service, program_name, supervisor_format_vars)
 
-        conf = join(instance_conf_dir, f"{service['config_type']}_{service['service_type']}_{service['service_name']}.conf")
+        conf = join(instance_conf_dir, f"{service.config_type}_{service.service_type}_{service.service_name}.conf")
 
         template = SUPERVISORD_SERVICE_TEMPLATE
         contents = template.format(**format_vars)
@@ -184,7 +183,7 @@ class SupervisorProcessManager(BaseProcessManager):
 
         Does not call ``supervisorctl update``.
         """
-        instance_name = config["instance_name"]
+        instance_name = config.instance_name
         instance_conf_dir = join(self.supervisord_conf_dir, f"{instance_name}.d")
         intended_configs = set()
         try:
@@ -194,9 +193,9 @@ class SupervisorProcessManager(BaseProcessManager):
                 raise
 
         programs = []
-        for service in config["services"]:
+        for service in config.services:
             intended_configs.add(self.__update_service(config, service, instance_conf_dir, instance_name))
-            programs.append(f"{instance_name}_{service['config_type']}_{service['service_type']}_{service['service_name']}")
+            programs.append(f"{instance_name}_{service.config_type}_{service.service_type}_{service.service_name}")
 
         # TODO: test group mode
         group_conf = join(self.supervisord_conf_dir, f"group_{instance_name}.conf")
@@ -214,8 +213,8 @@ class SupervisorProcessManager(BaseProcessManager):
             os.unlink(file)
 
         # ensure log dir exists only if configs exist
-        if intended_configs and not exists(config.attribs["log_dir"]):
-            os.makedirs(config.attribs["log_dir"])
+        if intended_configs and not exists(config.log_dir):
+            os.makedirs(config.log_dir)
 
     def _remove_invalid_configs(self, valid_configs=None, invalid_configs=None):
         if not valid_configs:
@@ -239,7 +238,7 @@ class SupervisorProcessManager(BaseProcessManager):
     def __start_stop(self, op, configs, service_names):
         for config in configs:
             if service_names:
-                services = [s for s in config.services if s["service_name"] in service_names]
+                services = [s for s in config.services if s.service_name in service_names]
                 for service in services:
                     program_name = self._service_program_name(config.instance_name, service)
                     self.supervisorctl(op, program_name)
@@ -250,12 +249,12 @@ class SupervisorProcessManager(BaseProcessManager):
     def __reload_graceful(self, configs, service_names):
         for config in configs:
             if service_names:
-                services = [s for s in config.services if s["service_name"] in service_names]
+                services = [s for s in config.services if s.service_name in service_names]
             else:
                 services = config.services
             for service in services:
                 program_name = self._service_program_name(config.instance_name, service)
-                if service.get_graceful_method(config["attribs"]) == GracefulMethod.SIGHUP:
+                if service.graceful_method == GracefulMethod.SIGHUP:
                     self.supervisorctl("signal", "SIGHUP", program_name)
                 else:
                     self.supervisorctl("restart", program_name)

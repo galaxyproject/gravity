@@ -23,9 +23,9 @@ def cli(ctx, version):
             click.echo(cols_str.format(*head))
             for config in configs:
                 row = [
-                    config.get("config_type", "unknown"),
-                    config.get("instance_name", "unknown"),
-                    config.__file__,
+                    config.config_type,
+                    config.instance_name,
+                    config.gravity_config_file,
                 ]
                 if version:
                     row.insert(2, config.galaxy_version)
