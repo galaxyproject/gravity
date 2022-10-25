@@ -8,7 +8,7 @@ import subprocess
 import time
 from os.path import exists, expanduser, join
 
-from gravity.io import debug, error, info, warn
+import gravity.io
 from gravity.process_manager import BaseProcessManager
 from gravity.settings import ProcessManager
 from gravity.state import GracefulMethod
@@ -119,12 +119,12 @@ class SupervisorProgram:
         return supervisor_program_names(service_name, instance_count, instance_number_start, instance_name=instance_name)
 
     @property
-    def instance_numbers(self):
+    def program_instances(self):
         """ """
         service_settings = self.service.get_settings()
-        instance_count = service_settings.get("instance_count", 1)
+        #instance_count = service_settings.get("instance_count", 1)
         instance_number_start = service_settings.get("instance_number_start", 0)
-        return range(instance_number_start, instance_number_start + instance_count)
+        return [(instance_number_start + i, name) for i, name in enumerate(self.program_names)]
 
 
 
@@ -139,7 +139,7 @@ class SupervisorProcessManager(BaseProcessManager):
             state_dir = self.config_manager.state_dir
         elif self.config_manager.instance_count > 1:
             state_dir = DEFAULT_STATE_DIR
-            info(f"Supervisor configuration will be stored in {state_dir}, set --state-dir ($GRAVITY_STATE_DIR) to override")
+            gravity.io.info(f"Supervisor configuration will be stored in {state_dir}, set --state-dir ($GRAVITY_STATE_DIR) to override")
         else:
             state_dir = self.config_manager.get_config().gravity_data_dir
 
@@ -180,10 +180,10 @@ class SupervisorProcessManager(BaseProcessManager):
             self.__supervisord_popen = subprocess.Popen(supervisord_cmd, env=os.environ)
             rc = self.__supervisord_popen.poll()
             if rc:
-                error("supervisord exited with code %d" % rc)
+                gravity.io.error("supervisord exited with code %d" % rc)
             # FIXME: don't wait forever
             while not exists(self.supervisord_pid_path) or not exists(self.supervisord_sock_path):
-                debug(f"Waiting for {self.supervisord_pid_path}")
+                gravity.io.debug(f"Waiting for {self.supervisord_pid_path}")
                 time.sleep(0.5)
 
     def __get_supervisor(self):
@@ -258,7 +258,7 @@ class SupervisorProcessManager(BaseProcessManager):
         present_configs = set([join(instance_conf_dir, f) for f in os.listdir(instance_conf_dir)])
 
         for file in (present_configs - intended_configs):
-            info("Removing service config %s", file)
+            gravity.io.info("Removing service config %s", file)
             os.unlink(file)
 
         # ensure log dir exists only if configs exist
@@ -278,18 +278,22 @@ class SupervisorProcessManager(BaseProcessManager):
         for entry in os.listdir(self.supervisord_conf_dir):
             path = join(self.supervisord_conf_dir, entry)
             if entry.startswith("group_") and entry not in valid_group_confs:
-                info(f"Removing group config {path}")
+                gravity.io.info(f"Removing group config {path}")
                 os.unlink(path)
             elif entry.endswith(".d") and entry not in valid_instance_dirs:
-                info(f"Removing instance directory {path}")
+                gravity.io.info(f"Removing instance directory {path}")
                 shutil.rmtree(path)
 
     def __supervisor_programs(self, config, service_names):
-            services = [s for s in config.services if s["service_name"] in service_names]
-            return [SupervisorProgram(config, service, self._use_instance_name) for service in services]
+        services = [s for s in config.services if s["service_name"] in service_names]
+        return [SupervisorProgram(config, service, self._use_instance_name) for service in services]
 
     def __supervisor_program_names(self, config, service_names):
-            return [p.program_names for p in self.__supervisor_programs(config, service_names) for p.program_names in p]
+        #return [p.program_names for p in self.__supervisor_programs(config, service_names) for p.program_names in p]
+        program_names = []
+        for program in self.__supervisor_programs(config, service_names):
+            program_names.extend(program.program_names)
+        return program_names
 
     def __start_stop(self, op, configs, service_names):
         targets = []
@@ -314,24 +318,26 @@ class SupervisorProcessManager(BaseProcessManager):
                 if graceful_method == GracefulMethod.SIGHUP:
                     self.supervisorctl("signal", "SIGHUP", *program.program_names)
                 elif graceful_method == GracefulMethod.ROUND_ROBIN:
-                    self.__round_robin(config, service, program)
+                    self.__rolling_restart(config, service, program)
                 else:
                     self.supervisorctl("restart", *program.program_names)
 
-    def __round_robin(self, config, service, program):
-        debug(f"#### ROUND ROBIN! {service['service_name']}")
-        for instance_number in program.instance_numbers:
-            # FIXME: no, you should not be pulling the instance number out like this, not even valid when the start > 0
-            # really just need to do store format vars or formatted vars
-            print(f"#### {instance_number}: {service['service_name']}")
-            GREAT THIS WORKS JUST NEED TO TEMPLATE BIND WITH INSTANCE_NUMBER
-            #format_vars = self._service_format_vars(config, service, {"instance_number": instance_number})
-            #self.supervisorctl("restart", program_name)
-            #while not service.is_ready(config.attribs, format_vars):
-            #    import time
-            #    time.sleep(1)
-            #    debug("#### SLEP")
-            # gonna need a timeout here
+    def __rolling_restart(self, config, service, program):
+        gravity.io.info(f"Performing rolling restart on service: {service['service_name']}")
+        for instance_number, program_name in program.program_instances:
+            if not service.is_ready(instance_number, quiet=False):
+                gravity.io.exception(f"Refusing to continue rolling restart, instance {instance_number} was down before restart")
+            self.supervisorctl("restart", program_name)
+            start = time.time()
+            timeout = service.get_settings()["restart_timeout"]
+            instance_is_ready = service.is_ready(instance_number)
+            while not instance_is_ready and ((time.time() - start) < timeout):
+                gravity.io.debug(f"{program_name} not ready...")
+                time.sleep(2)
+                instance_is_ready = service.is_ready(instance_number)
+            if not instance_is_ready:
+                gravity.io.exception(f"Refusing to continue rolling restart, instance failed to respond after {timeout} seconds")
+
 
     def start(self, configs=None, service_names=None):
         self.__supervisord()
@@ -345,22 +351,22 @@ class SupervisorProcessManager(BaseProcessManager):
         if self.__supervisord_is_running():
             proc_infos = supervisor.getAllProcessInfo()
             if all([i["state"] == 0 for i in proc_infos]):
-                info("All processes stopped, supervisord will exit")
+                gravity.io.info("All processes stopped, supervisord will exit")
                 self.shutdown()
             else:
-                info("Not all processes stopped, supervisord not shut down (hint: see `galaxyctl status`)")
+                gravity.io.info("Not all processes stopped, supervisord not shut down (hint: see `galaxyctl status`)")
 
     def restart(self, configs=None, service_names=None):
         if not self.__supervisord_is_running():
             self.__supervisord()
-            warn("supervisord was not previously running; it has been started, so the 'restart' command has been ignored")
+            gravity.io.warn("supervisord was not previously running; it has been started, so the 'restart' command has been ignored")
         else:
             self.__start_stop("restart", configs, service_names)
 
     def graceful(self, configs=None, service_names=None):
         if not self.__supervisord_is_running():
             self.__supervisord()
-            warn("supervisord was not previously running; it has been started, so the 'graceful' command has been ignored")
+            gravity.io.warn("supervisord was not previously running; it has been started, so the 'graceful' command has been ignored")
         else:
             self.__reload_graceful(configs, service_names)
 
@@ -373,14 +379,14 @@ class SupervisorProcessManager(BaseProcessManager):
     def shutdown(self):
         self.supervisorctl("shutdown")
         while self.__supervisord_is_running():
-            debug("Waiting for supervisord to terminate")
+            gravity.io.debug("Waiting for supervisord to terminate")
             time.sleep(0.5)
-        info("supervisord has terminated")
+        gravity.io.info("supervisord has terminated")
 
     def update(self, configs=None, force=False, clean=False):
         """Add newly defined servers, remove any that are no longer present"""
         if force and os.listdir(self.supervisord_conf_dir):
-            info(f"Removing supervisord conf dir due to --force option: {self.supervisord_conf_dir}")
+            gravity.io.info(f"Removing supervisord conf dir due to --force option: {self.supervisord_conf_dir}")
             shutil.rmtree(self.supervisord_conf_dir)
             os.makedirs(self.supervisord_conf_dir)
         elif not force:
@@ -396,10 +402,10 @@ class SupervisorProcessManager(BaseProcessManager):
 
     def supervisorctl(self, *args):
         if not self.__supervisord_is_running():
-            warn("supervisord is not running")
+            gravity.io.warn("supervisord is not running")
             return
         try:
-            debug("Calling supervisorctl with args: %s", list(args))
+            gravity.io.debug("Calling supervisorctl with args: %s", list(args))
             supervisorctl.main(args=["-c", self.supervisord_conf_path] + list(args))
         except SystemExit as e:
             # supervisorctl.main calls sys.exit(), so we catch that

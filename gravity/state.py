@@ -183,6 +183,19 @@ class Service(BaseModel):
         exclude = {"config", "service_settings"}
         return super().dict(*args, exclude=exclude, **kwargs)
 
+    def get_format_vars(self):
+        if "_format_vars" in self.__dict__:
+            return self.__dict__["_format_vars"]
+        else:
+            self.var_formatter(self)
+            return self.__dict__["_format_vars"]
+            #raise RuntimeError("Attempt to access format_vars before they have been set")
+
+    def set_format_vars(self, value):
+        self.__dict__["_format_vars"] = value
+
+    format_vars = property(get_format_vars, set_format_vars)
+
 
 class GalaxyGunicornService(Service):
     _service_type = "gunicorn"
@@ -234,13 +247,19 @@ class GalaxyGunicornService(Service):
         environment.update(self.settings.get("environment", {}))
         return environment
 
-    def is_ready(self, format_vars):
-        bind = self.get_command_arguments(format_vars)["bind"]
-        gravity.io.debug(f"#### BIND! {bind}")
-        http_check(bind, "/api/version")
-        gravity.io.debug(f"#### CHECK OK! {bind}")
+    def is_ready(self, instance_number, quiet=True):
+        bind = self.settings["bind"]
+        bind = bind.format(instance_number=instance_number)
+        # FIXME: insert app.galaxy_url_prefix
+        try:
+            response = http_check(bind, "/api/version")
+            version = response.json()
+        except Exception as exc:
+            if not quiet:
+                gravity.io.error(exc)
+            return False
+        gravity.io.info(f"Gunicorn instance {instance_number} running, version: {version['version_major']}.{version['version_minor']}")
         return True
-        
 
 
 class GalaxyUnicornHerderService(Service):
@@ -396,6 +415,49 @@ class GalaxyStandaloneService(Service):
             command_arguments["attach_to_pool"] = f" {_attach_to_pool}"
         return command_arguments
 
+
+class ConfigFile(AttributeDict):
+    persist_keys = (
+        "config_type",
+        "instance_name",
+        "galaxy_root",
+    )
+
+    def __init__(self, *args, **kwargs):
+        super(ConfigFile, self).__init__(*args, **kwargs)
+        services = []
+        for service in self.get("services", []):
+            service_class = SERVICE_CLASS_MAP.get(service["service_type"], Service)
+            services.append(service_class(**service))
+        self.services = services
+
+    @property
+    def defaults(self):
+        return {
+            "process_manager": self["process_manager"],
+            "instance_name": self["instance_name"],
+            "galaxy_root": self["galaxy_root"],
+            "log_dir": self["attribs"]["log_dir"],
+            "gunicorn":  self.gunicorn_config,
+        }
+
+    @property
+    def gunicorn_config(self):
+        # We used to store bind_address and bind_port instead of a gunicorn config key, so restore from here
+        gunicorn = self["attribs"].get("gunicorn")
+        if not gunicorn and 'bind_address' in self["attribs"]:
+            return {'bind': f'{self["attribs"]["bind_address"]}:{self["attribs"]["bind_port"]}'}
+        return gunicorn
+
+    @property
+    def galaxy_version(self):
+        galaxy_version_file = os.path.join(self["galaxy_root"], "lib", "galaxy", "version.py")
+        with open(galaxy_version_file) as fh:
+            locs = {}
+            exec(fh.read(), {}, locs)
+            return locs["VERSION"]
+
+>>>>>>> 80341da (Rolling gunicorn restarts are working)
 
 def service_for_service_type(service_type):
     try:

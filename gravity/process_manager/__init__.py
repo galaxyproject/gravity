@@ -38,9 +38,7 @@ def _route(func, all_process_managers=False):
         configs = self.config_manager.get_configs(instances=instance_names or None)
         for config in configs:
             for service in config.services:
-                # ensure all services have format vars set before passed to the routed function - maybe this is
-                # inefficient though? could add a "route_with_format_vars" if needed
-                service.format_vars = self.process_managers[config.process_manager].service_format_vars(config, service)
+                service.var_formatter = partial(self.process_managers[config.process_manager].service_format_vars, config)
             try:
                 configs_by_pm[config.process_manager].append(config)
             except KeyError:
@@ -92,7 +90,6 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
         format_vars = {
             "config_type": service.config_type,
             "server_name": service.service_name,
-            "program_name": program_name,
             "galaxy_infrastructure_url": config.galaxy_infrastructure_url,
             "galaxy_umask": service.settings.get("umask") or config.umask,
             "galaxy_conf": config.galaxy_config_file,

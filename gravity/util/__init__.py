@@ -96,7 +96,6 @@ def http_check(bind, path):
     scheme = 'http'
     if bind.startswith('unix:'):
         raise NotImplementedError("TODO: https://github.com/msabramo/requests-unixsocket")
-    try:
-        requests.get(f"{scheme}://{bind}{path}").raise_for_status()
-    except requests.exceptions.HTTPError:
-        raise
+    response = requests.get(f"{scheme}://{bind}{path}", timeout=30)
+    response.raise_for_status()
+    return response
