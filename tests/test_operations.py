@@ -18,30 +18,38 @@ CELERY_BEAT_TIMEOUT = 10
 CELERY_BEAT_DB_FILENAMES = list(map(lambda ext: CELERY_BEAT_DB_FILENAME + ext, ('', '.db', '.dat', '.bak', '.dir')))
 
 
-def log_for_service(state_dir, service_name, process_manager_name, start_time):
+def log_for_service(state_dir, process_manager_name, start_time, service_name, instance_name=None):
     if process_manager_name == "systemd":
-        cmd = f"journalctl --user --no-pager --since=@{start_time} --unit=galaxy-{service_name}.service".split()
+        # instance_name should never be none in the systemd case
+        log_name = f"galaxy-{instance_name}-{service_name}"
+        cmd = f"journalctl --user --no-pager --since=@{start_time} --unit={log_name}.service".split()
         return subprocess.check_output(cmd, text=True)
     else:
-        path = state_dir / "log" / f"{service_name}.log"
+        # could probably just glob here
+        if instance_name is not None:
+            log_name = f"{instance_name}_galaxy_{service_name}_{service_name}.log"
+        else:
+            log_name = f"{service_name}.log"
+        path = state_dir / "log" / log_name
         with open(path) as fh:
             return fh.read()
 
 
 def wait_for_startup(state_dir, free_port, prefix="/", path="/api/version", service_name="gunicorn",
-                     process_manager_name="supervisor", start_time=None):
+                     process_manager_name="supervisor", start_time=None, instance_name=None):
     for _ in range(STARTUP_TIMEOUT * 4):
         try:
             requests.get(f"http://localhost:{free_port}{prefix.rstrip('/')}{path}").raise_for_status()
             return True, ""
         except Exception:
             time.sleep(0.25)
-    return False, log_for_service(state_dir, service_name, process_manager_name, start_time)
+    return False, log_for_service(state_dir, process_manager_name, start_time, service_name, instance_name=instance_name)
 
 
 def wait_for_gxit_proxy(state_dir, process_manager_name, start_time):
+    instance_name = os.path.basename(state_dir)
     for _ in range(STARTUP_TIMEOUT * 4):
-        startup_logs = log_for_service(state_dir, "gx-it-proxy", process_manager_name, start_time)
+        startup_logs = log_for_service(state_dir, process_manager_name, start_time, service_name="gx-it-proxy", instance_name=instance_name)
         if 'Watching path' in startup_logs:
             return True, ""
         time.sleep(0.25)
@@ -58,19 +66,19 @@ def wait_for_any_path(paths, timeout):
     return False
 
 
-def start_instance(state_dir, galaxy_yml, free_port, process_manager_name="supervisor"):
+def start_instance(state_dir, galaxy_yml, free_port, process_manager_name="supervisor", instance_name=None):
     runner = CliRunner()
     start_time = time.time()
     result = runner.invoke(galaxyctl, ['--config-file', str(galaxy_yml), 'start'])
     assert result.exit_code == 0, result.output
     if process_manager_name == "systemd":
-        result = runner.invoke(galaxyctl, ['--config-file', str(galaxy_yml), 'status'])
-        output = subprocess.check_output("systemctl --user status galaxy-gunicorn.service".split(), text=True)
-        assert "● galaxy-gunicorn.service" in output
+        gunicorn_name = f"galaxy-{instance_name}-gunicorn"
+        output = subprocess.check_output(f"systemctl --user status {gunicorn_name}.service".split(), text=True)
+        assert f"● {gunicorn_name}.service" in output
     else:
         assert re.search(r"gunicorn\s*STARTING", result.output)
     startup_done, startup_logs = wait_for_startup(state_dir, free_port, process_manager_name=process_manager_name,
-                                                  start_time=start_time)
+                                                  start_time=start_time, instance_name=instance_name)
     assert startup_done is True, f"Startup failed. Application startup logs:\n {startup_logs}"
 
 
@@ -78,14 +86,14 @@ def start_instance(state_dir, galaxy_yml, free_port, process_manager_name="super
 def test_cmd_start(state_dir, galaxy_yml, startup_config, free_port, process_manager_name):
     # TODO: test service_command_style = gravity, doesn't work when you're using CliRunner, which just imports the cli
     # rather than the entry point existing on the filesystem somewhere.
-    # TODO: systemd tests should use a randomly generated instance name so that running tests locally does not result in
-    # service unit name collisions
+    instance_name = os.path.basename(state_dir)
     startup_config["gravity"]["process_manager"] = process_manager_name
+    startup_config["gravity"]["instance_name"] = instance_name
     galaxy_yml.write(json.dumps(startup_config))
     runner = CliRunner()
     result = runner.invoke(galaxyctl, ['--config-file', str(galaxy_yml), 'update'])
     assert result.exit_code == 0, result.output
-    start_instance(state_dir, galaxy_yml, free_port, process_manager_name)
+    start_instance(state_dir, galaxy_yml, free_port, process_manager_name, instance_name=instance_name)
     result = runner.invoke(galaxyctl, ['--config-file', str(galaxy_yml), 'status'])
     celery_beat_db_paths = list(map(lambda f: state_dir / f, CELERY_BEAT_DB_FILENAMES))
     celery_beat_db_exists = wait_for_any_path(celery_beat_db_paths, CELERY_BEAT_TIMEOUT)
@@ -116,6 +124,7 @@ def test_cmd_start_reports(state_dir, galaxy_yml, reports_config, free_port):
 
 @pytest.mark.parametrize('process_manager_name', ['supervisor', 'systemd'])
 def test_cmd_start_with_gxit(state_dir, galaxy_yml, gxit_startup_config, free_port, process_manager_name):
+    instance_name = gxit_startup_config["gravity"]["instance_name"]
     galaxy_yml.write(json.dumps(gxit_startup_config))
     runner = CliRunner()
     result = runner.invoke(galaxyctl, ['--config-file', str(galaxy_yml), 'update'])
@@ -123,7 +132,7 @@ def test_cmd_start_with_gxit(state_dir, galaxy_yml, gxit_startup_config, free_po
     start_time = time.time()
     result = runner.invoke(galaxyctl, ['--config-file', str(galaxy_yml), 'start'])
     assert result.exit_code == 0, result.output
-    start_instance(state_dir, galaxy_yml, free_port, process_manager_name)
+    start_instance(state_dir, galaxy_yml, free_port, process_manager_name, instance_name=instance_name)
     result = runner.invoke(galaxyctl, ['--config-file', str(galaxy_yml), 'status'])
     assert result.exit_code == 0, result.output
     startup_done, startup_logs = wait_for_gxit_proxy(state_dir, process_manager_name, start_time)

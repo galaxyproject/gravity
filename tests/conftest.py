@@ -17,6 +17,7 @@ GXIT_CONFIG = """
 gravity:
   process_manager: {process_manager_name}
   service_command_style: direct
+  instance_name: {instance_name}
   gunicorn:
     bind: 'localhost:{gx_port}'
   gx_it_proxy:
@@ -73,7 +74,8 @@ def state_dir(monkeypatch):
         except Exception:
             pass
         shutil.rmtree(directory)
-        unit_paths = glob.glob(os.path.join(unit_path, "galaxy*"))
+        instance_name = os.path.basename(directory)
+        unit_paths = glob.glob(os.path.join(unit_path, f"galaxy-{instance_name}*"))
         if unit_paths:
             units = list(map(os.path.basename, unit_paths))
             try:
@@ -116,7 +118,7 @@ another_free_port = free_port
 
 
 @pytest.fixture()
-def startup_config(galaxy_virtualenv, free_port):
+def startup_config(state_dir, galaxy_virtualenv, free_port):
     return {
         'gravity': {
             'service_command_style': 'direct',
@@ -168,19 +170,22 @@ def non_default_config():
 
 
 @pytest.fixture
-def gxit_config(free_port, another_free_port, process_manager_name):
+def gxit_config(state_dir, free_port, another_free_port, process_manager_name):
     config_yaml = GXIT_CONFIG.format(
         gxit_port=another_free_port,
         gx_port=free_port,
-        process_manager_name=process_manager_name)
+        process_manager_name=process_manager_name,
+        instance_name=os.path.basename(state_dir),
+    )
     return yaml.safe_load(config_yaml)
 
 
 @pytest.fixture
-def tusd_config(startup_config, free_port, another_free_port, process_manager_name):
+def tusd_config(state_dir, startup_config, free_port, another_free_port, process_manager_name):
     startup_config["gravity"] = {
         "process_manager": process_manager_name,
         "service_command_style": "direct",
+        "instance_name": os.path.basename(state_dir),
         "tusd": {"enable": True, "port": another_free_port, "upload_dir": "/tmp"}}
     startup_config["galaxy"]["galaxy_infrastructure_url"] = f"http://localhost:{free_port}"
     return startup_config

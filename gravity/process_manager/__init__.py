@@ -117,8 +117,8 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
             # is there a click way to do this?
             galaxyctl = sys.argv[0]
             if not galaxyctl.endswith("galaxyctl"):
-                exception(f"Unable to determine galaxyctl command, sys.argv[0] is: {galaxyctl}")
-            format_vars["command"] = f"{galaxyctl} --config-file {config_file} exec {config.instance_name} {program_name}"
+                warn(f"Unable to determine galaxyctl command, sys.argv[0] is: {galaxyctl}")
+            format_vars["command"] = f"{galaxyctl} --config-file {config_file} exec {config.instance_name} {service.service_name}"
             environment = {}
         format_vars["environment"] = self._service_environment_formatter(environment, format_vars)
 
