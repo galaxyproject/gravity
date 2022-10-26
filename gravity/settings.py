@@ -3,7 +3,9 @@ from enum import Enum
 from typing import (
     Any,
     Dict,
+    List,
     Optional,
+    Union,
 )
 from pydantic import BaseModel, BaseSettings, Extra, Field, validator
 
@@ -38,6 +40,7 @@ class ProcessManager(str, Enum):
 class ServiceCommandStyle(str, Enum):
     gravity = "gravity"
     direct = "direct"
+    exec = "exec"
 
 
 class AppServer(str, Enum):
@@ -128,20 +131,6 @@ names.
 
 class GunicornSettings(BaseModel):
     enable: bool = Field(True, description="Enable Galaxy gunicorn server.")
-    instance_count: int = Field(
-        default=1,
-        ge=1,
-        description="""
-The number of gunicorn processes to spawn.
-If set to > 1, then Gravity will perform zero downtime rolling restarts on ``galaxyctl graceful``, but the ``bind``
-option **must** contain a template value ``{instance_number}`` that will be templated by the instance number.
-""")
-    instance_number_start: int = Field(
-        default=0,
-        ge=0,
-        description="""
-The starting value of ``instance_number`` when ``instance_count`` is > 1.
-""")
     bind: str = Field(
         default="localhost:8080",
         description="The socket to bind. A string of the form: ``HOST``, ``HOST:PORT``, ``unix:PATH``, ``fd://FD``. An IP is a valid HOST.",
@@ -191,12 +180,14 @@ Memory limit (in GB). If the service exceeds the limit, it will be killed. Defau
 Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
 names.
 """)
-
-    @validator("bind", always=True)
-    def _instance_number_in_bind_required_if_instance_count(cls, v, values):
-        if values["instance_count"] > 1 and '{instance_number}' not in v:
-            raise ValueError("'bind' must contain '{instance_number}' when 'instance_count' > 1")
-        return v
+    instance_name: Optional[Union[int, str]] = Field(
+        default=0,
+        description="""
+If the ``gunicorn`` section is a list, then mutliple gunicorns will be started. If set, this option controls the name of
+the "instance" of gunicorn. How this is represented depends on your process manager. In ``systemd``, most alphanumeric
+characters and a few special characters are valid. In ``supervisor`` only integers are valid, and only the first
+gunicorn's ``instance_name`` will be used (the other instances are incremented by 1).
+""")
 
 
 class ReportsSettings(BaseModel):
@@ -377,7 +368,9 @@ similar to uWSGI Zerg Mode used in the past.
 """)
     instance_name: str = Field(default=DEFAULT_INSTANCE_NAME, description="""Override the default instance name.
 this is hidden from you when running a single instance.""")
-    gunicorn: GunicornSettings = Field(default={}, description="Configuration for Gunicorn.")
+    gunicorn: Union[List[GunicornSettings], GunicornSettings] = Field(default={}, description="""
+Configuration for Gunicorn. Can be a list to run multiple gunicorns for rolling restarts.
+""")
     celery: CelerySettings = Field(default={}, description="Configuration for Celery Processes.")
     gx_it_proxy: GxItProxySettings = Field(default={}, description="Configuration for gx-it-proxy.")
     # The default value for tusd is a little awkward, but is a convenient way to ensure that if

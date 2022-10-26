@@ -19,6 +19,7 @@ def cli(ctx, instances_services, foreground, quiet=False):
     """
     auto_update = False
     if not instances_services and not ctx.parent.cm_kwargs["config_file"]:
+        # FIXME: this doesn't do anything anymore now that the cm goes out of scope. you just init the cm twice
         with config_manager.config_manager(**ctx.parent.cm_kwargs) as cm:
             # If there are no configs known, we will attempt to auto-load one
             cm.auto_load()

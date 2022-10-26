@@ -5,6 +5,7 @@ from __future__ import annotations
 import enum
 import os
 import sys
+import time
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, validator
@@ -34,7 +35,7 @@ def relative_to_galaxy_root(cls, v, values):
 class GracefulMethod(str, enum.Enum):
     DEFAULT = "default"
     SIGHUP = "sighup"
-    ROUND_ROBIN = "round_robin"
+    ROLLING = "rolling"
 
 
 class ConfigFile(BaseModel):
@@ -98,14 +99,13 @@ class Service(BaseModel):
     # unfortunately as a class attribute this is now excluded from dict()
     _service_type: str = "service"
     service_name: str = "_default_"
-    service_settings: Dict[str, Any]
+    #service_settings: Dict[str, Any]
 
-    settings: Dict[str, Any] = {}
+    var_formatter: Callable[[ConfigFile, Service], Dict[str, str]] = None
+
+    settings: Dict[str, Any]
 
     config_type: str = None
-
-    # FIXME: remove
-    supports_multiple_instances = False
 
     _default_environment: Dict[str, str] = {}
     _settings_from: Optional[str] = None
@@ -118,7 +118,7 @@ class Service(BaseModel):
         super().__init__(*args, **kwargs)
         self.config_type = self.config.config_type
         # this ensures it's included in dict()
-        self.settings = self.service_settings[self.settings_from].copy()
+        #self.settings = self.service_settings[self.settings_from].copy()
 
     # these are class "properties" because they are accessed by validators
     @classproperty
@@ -132,6 +132,10 @@ class Service(BaseModel):
     @classproperty
     def default_environment(cls):
         return cls._default_environment.copy()
+
+    @property
+    def count(self):
+        return 1
 
     # @property
     # def settings(self):
@@ -168,9 +172,10 @@ class Service(BaseModel):
         for setting, value in self.settings.items():
             if setting in self.command_arguments:
                 if value:
+                    # FIXME: this should be unnecessary
                     # recursively format until there are no more template placeholders left
                     rval[setting] = self.command_arguments[setting]
-                    while "{" in rval[setting]:
+                    while "{" in rval[setting] and "}" in rval[setting]:
                         rval[setting] = rval[setting].format(**format_vars)
                 else:
                     rval[setting] = ""
@@ -180,9 +185,11 @@ class Service(BaseModel):
 
     def dict(self, *args, **kwargs):
         exclude = kwargs.pop("exclude", None) or {}
-        exclude = {"config", "service_settings"}
+        #exclude = {"config", "service_settings"}
+        exclude = {"config"}
         return super().dict(*args, exclude=exclude, **kwargs)
 
+    # FIXME: probably don't need to do all this
     def get_format_vars(self):
         if "_format_vars" in self.__dict__:
             return self.__dict__["_format_vars"]
@@ -197,43 +204,82 @@ class Service(BaseModel):
     format_vars = property(get_format_vars, set_format_vars)
 
 
+class ServiceList(BaseModel):
+    config = ConfigFile
+    _service_type = "_list_"
+    service_name = "_list_"
+    services: List[Service] = []
+    var_formatter: Callable[[ConfigFile, Service], Dict[str, str]] = None
+
+    # ServiceList is *only* used when service_command_style = gravity, meaning that the only case we need to do anything
+    # special with is galaxyctl exec
+
+    @property
+    def graceful_method(self):
+        if self.count > 1:
+            return GracefulMethod.ROLLING
+        else:
+            return self.services[0].graceful_method
+
+    @property
+    def count(self):
+        return len(self.services)
+
+    def get_service_instance(self, instance_number):
+        return self.services[instance_number]
+
+    def rolling_restart(self, restart_callbacks):
+        gravity.io.info(f"Performing rolling restart on service: {self.service_name}")
+        for instance_number, service_instance in enumerate(self.services):
+            if not service_instance.is_ready(quiet=False):
+                gravity.io.exception(f"Refusing to continue rolling restart, instance {instance_number} was down before restart")
+            gravity.io.debug(f"Calling restart callback {instance_number}: {restart_callbacks[instance_number]}")
+            restart_callbacks[instance_number]()
+            start = time.time()
+            timeout = service_instance.settings["restart_timeout"]
+            instance_is_ready = service_instance.is_ready()
+            while not instance_is_ready and ((time.time() - start) < timeout):
+                gravity.io.debug(f"{program_name} not ready...")
+                time.sleep(2)
+                instance_is_ready = service_instance.is_ready()
+            if not instance_is_ready:
+                gravity.io.exception(f"Refusing to continue rolling restart, instance failed to respond after {timeout} seconds")
+
+
+    # everything else falls through to the first configured service
+    def __getattr__(self, name):
+        return getattr(self.services[0], name)
+
+
 class GalaxyGunicornService(Service):
     _service_type = "gunicorn"
     service_name = "gunicorn"
     _default_environment = DEFAULT_GALAXY_ENVIRONMENT
-    command_arguments = {
+    _command_arguments = {
         "preload": "--preload",
-        # templates {instance_number}
-        "bind": "{settings[bind]}",
     }
     _command_template = "{virtualenv_bin}gunicorn 'galaxy.webapps.galaxy.fast_factory:factory()'" \
                         " --timeout {settings[timeout]}" \
                         " --pythonpath lib" \
                         " -k galaxy.webapps.galaxy.workers.Worker" \
-                        " -b {command_arguments[bind]}" \
+                        " -b {settings[bind]}" \
                         " --workers={settings[workers]}" \
                         " --config python:galaxy.web_stack.gunicorn_config" \
                         " {command_arguments[preload]}" \
                         " {settings[extra_args]}"
 
-    # FIXME: remove
-    supports_multiple_instances = True
-
-    @validator("service_settings")
+    @validator("settings")
     def _normalize_settings(cls, v, values):
         # TODO: should be copy?
-        settings = v[cls.settings_from]
+        #settings = v[cls.settings_from]
+        settings = v
         if settings["preload"] is None:
             settings["preload"] = True
         return v
 
     @property
     def graceful_method(self):
-        # we could technically still SIGHUP rather than SIGTERM/exec() if not using --preload but that's going to be the
-        # non-standard case so probably not worth the effort.
-        if self.settings.get("instance_count", 1) > 1:
-            return GracefulMethod.ROUND_ROBIN
-        elif self.settings.get("preload"):
+        if self.settings.get("preload"):
             return GracefulMethod.DEFAULT
         else:
             return GracefulMethod.SIGHUP
@@ -247,9 +293,8 @@ class GalaxyGunicornService(Service):
         environment.update(self.settings.get("environment", {}))
         return environment
 
-    def is_ready(self, instance_number, quiet=True):
+    def is_ready(self, quiet=True):
         bind = self.settings["bind"]
-        bind = bind.format(instance_number=instance_number)
         # FIXME: insert app.galaxy_url_prefix
         try:
             response = http_check(bind, "/api/version")
@@ -258,7 +303,9 @@ class GalaxyGunicornService(Service):
             if not quiet:
                 gravity.io.error(exc)
             return False
-        gravity.io.info(f"Gunicorn instance {instance_number} running, version: {version['version_major']}.{version['version_minor']}")
+        live_version = f"{version['version_major']}.{version['version_minor']}"
+        disk_version = self.config.galaxy_version
+        gravity.io.info(f"Gunicorn on {bind} running, version: {live_version} (disk version: {disk_version})")
         return True
 
 
@@ -279,10 +326,11 @@ class GalaxyUnicornHerderService(Service):
                         " {command_arguments[preload]}" \
                         " {settings[extra_args]}"
 
-    @validator("service_settings")
+    @validator("settings")
     def _normalize_settings(cls, v, values):
         # TODO: should be copy?
-        settings = v[cls.settings_from]
+        #settings = v[cls.settings_from]
+        settings = v
         if settings["preload"] is None:
             settings["preload"] = False
         return v
@@ -345,7 +393,7 @@ class GalaxyTUSDService(Service):
                         " -hooks-http-forward-headers=X-Api-Key,Cookie {settings[extra_args]}" \
                         " -hooks-enabled-events {settings[hooks_enabled_events]}"
 
-    @validator("service_settings")
+    @validator("settings")
     def _validate_settings(cls, v, values):
         if not values["config"].galaxy_infrastructure_url:
             gravity.io.exception("To run the tusd server you need to set galaxy_infrastructure_url in the galaxy section of galaxy.yml")
@@ -373,9 +421,10 @@ class GalaxyReportsService(Service):
                         " {command_arguments[url_prefix]}" \
                         " {settings[extra_args]}"
 
-    @validator("service_settings")
+    @validator("settings")
     def _validate_settings(cls, v, values):
-        settings = v[cls.settings_from]
+        #settings = v[cls.settings_from]
+        settings = v
         reports_config_file = settings["config_file"]
         if not os.path.isabs(reports_config_file):
             reports_config_file = os.path.join(os.path.dirname(values["config"]["galaxy_config_file"]), reports_config_file)
@@ -416,49 +465,6 @@ class GalaxyStandaloneService(Service):
         return command_arguments
 
 
-class ConfigFile(AttributeDict):
-    persist_keys = (
-        "config_type",
-        "instance_name",
-        "galaxy_root",
-    )
-
-    def __init__(self, *args, **kwargs):
-        super(ConfigFile, self).__init__(*args, **kwargs)
-        services = []
-        for service in self.get("services", []):
-            service_class = SERVICE_CLASS_MAP.get(service["service_type"], Service)
-            services.append(service_class(**service))
-        self.services = services
-
-    @property
-    def defaults(self):
-        return {
-            "process_manager": self["process_manager"],
-            "instance_name": self["instance_name"],
-            "galaxy_root": self["galaxy_root"],
-            "log_dir": self["attribs"]["log_dir"],
-            "gunicorn":  self.gunicorn_config,
-        }
-
-    @property
-    def gunicorn_config(self):
-        # We used to store bind_address and bind_port instead of a gunicorn config key, so restore from here
-        gunicorn = self["attribs"].get("gunicorn")
-        if not gunicorn and 'bind_address' in self["attribs"]:
-            return {'bind': f'{self["attribs"]["bind_address"]}:{self["attribs"]["bind_port"]}'}
-        return gunicorn
-
-    @property
-    def galaxy_version(self):
-        galaxy_version_file = os.path.join(self["galaxy_root"], "lib", "galaxy", "version.py")
-        with open(galaxy_version_file) as fh:
-            locs = {}
-            exec(fh.read(), {}, locs)
-            return locs["VERSION"]
-
->>>>>>> 80341da (Rolling gunicorn restarts are working)
-
 def service_for_service_type(service_type):
     try:
         return SERVICE_CLASS_MAP[service_type]
@@ -476,6 +482,7 @@ SERVICE_CLASS_MAP = {
     "tusd": GalaxyTUSDService,
     "reports": GalaxyReportsService,
     "standalone": GalaxyStandaloneService,
+    "_list_": ServiceList,
 }
 
 VALID_SERVICE_NAMES = set(SERVICE_CLASS_MAP)

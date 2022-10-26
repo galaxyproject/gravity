@@ -6,6 +6,7 @@ import shlex
 import shutil
 import subprocess
 import time
+from functools import partial
 from os.path import exists, expanduser, join
 
 import gravity.io
@@ -55,7 +56,7 @@ startsecs       = {settings[start_timeout]}
 stopwaitsecs    = {settings[stop_timeout]}
 environment     = {environment}
 numprocs        = {service_instance_count}
-numprocs_start  = {service_instance_number_start}
+numprocs_start  = {supervisor_numprocs_start}
 process_name    = {supervisor_process_name}
 stdout_logfile  = {log_file}
 redirect_stderr = true
@@ -84,17 +85,24 @@ class SupervisorProgram:
 
         self.config_process_name = "%(program_name)s"
         if self._use_instance_name:
-            self.config_process_name = service["service_name"]
+            self.config_process_name = service.service_name
 
-        service_settings = service.get_settings()
-        self.config_numprocs = service_settings.get("instance_count", 1)
-        self.config_numprocs_start = service_settings.get("instance_number_start", 0)
+        self.config_numprocs = service.count
+        self.config_numprocs_start = 0
 
-        if service.supports_multiple_instances and self.config_numprocs > 1:
+        self.config_instance_program_name = self.config_program_name
+
+        if self.config_numprocs > 1:
             if self._use_instance_name:
-                self.config_process_name = f"{service['service_name']}%(process_num)d"
+                self.config_process_name = f"{service.service_name}%(process_num)d"
             else:
                 self.config_process_name = "%(process_num)d"
+            self.config_instance_program_name += "_%(process_num)d"
+            # gets from the first
+            try:
+                self.config_numprocs_start = int(service.settings["instance_name"])
+            except (TypeError, ValueError) as exc:
+                gravity.io.exception(f"Invalid value for instance_name (must be an integer with supervisor): {exc}")
 
     @property
     def config_program_name(self):
@@ -102,9 +110,9 @@ class SupervisorProgram:
         service = self.service
         if self._use_instance_name:
             instance_name = self.config.instance_name
-            return f"{instance_name}_{service['config_type']}_{service['service_type']}_{service['service_name']}"
+            return f"{instance_name}_{service.config_type}_{service.service_type}_{service.service_name}"
         else:
-            return service["service_name"]
+            return service.service_name
 
     @property
     def program_names(self):
@@ -112,19 +120,23 @@ class SupervisorProgram:
         instance_name = None
         if self._use_instance_name:
             instance_name = self.config.instance_name
-        service_name = self.service["service_name"]
-        service_settings = self.service.get_settings()
-        instance_count = service_settings.get("instance_count", 1)
-        instance_number_start = service_settings.get("instance_number_start", 0)
+        service_name = self.service.service_name
+        instance_count = self.config_numprocs
+        instance_number_start = self.config_numprocs_start
         return supervisor_program_names(service_name, instance_count, instance_number_start, instance_name=instance_name)
 
-    @property
-    def program_instances(self):
-        """ """
-        service_settings = self.service.get_settings()
-        #instance_count = service_settings.get("instance_count", 1)
-        instance_number_start = service_settings.get("instance_number_start", 0)
-        return [(instance_number_start + i, name) for i, name in enumerate(self.program_names)]
+    def instance_number(self, instance_name):
+        try:
+            return int(instance_name) - self.config_numprocs_start
+        except (TypeError, ValueError) as exc:
+            gravity.io.exception(f"Invalid value for instance_name (must be an integer with supervisor): {exc}")
+
+    #@property
+    #def program_instances(self):
+    #    """ """
+    #    #instance_count = service_settings.get("instance_count", 1)
+    #    instance_number_start = self.service.settings.get("instance_number_start", 0)
+    #    return [(instance_number_start + i, name) for i, name in enumerate(self.program_names)]
 
 
 
@@ -201,6 +213,10 @@ class SupervisorProcessManager(BaseProcessManager):
     def _service_environment_formatter(self, environment, format_vars):
         return ",".join("{}={}".format(k, shlex.quote(v.format(**format_vars))) for k, v in environment.items())
 
+    def service_instance_number(self, config, service, instance_name):
+        program = SupervisorProgram(config, service, self._use_instance_name)
+        return program.instance_number(instance_name)
+
     def terminate(self):
         if self.foreground:
             # if running in foreground, if terminate is called, then supervisord should've already received a SIGINT
@@ -211,10 +227,11 @@ class SupervisorProcessManager(BaseProcessManager):
         # supervisor-specific format vars
         supervisor_format_vars = {
             "log_dir": config.log_dir,
-            "log_file": self._service_log_file(config.log_dir, program.config_program_name),
+            "log_file": self._service_log_file(config.log_dir, program.config_instance_program_name),
             "instance_number": "%(process_num)d",
             "supervisor_program_name": program.config_program_name,
             "supervisor_process_name": program.config_process_name,
+            "supervisor_numprocs_start": program.config_numprocs_start,
         }
 
         return self._service_format_vars(config, service, supervisor_format_vars)
@@ -222,8 +239,10 @@ class SupervisorProcessManager(BaseProcessManager):
     def __update_service(self, config, service, instance_conf_dir, instance_name):
         conf = join(instance_conf_dir, f"{service.config_type}_{service.service_type}_{service.service_name}.conf")
         template = SUPERVISORD_SERVICE_TEMPLATE
-        contents = template.format(**service.format_vars)
-        name = service["service_name"] if not self._use_instance_name else f"{instance_name}:{service['service_name']}"
+        # FIXME: uses var_formatter magic in the route decorator
+        #contents = template.format(**service.format_vars)
+        contents = template.format(**self.service_format_vars(config, service))
+        name = service.service_name if not self._use_instance_name else f"{instance_name}:{service.service_name}"
         self._update_file(conf, contents, name, "service")
         return conf
 
@@ -285,7 +304,7 @@ class SupervisorProcessManager(BaseProcessManager):
                 shutil.rmtree(path)
 
     def __supervisor_programs(self, config, service_names):
-        services = [s for s in config.services if s["service_name"] in service_names]
+        services = [s for s in config.services if s.service_name in service_names]
         return [SupervisorProgram(config, service, self._use_instance_name) for service in services]
 
     def __supervisor_program_names(self, config, service_names):
@@ -317,27 +336,14 @@ class SupervisorProcessManager(BaseProcessManager):
                 graceful_method = service.graceful_method
                 if graceful_method == GracefulMethod.SIGHUP:
                     self.supervisorctl("signal", "SIGHUP", *program.program_names)
-                elif graceful_method == GracefulMethod.ROUND_ROBIN:
+                elif graceful_method == GracefulMethod.ROLLING:
                     self.__rolling_restart(config, service, program)
                 else:
                     self.supervisorctl("restart", *program.program_names)
 
     def __rolling_restart(self, config, service, program):
-        gravity.io.info(f"Performing rolling restart on service: {service['service_name']}")
-        for instance_number, program_name in program.program_instances:
-            if not service.is_ready(instance_number, quiet=False):
-                gravity.io.exception(f"Refusing to continue rolling restart, instance {instance_number} was down before restart")
-            self.supervisorctl("restart", program_name)
-            start = time.time()
-            timeout = service.get_settings()["restart_timeout"]
-            instance_is_ready = service.is_ready(instance_number)
-            while not instance_is_ready and ((time.time() - start) < timeout):
-                gravity.io.debug(f"{program_name} not ready...")
-                time.sleep(2)
-                instance_is_ready = service.is_ready(instance_number)
-            if not instance_is_ready:
-                gravity.io.exception(f"Refusing to continue rolling restart, instance failed to respond after {timeout} seconds")
-
+        restart_callbacks = list(partial(self.supervisorctl, "restart", p) for p in program.program_names)
+        service.rolling_restart(restart_callbacks)
 
     def start(self, configs=None, service_names=None):
         self.__supervisord()

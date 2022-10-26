@@ -38,6 +38,8 @@ def _route(func, all_process_managers=False):
         configs = self.config_manager.get_configs(instances=instance_names or None)
         for config in configs:
             for service in config.services:
+                # TODO: not sure this is really necessary, originally it was to store format vars on the service, but do
+                # we need that?
                 service.var_formatter = partial(self.process_managers[config.process_manager].service_format_vars, config)
             try:
                 configs_by_pm[config.process_manager].append(config)
@@ -97,16 +99,15 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
             "virtualenv_bin": virtualenv_bin,
             "gravity_data_dir": config.gravity_data_dir,
         }
-        instance_count = service.settings.get("instance_count", 1)
+
         format_vars["settings"] = service.settings
-        format_vars["service_instance_count"] = instance_count
-        format_vars["service_instance_number_start"] = service.settings.get("instance_number_start", 0)
+        format_vars["service_instance_count"] = service.count
 
         # update here from PM overrides
         format_vars.update(pm_format_vars)
 
         # template the command template
-        if config.service_command_style == ServiceCommandStyle.direct:
+        if config.service_command_style in (ServiceCommandStyle.direct, ServiceCommandStyle.exec):
             format_vars["command_arguments"] = service.get_command_arguments(format_vars)
             format_vars["command"] = service.command_template.format(**format_vars)
 
@@ -123,13 +124,14 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
             if not galaxyctl.endswith("galaxyctl"):
                 warn(f"Unable to determine galaxyctl command, sys.argv[0] is: {galaxyctl}")
             instance_number_opt = ""
-            if instance_count > 1:
+            if service.count > 1:
                 instance_number_opt = f" --service-instance {pm_format_vars['instance_number']}"
-            format_vars["command"] = f"{galaxyctl} --config-file {config_file} exec{instance_number_opt {config.instance_name} {service.service_name}"
+            format_vars["command"] = f"{galaxyctl} --config-file {config_file} exec{instance_number_opt} {config.instance_name} {service.service_name}"
             environment = {}
         format_vars["environment"] = self._service_environment_formatter(environment, format_vars)
 
-        service.format_vars = format_vars
+        # FIXME: do we actually need to do this?
+        #service.format_vars = format_vars
 
         return format_vars
 
@@ -243,20 +245,22 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
 
         # if this is an instance of a service, we need to ensure that instance_number is formatted in as needed
         exec_format_vars = {}
-        service_settings = service.get_settings()
-        instance_count = service_settings.get("instance_count", 1)
-        if service.supports_multiple_instances and instance_count > 1:
+        instance_count = service.count
+        if instance_count > 1:
             msg = f"Cannot exec '{service_name}': This service is configured to use multiple instances and "
             if service_instance_number is None:
                 exception(msg + "--service-instance was not set")
-            start = service_settings["instance_number_start"]
-            if service_instance_number not in range(start, start + instance_count):
+            if service_instance_number not in range(0, instance_count):
                 exception(msg + "--service-instance is out of range")
+            # FIXME: is this needed?
             exec_format_vars = {"instance_number": service_instance_number}
+            service_instance = service.get_service_instance(service_instance_number)
+        else:
+            service_instance = service
 
         # force generation of real commands
-        config.service_command_style = ServiceCommandStyle.direct
-        format_vars = self._service_format_vars(config, service, exec_format_vars)
+        config.service_command_style = ServiceCommandStyle.exec
+        format_vars = self._service_format_vars(config, service_instance, exec_format_vars)
         print_env = ' '.join('{}={}'.format(k, shlex.quote(v)) for k, v in format_vars["environment"].items())
 
         cmd = shlex.split(format_vars["command"])
@@ -305,7 +309,7 @@ class ProcessManagerRouter:
                 exception("No provided names are known instance or service names")
         return (instance_names, service_names)
 
-    def exec(self, instance_names=None, service_instance_number=None, no_exec=False):
+    def exec(self, instance_names=None, service_instance=None, no_exec=False):
         """ """
         instance_names, service_names = self._instance_service_names(instance_names)
 
@@ -326,6 +330,12 @@ class ProcessManagerRouter:
             exception(f"Service '{service_name}' is not configured. Configured service(s): {service_list}")
 
         service = services[0]
+
+        # translate the instance name from the PM back into a list index
+        pm = self.process_managers[config.process_manager]
+        service_instance_number = pm.service_instance_number(config, service, service_instance)
+        debug(f"Service instance name '{service_instance}' -> number '{service_instance_number}'")
+
         return self._process_executor.exec(config, service, service_instance_number=service_instance_number, no_exec=no_exec)
 
     @route

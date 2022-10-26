@@ -10,8 +10,8 @@ from typing import Union
 from pydantic import ValidationError
 from yaml import safe_load
 
-from gravity.settings import Settings
-from gravity.io import debug, error, exception, warn
+import gravity.io
+from gravity.settings import ServiceCommandStyle, Settings
 from gravity.state import (
     ConfigFile,
     service_for_service_type,
@@ -42,7 +42,7 @@ class ConfigManager(object):
             # convert from pathlib.Path
             self.state_dir = str(state_dir)
 
-        debug(f"Gravity state dir: {state_dir}")
+        gravity.io.debug(f"Gravity state dir: {state_dir}")
 
         if config_file:
             for cf in config_file:
@@ -60,11 +60,11 @@ class ConfigManager(object):
                 config_dict = safe_load(config_fh)
             except Exception as exc:
                 # this should always be a parse error, access errors will be caught by click
-                error(f"Failed to parse config: {config_file}")
-                exception(exc)
+                gravity.io.error(f"Failed to parse config: {config_file}")
+                gravity.io.exception(exc)
 
         if type(config_dict) is not dict:
-            exception(f"Config file does not look like valid Galaxy or Gravity configuration file: {config_file}")
+            gravity.io.exception(f"Config file does not look like valid Galaxy or Gravity configuration file: {config_file}")
 
         gravity_config_dict = config_dict.get(self.gravity_config_section) or {}
 
@@ -79,15 +79,15 @@ class ConfigManager(object):
             if app_config_file:
                 app_config = self.__load_app_config_file(config_file, app_config_file)
             else:
-                warn(
+                gravity.io.warn(
                     f"Config file appears to be a Gravity config but contains no {server_section} section, "
                     f"Galaxy defaults will be used: {config_file}")
         elif self.gravity_config_section not in config_dict and server_section in config_dict:
-            warn(
+            gravity.io.warn(
                 f"Config file appears to be a Galaxy config but contains no {self.gravity_config_section} section, "
                 f"Gravity defaults will be used: {config_file}")
         elif self.gravity_config_section not in config_dict and server_section not in config_dict:
-            exception(f"Config file does not look like valid Galaxy or Gravity configuration file: {config_file}")
+            gravity.io.exception(f"Config file does not look like valid Galaxy or Gravity configuration file: {config_file}")
 
         app_config = app_config or config_dict.get(server_section) or {}
         gravity_config_dict["__file__"] = config_file
@@ -103,12 +103,12 @@ class ConfigManager(object):
                 if server_section not in _app_config_dict:
                     # we let a missing galaxy config slide in other scenarios but if you set the option to something
                     # that doesn't contain a galaxy section that's almost surely a mistake
-                    exception(f"Galaxy config file does not contain a {server_section} section: {app_config_file}")
+                    gravity.io.exception(f"Galaxy config file does not contain a {server_section} section: {app_config_file}")
             app_config = _app_config_dict[server_section] or {}
             app_config["__file__"] = app_config_file
             return app_config
         except Exception as exc:
-            exception(exc)
+            gravity.io.exception(exc)
 
     def __load_config_list(self, config_file, config_dict):
         try:
@@ -125,7 +125,7 @@ class ConfigManager(object):
                 gravity_config_dict["__file__"] = config_file
                 self.__load_config(gravity_config_dict, app_config)
         except AssertionError as exc:
-            exception(exc)
+            gravity.io.exception(exc)
 
     def __load_config(self, gravity_config_dict, app_config):
         defaults = {}
@@ -133,19 +133,22 @@ class ConfigManager(object):
             gravity_config = Settings(**recursive_update(defaults, gravity_config_dict))
         except ValidationError as exc:
             # suppress the traceback and just report the error
-            exception(exc)
+            gravity.io.exception(exc)
 
         if gravity_config.instance_name in self.__configs:
-            error(
+            gravity.io.error(
                 f"Galaxy instance {gravity_config.instance_name} already loaded from file: "
                 f"{self.__configs[gravity_config.instance_name].gravity_config_file}")
-            exception(f"Duplicate instance name {gravity_config.instance_name}, instance names must be unique")
+            gravity.io.exception(f"Duplicate instance name {gravity_config.instance_name}, instance names must be unique")
 
         gravity_config_file = gravity_config_dict["__file__"]
         galaxy_config_file = app_config.get("__file__", gravity_config_file)
 
         service_settings = {}
-        service_settings["gunicorn"] = gravity_config.gunicorn.dict()
+        if isinstance(gravity_config.gunicorn, list):
+            service_settings["gunicorn"] = [g.dict() for g in gravity_config.gunicorn]
+        else:
+            service_settings["gunicorn"] = gravity_config.gunicorn.dict()
         service_settings["tusd"] = gravity_config.tusd.dict()
         service_settings["celery"] = gravity_config.celery.dict()
         service_settings["reports"] = gravity_config.reports.dict()
@@ -180,16 +183,45 @@ class ConfigManager(object):
             "service_settings": service_settings,
         }
 
-        if gravity_config.gunicorn.enable:
+        # TODO: don't allow gunicorn list + unicornherder
+        # TODO: do this better
+        if isinstance(gravity_config.gunicorn, list):
+            gunicorn_services = []
+            for i, gunicorn in enumerate(gravity_config.gunicorn):
+                if gunicorn.enable:
+                    settings = service_settings["gunicorn"][i]
+                    service_kwargs = {"config": config, "settings": settings}
+                    gunicorn_services.append(service_for_service_type("gunicorn")(**service_kwargs))
+            if gravity_config.service_command_style == ServiceCommandStyle.direct:
+                # service instances have to be separate files if writing direct, since command lines vary by more than
+                # just a single templatable integer/string
+                # TODO: test this
+                config.services.extend(gunicorn_services)
+            else:
+                config.services.append(service_for_service_type("_list_")(services=gunicorn_services, service_name="gunicorn"))
+        elif gravity_config.gunicorn.enable:
+            settings = service_settings["gunicorn"]
+            service_kwargs = {"config": config, "settings": settings}
             config.services.append(service_for_service_type(config.app_server)(**service_kwargs))
+
         if gravity_config.celery.enable:
+            settings = service_settings["celery"]
+            service_kwargs = {"config": config, "settings": settings}
             config.services.append(service_for_service_type("celery")(**service_kwargs))
         if gravity_config.celery.enable_beat:
+            settings = service_settings["celery"]
+            service_kwargs = {"config": config, "settings": settings}
             config.services.append(service_for_service_type("celery-beat")(**service_kwargs))
         if gravity_config.tusd.enable:
+            settings = service_settings["tusd"]
+            service_kwargs = {"config": config, "settings": settings}
             config.services.append(service_for_service_type("tusd")(**service_kwargs))
         if gravity_config.reports.enable:
+            settings = service_settings["reports"]
+            service_kwargs = {"config": config, "settings": settings}
             config.services.append(service_for_service_type("reports")(**service_kwargs))
+
+        # FIXME: handlers
 
         if not app_config.get("job_config_file") and app_config.get("job_config"):
             # config embedded directly in Galaxy config
@@ -216,7 +248,7 @@ class ConfigManager(object):
         self.create_handler_services(gravity_config, config)
         self.create_gxit_services(gravity_config, app_config, config)
         self.__configs[config.instance_name] = config
-        debug(f"Loaded instance {config.instance_name} from Gravity config file: {config.gravity_config_file}")
+        gravity.io.debug(f"Loaded instance {config.instance_name} from Gravity config file: {config.gravity_config_file}")
         return config
 
     def create_handler_services(self, gravity_config: Settings, config):
@@ -237,7 +269,7 @@ class ConfigManager(object):
     def create_gxit_services(self, gravity_config: Settings, app_config, config):
         interactivetools_enable = app_config.get("interactivetools_enable")
         if gravity_config.gx_it_proxy.enable and not interactivetools_enable:
-            exception("To run the gx-it-proxy server you need to set interactivetools_enable in the galaxy section of galaxy.yml")
+            gravity.io.exception("To run the gx-it-proxy server you need to set interactivetools_enable in the galaxy section of galaxy.yml")
         if gravity_config.gx_it_proxy.enable:
             # TODO: resolve against data_dir, or bring in galaxy-config ?
             # CWD in supervisor template is galaxy_root, so this should work for simple cases as is
@@ -282,7 +314,7 @@ class ConfigManager(object):
                 with open(conf) as job_conf_fh:
                     conf = safe_load(job_conf_fh.read())
             else:
-                exception(f"Unknown job config file type: {conf}")
+                gravity.io.exception(f"Unknown job config file type: {conf}")
         if isinstance(conf, dict):
             handling = conf.get('handling') or {}
             processes = handling.get('processes') or {}
@@ -319,14 +351,14 @@ class ConfigManager(object):
     def get_config(self, instance_name=None):
         if instance_name is None:
             if self.instance_count > 1:
-                exception("An instance name is required when more than one instance is configured")
+                gravity.io.exception("An instance name is required when more than one instance is configured")
             elif self.instance_count == 0:
-                exception("No configured Galaxy instances")
+                gravity.io.exception("No configured Galaxy instances")
             instance_name = list(self.__configs.keys())[0]
         try:
             return self.__configs[instance_name]
         except KeyError:
-            exception(f"Unknown instance name: {instance_name}")
+            gravity.io.exception(f"Unknown instance name: {instance_name}")
 
     def get_configured_service_names(self):
         rval = set()
