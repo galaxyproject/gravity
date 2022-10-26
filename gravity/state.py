@@ -127,7 +127,7 @@ class Service(BaseModel):
                     f"Settings for {cls._service_type} is a list, but lists are not allowed for this service type")
             for i, instance_settings in enumerate(settings):
                 services.extend(cls.services_if_enabled(config, settings=instance_settings, service_name=f"{service_name}{i}"))
-            if gravity_settings.service_command_style == ServiceCommandStyle.gravity:
+            if gravity_settings.use_service_instances:
                 services = [ServiceList(services=services, service_name=service_name)]
         elif isinstance(settings, dict) and settings[cls._enable_attribute]:
             # settings is already a dict e.g. in the case of handlers

@@ -437,16 +437,25 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
   gravity:
 
     # Process manager to use.
-    # ``supervisor`` is the default process manager.
-    # ``systemd`` is also supported.
+    # ``supervisor`` is the default process manager when Gravity is invoked as a non-root user.
+    # ``systemd`` is the default when Gravity is invoked as root.
     # Valid options are: supervisor, systemd
-    # process_manager: supervisor
+    # process_manager:
 
     # What command to write to the process manager configs
     # `gravity` (`galaxyctl exec <service-name>`) is the default
     # `direct` (each service's actual command) is also supported.
-    # Valid options are: gravity, direct
+    # Valid options are: gravity, direct, exec
     # service_command_style: gravity
+
+    # Use the process manager's *service instance* functionality for services that can run multiple instances.
+    # Presently this includes services like gunicorn and Galaxy dynamic job handlers. Service instances are only supported if
+    # ``service_command_style`` is ``gravity``, and so this option is automatically set to ``false`` if
+    # ``service_command_style`` is set to ``direct``.
+    # use_service_instances: true
+
+    # umask under which services should be executed. Setting ``umask`` on an individual service overrides this value.
+    # umask: '022'
 
     # Memory limit (in GB), processes exceeding the limit will be killed. Default is no limit. If set, this is default value
     # for all services. Setting ``memory_limit`` on an individual service overrides this value. Ignored if ``process_manager``
@@ -489,7 +498,7 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
     # this is hidden from you when running a single instance.
     # instance_name: _default_
 
-    # Configuration for Gunicorn.
+    # Configuration for Gunicorn. Can be a list to run multiple gunicorns for rolling restarts.
     gunicorn:
 
       # Enable Galaxy gunicorn server.
@@ -557,6 +566,9 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
       # Extra arguments to pass to Celery command line.
       # extra_args:
 
+      # umask under which service should be executed
+      # umask:
+
       # Value of supervisor startsecs, systemd TimeoutStartSec
       # start_timeout: 10
 
@@ -585,7 +597,8 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
       # port: 4002
 
       # Routes file to monitor.
-      # Should be set to the same path as ``interactivetools_map`` in the ``galaxy:`` section.
+      # Should be set to the same path as ``interactivetools_map`` in the ``galaxy:`` section. This is ignored if
+      # ``interactivetools_map is set``.
       # sessions: database/interactivetools_map.sqlite
 
       # Include verbose messages in gx-it-proxy
@@ -602,6 +615,9 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
       # Rewrite location blocks with proxy port.
       # This is an advanced option that is only needed when proxying to remote interactive tool container that cannot be reached through the local network.
       # reverse_proxy: false
+
+      # umask under which service should be executed
+      # umask:
 
       # Value of supervisor startsecs, systemd TimeoutStartSec
       # start_timeout: 10
@@ -654,6 +670,9 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
       # Extra arguments to pass to tusd command line.
       # extra_args:
 
+      # umask under which service should be executed
+      # umask:
+
       # Value of supervisor startsecs, systemd TimeoutStartSec
       # start_timeout: 10
 
@@ -702,6 +721,9 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
 
       # Extra arguments to pass to Gunicorn command line.
       # extra_args:
+
+      # umask under which service should be executed
+      # umask:
 
       # Value of supervisor startsecs, systemd TimeoutStartSec
       # start_timeout: 10

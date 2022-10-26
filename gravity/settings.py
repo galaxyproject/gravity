@@ -304,6 +304,15 @@ What command to write to the process manager configs
 `direct` (each service's actual command) is also supported.
 """)
 
+    use_service_instances: bool = Field(
+        True,
+        description="""
+Use the process manager's *service instance* functionality for services that can run multiple instances.
+Presently this includes services like gunicorn and Galaxy dynamic job handlers. Service instances are only supported if
+``service_command_style`` is ``gravity``, and so this option is automatically set to ``false`` if
+``service_command_style`` is set to ``direct``.
+""")
+
     umask: str = Field("022", description="""
 umask under which services should be executed. Setting ``umask`` on an individual service overrides this value.
 """)
@@ -398,6 +407,7 @@ See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defi
                 raise ValueError("Gravity cannot be run as root unless using the systemd process manager")
         return v
 
+    # automatically set process_manager to systemd if unset and running is root
     @validator("process_manager")
     def _process_manager_systemd_if_root(cls, v, values):
         if v is None:
@@ -405,6 +415,13 @@ See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defi
                 v = ProcessManager.systemd.value
             else:
                 v = ProcessManager.supervisor.value
+        return v
+
+    # disable service instances unless command style is gravity
+    @validator("use_service_instances")
+    def _disable_service_instances_if_direct(cls, v, values):
+        if values["service_command_style"] != ServiceCommandStyle.gravity:
+            v = False
         return v
 
     class Config:

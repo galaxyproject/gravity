@@ -11,7 +11,7 @@ from pydantic import ValidationError
 from yaml import safe_load
 
 import gravity.io
-from gravity.settings import ServiceCommandStyle, Settings
+from gravity.settings import Settings
 from gravity.state import (
     ConfigFile,
     service_for_service_type,
@@ -244,7 +244,7 @@ class ConfigManager(object):
 
     @staticmethod
     def expand_handlers(gravity_settings: Settings, config: ConfigFile):
-        use_list = gravity_settings.service_command_style == ServiceCommandStyle.gravity
+        use_list = gravity_settings.use_service_instances
         handlers = gravity_settings.handlers or {}
         expanded_handlers = {}
         default_name_template = "{name}_{process}"
