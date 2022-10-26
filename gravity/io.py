@@ -14,10 +14,13 @@ def debug(message, *args):
         click.echo(message)
 
 
-def info(message, *args):
+def info(message, *args, bright=True):
     if args:
         message = message % args
-    click.echo(click.style(message, bold=True, fg="green"))
+    style_kwargs = {}
+    if bright:
+        style_kwargs = {"bold": True, "fg": "green"}
+    click.echo(click.style(message, **style_kwargs))
 
 
 def error(message, *args):

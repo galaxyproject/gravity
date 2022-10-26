@@ -163,8 +163,8 @@ Consumes less memory when multiple processes are configured. Default is ``false`
     start_timeout: int = Field(15, description="Value of supervisor startsecs, systemd TimeoutStartSec")
     stop_timeout: int = Field(65, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
     restart_timeout: int = Field(
-    300,
-    description="""
+        default=300,
+        description="""
 Amount of time to wait for a server to become alive when performing rolling restarts.
 """)
     memory_limit: Optional[int] = Field(

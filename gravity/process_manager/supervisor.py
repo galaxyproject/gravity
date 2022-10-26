@@ -100,6 +100,11 @@ class SupervisorProgram:
             self.config_instance_program_name += "_%(process_num)d"
 
     @property
+    def config_file_name(self):
+        service = self.service
+        return f"{service.config_type}_{service.service_type}_{service.service_name}.conf"
+
+    @property
     def config_program_name(self):
         """The representation in [program:NAME] in the supervisor config"""
         service = self.service
@@ -213,7 +218,7 @@ class SupervisorProcessManager(BaseProcessManager):
 
         format_vars = self._service_format_vars(config, service, supervisor_format_vars)
 
-        conf = join(instance_conf_dir, f"{service.config_type}_{service.service_type}_{service.service_name}.conf")
+        conf = join(instance_conf_dir, program.config_file_name)
         template = SUPERVISORD_SERVICE_TEMPLATE
         contents = template.format(**format_vars)
         name = service.service_name if not self._use_instance_name else f"{instance_name}:{service.service_name}"
@@ -239,7 +244,6 @@ class SupervisorProcessManager(BaseProcessManager):
             intended_configs.add(self.__update_service(config, service, instance_conf_dir, instance_name))
             programs.append(f"{instance_name}_{service.config_type}_{service.service_type}_{service.service_name}")
 
-        # TODO: test group mode
         group_conf = join(self.supervisord_conf_dir, f"group_{instance_name}.conf")
         if self._use_instance_name:
             format_vars = {"instance_name": instance_name, "programs": ",".join(programs)}
@@ -282,7 +286,6 @@ class SupervisorProcessManager(BaseProcessManager):
         return [SupervisorProgram(config, service, self._use_instance_name) for service in services]
 
     def __supervisor_program_names(self, config, service_names):
-        #return [p.program_names for p in self.__supervisor_programs(config, service_names) for p.program_names in p]
         program_names = []
         for program in self.__supervisor_programs(config, service_names):
             program_names.extend(program.program_names)

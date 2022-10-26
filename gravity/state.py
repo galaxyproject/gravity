@@ -225,12 +225,14 @@ class ServiceList(BaseModel):
             if not service_instance.is_ready(quiet=False):
                 gravity.io.exception(f"Refusing to continue rolling restart, instance {instance_number} was down before restart")
             gravity.io.debug(f"Calling restart callback {instance_number}: {restart_callbacks[instance_number]}")
+            gravity.io.info(f"Restarting {self.service_name} instance {instance_number}")
             restart_callbacks[instance_number]()
+            gravity.io.info(f"Restarted {self.service_name} instance {instance_number}, waiting for readiness check...")
             start = time.time()
             timeout = service_instance.settings["restart_timeout"]
             instance_is_ready = service_instance.is_ready()
             while not instance_is_ready and ((time.time() - start) < timeout):
-                gravity.io.debug(f"{program_name} not ready...")
+                gravity.io.debug(f"{self.service_name}@{instance_number} not ready...")
                 time.sleep(2)
                 instance_is_ready = service_instance.is_ready()
             if not instance_is_ready:
@@ -294,7 +296,7 @@ class GalaxyGunicornService(Service):
             return False
         live_version = f"{version['version_major']}.{version['version_minor']}"
         disk_version = self.config.galaxy_version
-        gravity.io.info(f"Gunicorn on {bind} running, version: {live_version} (disk version: {disk_version})")
+        gravity.io.info(f"Gunicorn on {bind} running, version: {live_version} (disk version: {disk_version})", bright=False)
         return True
 
 
@@ -483,7 +485,6 @@ SERVICE_CLASS_MAP = {
     "tusd": GalaxyTUSDService,
     "reports": GalaxyReportsService,
     "standalone": GalaxyStandaloneService,
-    #"_list_": ServiceList,
 }
 
 VALID_SERVICE_NAMES = set(SERVICE_CLASS_MAP)

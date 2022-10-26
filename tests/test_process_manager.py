@@ -358,7 +358,7 @@ def test_default_memory_limit(galaxy_yml, default_config_manager):
     conf_dir = service_conf_dir(state_dir, process_manager_name)
     gunicorn_conf_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'gunicorn')
     assert 'MemoryLimit=2G' in gunicorn_conf_path.open().read()
-    handler0_config_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'handler_0', service_type='standalone')
+    handler0_config_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'handler', service_type='standalone')
     assert handler0_config_path.exists(), os.listdir(conf_dir)
     assert 'MemoryLimit=2G' in handler0_config_path.open().read()
 
@@ -379,7 +379,7 @@ def test_service_memory_limit(galaxy_yml, default_config_manager):
     conf_dir = service_conf_dir(state_dir, process_manager_name)
     gunicorn_conf_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'gunicorn')
     assert 'MemoryLimit=4G' in gunicorn_conf_path.open().read()
-    handler0_config_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'handler_0', service_type='standalone')
+    handler0_config_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'handler', service_type='standalone')
     assert handler0_config_path.exists(), os.listdir(conf_dir)
     assert 'MemoryLimit' not in handler0_config_path.open().read()
 
@@ -401,7 +401,7 @@ def test_override_memory_limit(galaxy_yml, default_config_manager):
     conf_dir = service_conf_dir(state_dir, process_manager_name)
     gunicorn_conf_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'gunicorn')
     assert 'MemoryLimit=4G' in gunicorn_conf_path.open().read()
-    handler0_config_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'handler_0', service_type='standalone')
+    handler0_config_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'handler', service_type='standalone')
     assert handler0_config_path.exists(), os.listdir(conf_dir)
     assert 'MemoryLimit=2G' in handler0_config_path.open().read()
 
@@ -421,7 +421,7 @@ def test_default_umask(galaxy_yml, default_config_manager):
     conf_dir = service_conf_dir(state_dir, process_manager_name)
     gunicorn_conf_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'gunicorn')
     assert 'UMask=022' in gunicorn_conf_path.open().read()
-    handler0_config_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'handler_0', service_type='standalone')
+    handler0_config_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'handler', service_type='standalone')
     assert handler0_config_path.exists(), os.listdir(conf_dir)
     assert 'UMask=022' in handler0_config_path.open().read()
 
@@ -442,7 +442,7 @@ def test_service_umask(galaxy_yml, default_config_manager):
     conf_dir = service_conf_dir(state_dir, process_manager_name)
     gunicorn_conf_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'gunicorn')
     assert 'UMask=077' in gunicorn_conf_path.open().read()
-    handler0_config_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'handler_0', service_type='standalone')
+    handler0_config_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'handler', service_type='standalone')
     assert handler0_config_path.exists(), os.listdir(conf_dir)
     assert 'UMask=022' in handler0_config_path.open().read()
 
@@ -464,7 +464,7 @@ def test_override_umask(galaxy_yml, default_config_manager):
     conf_dir = service_conf_dir(state_dir, process_manager_name)
     gunicorn_conf_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'gunicorn')
     assert 'UMask=077' in gunicorn_conf_path.open().read()
-    handler0_config_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'handler_0', service_type='standalone')
+    handler0_config_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'handler', service_type='standalone')
     assert handler0_config_path.exists(), os.listdir(conf_dir)
     assert 'UMask=027' in handler0_config_path.open().read()
 
