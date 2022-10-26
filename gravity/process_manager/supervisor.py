@@ -291,7 +291,7 @@ class SupervisorProcessManager(BaseProcessManager):
             program_names.extend(program.program_names)
         return program_names
 
-    def __start_stop(self, op, configs, service_names):
+    def __op_on_programs(self, op, configs, service_names):
         targets = []
         for config in configs:
             if service_names:
@@ -324,11 +324,11 @@ class SupervisorProcessManager(BaseProcessManager):
 
     def start(self, configs=None, service_names=None):
         self.__supervisord()
-        self.__start_stop("start", configs, service_names)
+        self.__op_on_programs("start", configs, service_names)
         self.supervisorctl("status")
 
     def stop(self, configs=None, service_names=None):
-        self.__start_stop("stop", configs, service_names)
+        self.__op_on_programs("stop", configs, service_names)
         # Exit supervisor if all processes are stopped
         supervisor = self.__get_supervisor()
         if self.__supervisord_is_running():
@@ -344,7 +344,7 @@ class SupervisorProcessManager(BaseProcessManager):
             self.__supervisord()
             gravity.io.warn("supervisord was not previously running; it has been started, so the 'restart' command has been ignored")
         else:
-            self.__start_stop("restart", configs, service_names)
+            self.__op_on_programs("restart", configs, service_names)
 
     def graceful(self, configs=None, service_names=None):
         if not self.__supervisord_is_running():
@@ -357,7 +357,7 @@ class SupervisorProcessManager(BaseProcessManager):
         # TODO: create our own formatted output
         # supervisor = self.get_supervisor()
         # all_infos = supervisor.getAllProcessInfo()
-        self.supervisorctl("status")
+        self.__op_on_programs("status", configs, service_names)
 
     def shutdown(self):
         self.supervisorctl("shutdown")

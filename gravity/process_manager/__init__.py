@@ -346,7 +346,7 @@ class ProcessManagerRouter:
         """ """
 
     @route
-    def status(self):
+    def status(self, instance_names=None):
         """ """
 
     @route_to_all

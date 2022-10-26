@@ -155,6 +155,19 @@ class SystemdProcessManager(BaseProcessManager):
         instance_name = f"-{config.instance_name}" if self._use_instance_name else ""
         return f"{config.config_type}{instance_name}.target"
 
+    def __unit_files_to_active_unit_names(self, *unit_files):
+        unit_names = []
+        for unit_file in unit_files:
+            unit_file = os.path.basename(unit_file)
+            if "@" in unit_file:
+                at_position = unit_file.index("@")
+                unit_arg = unit_file[:at_position + 1] + "*" + unit_file[at_position + 1:]
+            else:
+                unit_arg = unit_file
+            list_output = self.__systemctl("list-units", "--plain", "--no-legend", unit_arg, capture=True)
+            unit_names.extend(line.split()[0] for line in list_output.splitlines())
+        return unit_names
+
     def __update_service(self, config, service, systemd_service: SystemdService):
         # under supervisor we expect that gravity is installed in the galaxy venv and the venv is active when gravity
         # runs, but under systemd this is not the case. we do assume $VIRTUAL_ENV is the galaxy venv if running as an
@@ -266,11 +279,14 @@ class SystemdProcessManager(BaseProcessManager):
         else:
             unintended_configs = present_configs - intended_configs
 
-        for file in unintended_configs:
-            unit_name = os.path.basename(file)
-            self.__systemctl("disable", "--now", unit_name)
-            gravity.io.info("Removing systemd config %s", file)
-            os.unlink(file)
+        if unintended_configs:
+            unit_files = sorted(unintended_configs)
+            unit_names = self.__unit_files_to_active_unit_names(*unit_files)
+            if unit_names:
+                gravity.io.info(f"Stopping active units: {', '.join(unit_names)}")
+                self.__systemctl("disable", "--now", *unit_names)
+            gravity.io.info(f"Removing systemd configs: {', '.join(unit_files)}")
+            list(map(os.unlink, unit_files))
             self._service_changes = True
 
     def __unit_names(self, configs, service_names, use_target=True, include_services=False):
@@ -333,7 +349,10 @@ class SystemdProcessManager(BaseProcessManager):
         """ """
         unit_names = self.__unit_names(configs, service_names, include_services=True)
         try:
-            self.__systemctl("status", "--lines=0", *unit_names, ignore_rc=(3,))
+            if service_names:
+                self.__systemctl("status", *unit_names, ignore_rc=(3,))
+            else:
+                self.__systemctl("list-units", "--all", *unit_names)
         except subprocess.CalledProcessError as exc:
             if exc.returncode == 4:
                 gravity.io.error("Some expected systemd units were not found, did you forget to run `galaxyctl update`?")
