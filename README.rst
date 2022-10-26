@@ -1,53 +1,123 @@
-========================================
- gravity - Galaxy Server Administration
-========================================
+============================================
+ gravity - Galaxy Server Process Management
+============================================
 
-A process manager (`supervisor`_) and management tools for `Galaxy`_ servers.
+Process management for `Galaxy`_ servers.
 
-Installing this will give you two executables, ``galaxyctl`` which is used to manage the starting, stopping, and logging
-of Galaxy's various processes, and ``galaxy``, which can be used to run a Galaxy server in the foreground.
+Modern Galaxy servers run multiple disparate processes: `gunicorn`_ for serving the web application, `celery`_ for
+asynchronous tasks, `tusd`_ for fault-tolerant uploads, standalone Galaxy processes for job handling, and more. Gravity
+is Galaxy's process manager, to make configuring and running these services simple.
+
+Installing Gravity will give you two executables, ``galaxyctl`` which is used to manage the starting, stopping, and
+logging of Galaxy's various processes, and ``galaxy``, which can be used to run a Galaxy server in the foreground.
 
 Installation
 ============
 
-Python 3.7 or later is required. Gravity can be installed independently of Galaxy, but please read the section on Galaxy
-Integration below.
+Python 3.7 or later is required. Gravity can be installed independently of Galaxy, but it is also a dependency of
+Galaxy since Galaxy 22.01. If you've installed Galaxy, then Gravity is already installed in Galaxy's virtualenv.
 
-To install::
+To install independently:
+
+.. code:: console
 
     $ pip install gravity
 
 To make your life easier, you are encourged to install into a `virtualenv`_. The easiest way to do this is with Python's
-built-in `venv`_ module::
+built-in `venv`_ module:
+
+.. code:: console
 
     $ python3 -m venv ~/gravity
     $ . ~/gravity/bin/activate
 
-By default, Gravity will store its state, configuration, and log files in ``$XDG_CONFIG_HOME/galaxy-gravity``, where
-``$XDG_CONFIG_HOME`` typically defaults to ``~/.config``. You can change this with the ``--state-dir`` option to the
-Gravity commands, or by setting ``$GRAVITY_STATE_DIR`` in your environment.
-
-Galaxy 22.01 Integration
-========================
-
-Gravity was originally designed to support managing multiple Galaxy (as well as Galaxy Reports and Tool Shed) servers on
-a single host, but hides some of this complexity from you if you are working with a single Galaxy server. Additionally,
-Galaxy 22.01 has added Gravity as a dependency, and changes have been made to Gravity to support this mode of operation.
-
-- Gravity 0.9.0 has dropped support for running Galaxy with uWSGI in favor of `gunicorn`_ and `FastAPI`_.
-- Gravity 0.9.0 cannot be used with Galaxy versions older than 22.01.
-- As of Galaxy 22.01, Gravity is automatically installed into Galaxy's virtualenv by Galaxy's setup scripts (as called
-  by ``run.sh``)
-- Galaxy's setup scripts as of 22.01 also set ``$GRAVITY_STATE_DIR`` to ``<galaxy_root>/database/gravity`` when running
-  Galaxy from the source directory. This keeps each Galaxy instance's Gravity configuration separate.
-
 Usage
 =====
 
-If running from the root of a Galaxy source tree, you can start and run Galaxy in the foreground with::
+Gravity needs to know where your Galaxy configuration file is, and depending on your Galaxy layout, some additional
+details like the paths to its virtualenv and root directory. Gravity's configuration is defined in Galaxy's
+configuration file (``galaxy.yml``) to be easy and familiar for Galaxy administrators.
+
+Examples in this documentation assume a Galaxy layout like the one used in the `Galaxy Installation with Ansible`_
+tutorial::
+
+    /srv/galaxy/server  # Galaxy code
+    /srv/galaxy/config  # config files
+    /srv/galaxy/venv    # virtualenv
+
+Gravity can either run Galaxy via the `supervisor`_ process manager (the default) or `systemd`_.
+
+Managing a Single Galaxy
+------------------------
+
+The simplest way to use Gravity is to activate Galaxy's virtualenv, which will put Gravity's ``galaxyctl`` and
+``galaxy`` commands on your ``$PATH``:
+
+.. code:: console
+
+    $ . /srv/galaxy/venv/bin/activate
+    $ galaxyctl --help
+    Usage: galaxyctl [OPTIONS] COMMAND [ARGS]...
+
+      Manage Galaxy server configurations and processes.
+
+    Options:
+      -d, --debug             Enables debug mode.
+      -c, --config-file FILE  Gravity (or Galaxy) config file to operate on. Can
+                              also be set with $GRAVITY_CONFIG_FILE or
+                              $GALAXY_CONFIG_FILE
+      --state-dir DIRECTORY   Where process management configs and state will be
+                              stored.
+      -h, --help              Show this message and exit.
+
+    Commands:
+      configs     List registered config files.
+      deregister  Deregister config file(s).
+      exec        Run a single Galaxy service in the foreground, with logging...
+      follow      Follow log files of configured instances.
+      graceful    Gracefully reload configured services.
+      instances   List all known instances.
+      pm          Invoke process manager (supervisorctl, systemctl) directly.
+      register    Register config file(s).
+      rename      Update path of registered config file.
+      restart     Restart configured services.
+      show        Show details of registered config.
+      shutdown    Shut down process manager.
+      start       Start configured services.
+      status      Display server status.
+      stop        Stop configured services.
+      update      Update process manager from config changes.
+
+If you run ``galaxy`` or ``galaxyctl`` from the root of a Galaxy source checkout and do not specify the config file
+option, ``config/galaxy.yml`` or ``config/galaxy.yml.sample`` will be automatically used. This is handy for working with
+local clones of Galaxy for testing or development. You can skip Galaxy's lengthy and repetitive ``run.sh`` configuration
+steps when starting and stopping Galaxy in between code updates (you should still run ``run.sh`` after performing a
+``git pull`` to make sure your dependencies are up to date).
+
+For production servers, **it is recommended that you run Gravity as root in systemd mode**. See the :ref:`Managing a
+Production Galaxy` section below for details.
+
+To avoid having to run from the galaxy root directory, you can explicitly point Gravity at your Galaxy configuration
+file with the ``--config-file`` option or ``$GRAVITY_CONFIG_FILE`` (or ``$GALAXY_CONFIG_FILE``, as set by Galaxy's
+``run.sh`` script) environment variable. Then it's possible to run the ``galaxyctl`` command from anywhere.
+
+.. code:: console
+
+    $ galaxyctl --config-file /srv/galaxy/config/galaxy.yml SUBCOMMAND [OPTIONS]
+
+Often times it's more convenient to put the environment variable in the Galaxy user's shell environment file, e.g.:
+
+.. code:: console
+
+    $ echo "export GRAVITY_CONFIG_FILE='/srv/galaxy/config/galaxy.yml'" >> ~/.bash_profile
+
+Once you have configured the path to your config file, you can start and run Galaxy in the foreground using the
+``galaxy`` command:
+
+.. code:: console
 
     $ galaxy
-    Registered galaxy config: /home/nate/work/galaxy/config/galaxy.yml
+    Registered galaxy config: /srv/galaxy/config/galaxy.yml
     Creating or updating service gunicorn
     Creating or updating service celery
     Creating or updating service celery-beat
@@ -60,19 +130,20 @@ If running from the root of a Galaxy source tree, you can start and run Galaxy i
     celery                           STARTING
     celery-beat                      STARTING
     gunicorn                         STARTING
-    ==> /home/nate/work/galaxy/database/gravity/log/gunicorn.log <==
+    ==> /srv/galaxy/var/gravity/log/gunicorn.log <==
     ...log output follows...
 
 Galaxy will continue to run and output logs to stdout until terminated with ``CTRL+C``.
 
-The ``galaxy`` command is actually a shortcut for three separate steps: 1. register your Galaxy configuration file
-(``galaxy.yml``) with Gravity, 2. write out the process manager configurations, and 3. start and run Galaxy in the
-foreground using the process manager (`supervisor`_). You can perform these steps separately (and in this example, start
-Galaxy as a backgrounded daemon instead of in the foreground)::
+The ``galaxy`` command is actually a shortcut for two separate steps: 1. read the provided ``galaxy.yml`` and write out
+the corresponding process manager configurations, and 2. start and run Galaxy in the foreground using the process
+manager (`supervisor`_). You can perform these steps separately (and in this example, start Galaxy as a backgrounded
+daemon instead of in the foreground):
 
-    $ galaxyctl register config/galaxy.yml
-    Registered galaxy config: /home/nate/work/galaxy/config/galaxy.yml
+.. code:: console
+
     $ galaxyctl update
+    Registered galaxy config: /home/nate/work/galaxy/config/galaxy.yml
     Creating or updating service gunicorn
     Creating or updating service celery
     Creating or updating service celery-beat
@@ -82,7 +153,9 @@ Galaxy as a backgrounded daemon instead of in the foreground)::
     gunicorn                         STARTING
     Log files are in /home/nate/work/galaxy/database/gravity/log
 
-When running as a daemon, the ``stop`` subcommand stops your Galaxy server::
+When running as a daemon, the ``stop`` subcommand stops your Galaxy server:
+
+.. code:: console
 
     $ galaxyctl stop
     celery-beat: stopped
@@ -91,29 +164,224 @@ When running as a daemon, the ``stop`` subcommand stops your Galaxy server::
     All processes stopped, supervisord will exit
     Shut down
 
-Once a Galaxy configuration file has been registered with Gravity, it doesn't matter where you call ``galaxy`` or
-``galaxyctl`` from.
+Managing a Production Galaxy
+----------------------------
+
+By default, Gravity runs Galaxy processes under `supervisor`_, but setting the ``process_manager`` option to ``systemd``
+in Gravity's configuration will cause it to run under `systemd`_ instead. systemd is the default init system under most
+modern Linux distributions, and using systemd is strongly encouraged for production Galaxy deployments.
+
+Gravity manages `systemd service unit files`_ corresponding to all of the Galaxy services that it is aware of, much like
+how it manages supervisor program config files in supervisor mode. If you run ``galaxyctl update`` as a non-root user,
+the unit files will be installed in ``~/.config/systemd/user`` and run via `systemd user mode`_. This can be useful for
+testing and development, but in production it is recommended to run Gravity as root, so that it installs the service
+units in ``/etc/systemd/system`` and are managed by the privileged systemd instance. Even when Gravity is run as root,
+Galaxy itself still runs as a non-root user, specified by the ``galaxy_user`` option in the Gravity configuration.
+
+It is also recommended, when running as root, that you install Gravity independent of Galaxy, rather than use the copy
+installed in Galaxy's virtualenv:
+
+.. code:: console
+
+    # python3 -m venv /opt/gravity
+    # /opt/gravity/bin/pip install gravity
+
+.. caution::
+
+    Because systemd unit file names have semantic meaning (the filename is the service's name) and systemd does not have
+    a facility for isolating unit files controlled by an application, Gravity considers all unit files in the unit dir
+    (``/etc/systemd/system``) that are named like ``galaxy-*`` to be controlled by Gravity. **If you have existing unit
+    files that are named as such, Gravity will overwrite or remove them.**
+
+In systemd mode, and especially when run as root, some Gravity options are required:
+
+.. code:: yaml
+
+    gravity:
+      process_manager: systemd
+
+      # required if running as root
+      galaxy_user: GALAXY-USERNAME
+      # optional, defaults to primary group of the user set above
+      galaxy_group: GALAXY-GROUPNAME
+
+      # required
+      virtualenv: /srv/galaxy/venv
+      # probably necessary if your galaxy.yml is not in galaxy_root/config
+      galaxy_root: /srv/galaxy/server
+
+See the :ref:`Configuration` section for more details on these options and others.
+
+When running Gravity as root, the following configuration files will automatically be searched for and read, unless
+``--config-file`` is specified or ``$GRAVITY_CONFIG_FILE`` is set:
+
+- ``/etc/galaxy/gravity.yml``
+- ``/etc/galaxy/galaxy.yml``
+- ``/etc/galaxy/gravity.d/*.y(a?)ml``
+
+It is *not* necessary to write your entire Galaxy configuration to the Gravity config file. You can write only the
+Gravity configuration, and then point to your Galaxy config file with the ``galaxy_config_file`` option in the Gravity
+config. See the :ref:`Managing Multiple Galaxies` section for more details.
+
+The ``log_dir`` option is ignored when using systemd. Logs are instead captured by systemd's logging facility,
+``journald``.
+
+You can use ``galaxyctl`` to manage Galaxy process starts/stops/restarts/etc. and follow the logs, just as you do under
+supervisor, but you can also use ``systemctl`` and ``journalctl`` directly to manage process states and inspect logs
+(respectively). Only ``galaxyctl update`` is necessary, in order to write and/or remove the appropriate systemd service
+units based on your configuration. For example:
+
+.. code:: console
+
+   # export GRAVITY_CONFIG_FILE=/srv/galaxy/config/galaxy.yml
+   # . /srv/galaxy/venv/bin/activate
+   (venv) # galaxyctl update
+   Adding service galaxy-gunicorn.service
+   Adding service galaxy-celery.service
+   Adding service galaxy-celery-beat.service
+
+After this point, operations can be performed with either ``galaxyctl`` or ``systemctl``. Some examples of equivalent
+commands:
+
+=================================== ==================================================================
+ Gravity                             systemd
+=================================== ==================================================================
+``galaxy``                          ``systemctl start galaxy.target && journalctl -f -u 'galaxy-*'``
+``galaxyctl start``                 ``systemctl start galaxy.target``
+``galaxyctl start SERVICE ...``     ``systemctl start galaxy-SERVICE.service galaxy-...``
+``galaxyctl restart``               ``systemctl restart galaxy.target``
+``galaxyctl restart SERVICE ...``   ``systemctl restart galaxy-SERVICE.service galaxy-...``
+``galaxyctl graceful``              ``systemctl reload-or-restart galaxy.target``
+``galaxyctl graceful SERVICE ...``  ``systemctl reload-or-restart galaxy-SERVICE.service galaxy-...``
+``galaxyctl stop``                  ``systemctl start galaxy.target``
+``galayxctl follow``                ``journalctl -f -u 'galaxy-*'``
+=================================== ==================================================================
+
+Managing Multiple Galaxies
+--------------------------
+
+Gravity can manage multiple instances of Galaxy simultaneously. This is useful especially in the case where you have
+multiple production Galaxy instances on a single server and are managing them with Gravity installed outside of a Galaxy
+virtualenv, as root. There are multiple ways to achieve this:
+
+1. Pass multiple ``--config-file`` options to ``galaxyctl``, or set a list of colon-separated config paths in
+   ``$GRAVITY_CONFIG_FILE``:
+
+    .. code:: console
+
+        $ galaxyctl --config-file /srv/galaxy/test/config/galaxy.yml \
+                    --config-file /srv/galaxy/main/config/galaxy.yml list --version
+        TYPE      INSTANCE NAME       VERSION       CONFIG PATH
+        galaxy    test                22.05         /srv/galaxy/test/config/galaxy.yml
+        galaxy    main                22.09.dev0    /srv/galaxy/main/config/galaxy.yml
+        $ export GRAVITY_CONFIG_FILE='/srv/galaxy/test/config/galaxy.yml:/srv/galaxy/main/config/galaxy.yml'
+        $ galaxyctl list --version
+        TYPE      INSTANCE NAME       VERSION       CONFIG PATH
+        galaxy    test                22.05         /srv/galaxy/test/config/galaxy.yml
+        galaxy    main                22.09.dev0    /srv/galaxy/main/config/galaxy.yml
+
+2. If running as root, any config files located in ``/etc/galaxy/gravity.d`` will automatically be loaded.
+
+3. Specify multiple Gravity configurations in a single config file, as a list. In this case, the Galaxy and Gravity
+   configurations must be in separate files as described in :ref:`Splitting Gravity and Galaxy Configurations`:
+
+    .. code:: yaml
+
+        gravity:
+          - instance_name: test
+            process_manager: systemd
+            galaxy_config_file: /srv/galaxy/test/config/galaxy.yml
+            galaxy_root: /srv/galaxy/test/server
+            virtualenv: /srv/galaxy/test/venv
+            galaxy_user: gxtest
+            gunicorn:
+              bind: unix:/srv/galaxy/test/var/gunicorn.sock
+            handlers:
+              handler:
+                pools:
+                  - job-handlers
+                  - workflow-schedulers
+
+          - instance_name: main
+            process_manager: systemd
+            galaxy_config_file: /srv/galaxy/main/config/galaxy.yml
+            galaxy_root: /srv/galaxy/main/server
+            virtualenv: /srv/galaxy/main/venv
+            galaxy_user: gxmain
+            gunicorn:
+              bind: unix:/srv/galaxy/main/var/gunicorn.sock
+              workers: 8
+            handlers:
+              handler:
+                processes: 4
+                pools:
+                  - job-handlers
+                  - workflow-schedulers
+
+In all cases, when using multiple Gravity instances, each Galaxy instance managed by Gravity must have a unique
+**instance name**. When working with a single instance, the default name ``_default_`` is used automatically and mostly
+hidden from you. When working with multiple instances, set the ``instance_name`` option in each instance's Gravity
+config to a unique name.
+
+Although it is strongly encouraged to use systemd for running multiple instances, it is possible to use supervisor. If
+using supervisor, the supervisor configurations will be stored in ``$XDG_CONFIG_HOME/galaxy-gravity``
+(``$XDG_CONFIG_HOME`` defaults to ``~/.config/galaxy-gravity``), so you may want to set this to a different path using
+the ``--state-dir`` option (or ``$GRAVITY_STATE_DIR``).
+
+Note, Galaxy 22.01 and 22.05 automatically set ``$GRAVITY_STATE_DIR`` to ``<galaxy_root>/database/gravity`` in the
+virtualenv's activation script.
 
 Configuration
 =============
 
-The following options in the ``gravity`` section of ``galaxy.yml`` can be used to control Gravity::
-unset are shown)::
+The following options in the ``gravity`` section of ``galaxy.yml`` can be used to control Gravity:
+
+.. code:: yaml
 
   # Configuration for Gravity process manager.
   # ``uwsgi:`` section will be ignored if Galaxy is started via Gravity commands (e.g ``./run.sh``, ``galaxy`` or ``galaxyctl``).
   gravity:
 
+    # Process manager to use.
+    # ``supervisor`` is the default process manager.
+    # ``systemd`` is also supported.
+    # Valid options are: supervisor, systemd
+    # process_manager: supervisor
+
+    # What command to write to the process manager configs
+    # `gravity` (`galaxyctl exec <service-name>`) is the default
+    # `direct` (each service's actual command) is also supported.
+    # Valid options are: gravity, direct
+    # service_command_style: gravity
+
+    # Memory limit (in GB), processes exceeding the limit will be killed. Default is no limit. If set, this is default value
+    # for all services. Setting ``memory_limit`` on an individual service overrides this value. Ignored if ``process_manager``
+    # is ``supervisor``.
+    # memory_limit:
+
+    # Specify Galaxy config file (galaxy.yml), if the Gravity config is separate from the Galaxy config. Assumed to be the
+    # same file as the Gravity config if a ``galaxy`` key exists at the root level, otherwise, this option is required.
+    # galaxy_config_file:
+
     # Specify Galaxy's root directory.
     # Gravity will attempt to find the root directory, but you can set the directory explicitly with this option.
     # galaxy_root:
 
+    # User to run Galaxy as, required when using the systemd process manager as root.
+    # Ignored if ``process_manager`` is ``supervisor`` or user-mode (non-root) ``systemd``.
+    # galaxy_user:
+
+    # Group to run Galaxy as, optional when using the systemd process manager as root.
+    # Ignored if ``process_manager`` is ``supervisor`` or user-mode (non-root) ``systemd``.
+    # galaxy_group:
+
     # Set to a directory that should contain log files for the processes controlled by Gravity.
-    # If not specified defaults to ``<state_dir>/log``.
+    # If not specified defaults to ``<galaxy_data_dir>/gravity/log``.
     # log_dir:
 
     # Set to Galaxy's virtualenv directory.
-    # If not specified, Gravity assumes all processes are on PATH.
+    # If not specified, Gravity assumes all processes are on PATH. This option is required in most circumstances when using
+    # the ``systemd`` process manager.
     # virtualenv:
 
     # Select the application server.
@@ -154,6 +422,17 @@ unset are shown)::
       # Consumes less memory when multiple processes are configured. Default is ``false`` if using unicornherder, else ``true``.
       # preload:
 
+      # Value of supervisor startsecs, systemd TimeoutStartSec
+      # start_timeout: 15
+
+      # Value of supervisor stopwaitsecs, systemd TimeoutStopSec
+      # stop_timeout: 65
+
+      # Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
+      # ``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
+      # ``supervisor``.
+      # memory_limit:
+
       # Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
       # names.
       # environment: {}
@@ -183,6 +462,17 @@ unset are shown)::
 
       # Extra arguments to pass to Celery command line.
       # extra_args:
+
+      # Value of supervisor startsecs, systemd TimeoutStartSec
+      # start_timeout: 10
+
+      # Value of supervisor stopwaitsecs, systemd TimeoutStopSec
+      # stop_timeout: 10
+
+      # Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
+      # ``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
+      # ``supervisor``.
+      # memory_limit:
 
       # Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
       # names.
@@ -218,6 +508,17 @@ unset are shown)::
       # Rewrite location blocks with proxy port.
       # This is an advanced option that is only needed when proxying to remote interactive tool container that cannot be reached through the local network.
       # reverse_proxy: false
+
+      # Value of supervisor startsecs, systemd TimeoutStartSec
+      # start_timeout: 10
+
+      # Value of supervisor stopwaitsecs, systemd TimeoutStopSec
+      # stop_timeout: 10
+
+      # Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
+      # ``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
+      # ``supervisor``.
+      # memory_limit:
 
       # Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
       # names.
@@ -259,6 +560,66 @@ unset are shown)::
       # Extra arguments to pass to tusd command line.
       # extra_args:
 
+      # Value of supervisor startsecs, systemd TimeoutStartSec
+      # start_timeout: 10
+
+      # Value of supervisor stopwaitsecs, systemd TimeoutStopSec
+      # stop_timeout: 10
+
+      # Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
+      # ``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
+      # ``supervisor``.
+      # memory_limit:
+
+      # Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
+      # names.
+      # environment: {}
+
+    # Configuration for Galaxy Reports.
+    reports:
+
+      # Enable Galaxy Reports server.
+      # enable: false
+
+      # Path to reports.yml, relative to galaxy.yml if not absolute
+      # config_file: reports.yml
+
+      # The socket to bind. A string of the form: ``HOST``, ``HOST:PORT``, ``unix:PATH``, ``fd://FD``. An IP is a valid HOST.
+      # bind: localhost:9001
+
+      # Controls the number of Galaxy Reports application processes Gunicorn will spawn.
+      # It is not generally necessary to increase this for the low-traffic Reports server.
+      # workers: 1
+
+      # Gunicorn workers silent for more than this many seconds are killed and restarted.
+      # Value is a positive number or 0. Setting it to 0 has the effect of infinite timeouts by disabling timeouts for all workers entirely.
+      # timeout: 300
+
+      # URL prefix to serve from.
+      # The corresponding nginx configuration is (replace <url_prefix> and <bind> with the values from these options):
+      #
+      # location /<url_prefix>/ {
+      #     proxy_pass http://<bind>/;
+      # }
+      #
+      # If <bind> is a unix socket, you will need a ``:`` after the socket path but before the trailing slash like so:
+      #     proxy_pass http://unix:/run/reports.sock:/;
+      # url_prefix:
+
+      # Extra arguments to pass to Gunicorn command line.
+      # extra_args:
+
+      # Value of supervisor startsecs, systemd TimeoutStartSec
+      # start_timeout: 10
+
+      # Value of supervisor stopwaitsecs, systemd TimeoutStopSec
+      # stop_timeout: 10
+
+      # Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
+      # ``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
+      # ``supervisor``.
+      # memory_limit:
+
       # Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
       # names.
       # environment: {}
@@ -267,39 +628,40 @@ unset are shown)::
     # See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defined-handlers for details.
     # handlers: {}
 
+Splitting Gravity and Galaxy Configurations
+-------------------------------------------
 
 As a convenience for cases where you may want to have different Gravity configurations but a single Galaxy
 configuration (e.g. your Galaxy server is split across multiple hosts), the Gravity configuration can be stored in a
-separate file and included into the Galaxy configuration. For example, on a deployment where the web (gunicorn) and job
-handler processes run on different hosts, one might have:
+separate file. In this case, you must set the ``galaxy_config_file`` option in the Gravity config to specify the
+location of the Galaxy config file.
 
-In ``galaxy.yml``::
-
-    gravity: !include gravity.yml
-    galaxy:
-      database_connection: postgresql://...
-      ...
+For example, on a deployment where the web (gunicorn) and job handler processes run on different hosts, one might have:
 
 In ``gravity.yml`` on the web host::
 
-    log_dir: /var/log/galaxy
-    gunicorn:
-      bind: localhost:8888
-    celery:
-      enable: false
-      enable_beat: false
+    gravity:
+      galaxy_config_file: galaxy.yml
+      log_dir: /var/log/galaxy
+      gunicorn:
+        bind: localhost:8888
+      celery:
+        enable: false
+        enable_beat: false
 
 In ``gravity.yml`` on the job handler host::
 
-    log_dir: /var/log/galaxy
-    gunicorn:
-      enable: false
-    celery:
-      enable: true
-      enable_beat: true
-    handlers:
-      handler:
-        processes: 2
+    gravity:
+      galaxy_config_file: galaxy.yml
+      log_dir: /var/log/galaxy
+      gunicorn:
+        enable: false
+      celery:
+        enable: true
+        enable_beat: true
+      handlers:
+        handler:
+          processes: 2
 
 Galaxy Job Handlers
 -------------------
@@ -312,38 +674,21 @@ Gravity has support for reading Galaxy's job configuration: it can read statical
 When using dynamically defined handlers, be sure to explicitly set the `job handler assignment method`_ to
 ``db-skip-locked`` or ``db-transaction-isolation`` to prevent the web process from also handling jobs.
 
-Configuration Precedence
-------------------------
+Configuration and State
+-----------------------
 
-Gravity's configuration is defined in Galaxy's configuration file to be easy and familiar for Galaxy administrators, but
-Gravity maintains its own state in ``$GRAVITY_STATE_DIR/configstate.yaml``.  **If set**, the options in ``galaxy.yml``
-will override Gravity's saved state whenever ``galaxyctl update`` is run, but if later **unset**, then the persisted
-values in Gravity's saved state are used.
+Older versions of Gravity stored a considerable amount of *config state* in ``$GRAVITY_STATE_DIR/configstate.yaml``. As
+of version 1.0.0, Gravity does not store state information, and this file can be removed.
 
-The exception is the values of ``app_server`` and ``job_handler_*``, which will revert to default values if unset in
-``galaxy.yml``, because Gravity dynamically adds and removes services based on the Galaxy configuration by design.
+Although Gravity no longer uses the config state file, it does still use a state directory for storing supervisor
+configs, the default log directory (if ``log_dir`` is unchanged), and the celery-beat database. This directory defaults
+to ``<galaxy_root>/database/gravity/`` by way of the ``data_dir`` option in the ``galaxy`` section of ``galaxy.yml``
+(which defaults to ``<galaxy_root>/database/``).
 
 Subcommands
 ===========
 
 Use ``galaxyctl --help`` for help. Subcommands also support ``--help``, e.g. ``galaxy register --help``
-
-register
---------
-
-Register a Galaxy server config (``galaxy.yml``) with Gravity. Does not update or start. Run ``galaxyctl update`` after
-registering to apply changes.
-
-list
-----
-
-List config files registered with the process manager.
-
-deregister
-----------
-
-Deregister a Galaxy server config, Gravity will no longer manage this Galaxy instance. Run ``galaxyctl update`` after
-deregistering to apply changes.
 
 start
 -----
@@ -384,84 +729,61 @@ update
 Figure out what has changed in configs, which could be:
 
 -  changes to the Gravity configuration options in ``galaxy.yml``
--  adding or removing handlers in ``job_conf.xml``
+-  adding or removing handlers in ``job_conf.yml`` or ``job_conf.xml``
 
 This may cause service restarts if there are any changes.
 
-Any needed changes to supervisor configs will be performed and then ``supervisorctl update`` will be called.
-
-``update`` is called automatically for the ``start``, ``stop``, ``restart``, and ``graceful`` subcommands.
+Any needed changes to supervisor or systemd configs will be performed and then ``supervisorctl update`` or ``systemctl
+daemon-reload`` will be called.
 
 shutdown
 --------
 
 Stop all processes and cause ``supervisord`` to terminate. Similar to ``stop`` but there is no ambiguity as to whether
-``supervisord`` remains running.
+``supervisord`` remains running. The equivalent of ``stop`` when using systemd.
 
-supervisorctl
--------------
+follow
+------
 
-Pass through directly to supervisor. Run ``galaxyctl supervisorctl`` to invoke the supervisorctl shell, or ``galaxyctl
-supervisorctl [command]`` to call a supervisorctl command directly. See the `supervisor`_ documentation or ``galaxyctl
-supervisorctl help`` for help.
+Follow (e.g. using ``tail -f`` (supervisor) or ``journalctl -f`` (systemd)) log files of all Galaxy services, or a
+subset (if named as arguments).
 
-instances
----------
+list
+----
 
-List known (configured) Galaxy instances and services.
+List config files known to Gravity.
 
 show
 ----
 
-Show stored configuration details for the named config file.
+Show Gravity configuration details for a Galaxy instance.
 
-rename
-------
+pm
+--
 
-If your ``galaxy.yml`` has moved, you can update its path in Gravity's saved state with this command.
+Pass through directly to the process manager (e.g. supervisor). Run ``galaxyctl pm`` to invoke the supervisorctl shell,
+or ``galaxyctl pm [command]`` to call a supervisorctl or systemctl command directly. See the `supervisor`_ documentation
+or ``galaxyctl pm help`` for help.
 
-configstate.yaml
-================
+exec
+----
 
-As discussed in the Configuration section, Gravity maintains a state file that also acts as a configuration of sorts.
-Administrators deploying Galaxy with a deployment tool (e.g. `Ansible`_) can take advantage of this to deploy a Gravity
-state file as part of their Galaxy deployment. See the ``$GRAVITY_STATE_DIR/configstate.yaml`` file after performing a
-``register`` and ``update`` command to see what this file looks like, or below for an example. Keep in mind that running
-``galaxyctl`` commands after changing the Galaxy configuration can cause changes to the state file because it was not
-originally intended to be user-maintainable. See `Issue #6`_ for discussion and development related to this, as we seek
-to provide a more consistent experience in working with Gravity's configuration.
+Directly execute a single Galaxy service in the foreground, e.g. ``galaxyctl exec gunicorn``, ``galaxyctl exec tusd``,
+etc. ``galaxyctl exec`` comands are written to the supervisor/systemd service files rather than the underlying command
+so that it is not necesary to rewrite the process manager configs and update the process manager every time a parameter
+is changed.
 
-Example
--------
-
-A ``configstate.yaml`` file for a Galaxy service might look like::
-
-    config_files:
-      /home/nate/work/galaxy/config/galaxy.yml:
-        config_type: galaxy
-        instance_name: _default_
-        attribs:
-          app_server: gunicorn
-          log_dir: /home/nate/work/galaxy/database/gravity/log
-          bind: 'localhost:8080'
-          galaxy_root: /home/nate/work/galaxy
-        services:
-        - config_type: galaxy
-          service_type: gunicorn
-          service_name: gunicorn
-        - config_type: galaxy
-          service_type: celery
-          service_name: celery
-        - config_type: galaxy
-          service_type: celery-beat
-          service_name: celery-beat
-
-.. _supervisor: http://supervisord.org/
 .. _Galaxy: http://galaxyproject.org/
+.. _gunicorn: https://gunicorn.org/
+.. _celery: https://docs.celeryq.dev/
+.. _tusd: https://tus.io/
+.. _supervisor: http://supervisord.org/
+.. _systemd: https://www.freedesktop.org/wiki/Software/systemd/
+.. _systemd service unit files: https://www.freedesktop.org/software/systemd/man/systemd.unit.html
+.. _systemd user mode: https://www.freedesktop.org/software/systemd/man/user@.service.html
 .. _virtualenv: https://virtualenv.pypa.io/
 .. _venv: https://docs.python.org/3/library/venv.html
-.. _gunicorn: https://gunicorn.org/
-.. _FastAPI: https://fastapi.tiangolo.com/
+.. _Galaxy Installation with Ansible: https://training.galaxyproject.org/training-material/topics/admin/tutorials/ansible-galaxy/tutorial.html
 .. _unicornherder: https://github.com/alphagov/unicornherder
 .. _job handler assignment method: https://docs.galaxyproject.org/en/master/admin/scaling.html#job-handler-assignment-methods
 .. _dynamically defined handlers: https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defined-handlers

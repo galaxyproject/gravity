@@ -7,12 +7,13 @@ import inspect
 import os
 import shlex
 import subprocess
+import sys
 from abc import ABCMeta, abstractmethod
 from functools import partial, wraps
 
 from gravity.config_manager import ConfigManager
 from gravity.io import debug, exception, info, warn
-from gravity.settings import ServiceCommandStyle
+from gravity.settings import DEFAULT_INSTANCE_NAME, ServiceCommandStyle
 from gravity.state import VALID_SERVICE_NAMES
 from gravity.util import which
 
@@ -34,7 +35,7 @@ def _route(func, all_process_managers=False):
         configs_by_pm = {}
         pm_names = self.process_managers.keys()
         instance_names, service_names = self._instance_service_names(instance_names)
-        configs = self.config_manager.get_registered_configs(instances=instance_names or None)
+        configs = self.config_manager.get_configs(instances=instance_names or None)
         for config in configs:
             try:
                 configs_by_pm[config.process_manager].append(config)
@@ -63,9 +64,8 @@ route_to_all = partial(_route, all_process_managers=True)
 
 
 class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
-    def __init__(self, state_dir=None, config_manager=None, start_daemon=True, foreground=False):
-        self.config_manager = config_manager or ConfigManager(state_dir=state_dir)
-        self.state_dir = self.config_manager.state_dir
+    def __init__(self, state_dir=None, config_file=None, config_manager=None, **kwargs):
+        self.config_manager = config_manager or ConfigManager(state_dir=state_dir, config_file=config_file)
         self.tail = which("tail")
 
     @abstractmethod
@@ -79,60 +79,61 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
         return os.path.join(log_dir, program_name + ".log")
 
     def _service_program_name(self, instance_name, service):
-        return f"{instance_name}_{service['config_type']}_{service['service_type']}_{service['service_name']}"
-
-    def _service_environment(self, service, attribs):
-        environment = service.get_environment()
-        environment_from = service.environment_from
-        if not environment_from:
-            environment_from = service.service_type
-        environment.update(attribs.get(environment_from, {}).get("environment", {}))
-        return environment
+        return f"{instance_name}_{service.config_type}_{service.service_type}_{service.service_name}"
 
     def _service_format_vars(self, config, service, program_name, pm_format_vars):
-        attribs = config.attribs
-        virtualenv_dir = attribs.get("virtualenv")
+        virtualenv_dir = config.virtualenv
         virtualenv_bin = f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}' if virtualenv_dir else ""
 
         format_vars = {
-            "config_type": service["config_type"],
-            "server_name": service["service_name"],
+            "config_type": service.config_type,
+            "server_name": service.service_name,
             "program_name": program_name,
-            "galaxy_infrastructure_url": attribs["galaxy_infrastructure_url"],
-            "galaxy_umask": service.get("umask", "022"),
-            "galaxy_conf": config.__file__,
-            "galaxy_root": config["galaxy_root"],
+            "galaxy_infrastructure_url": config.galaxy_infrastructure_url,
+            "galaxy_umask": service.settings.get("umask") or config.umask,
+            "galaxy_conf": config.galaxy_config_file,
+            "galaxy_root": config.galaxy_root,
             "virtualenv_bin": virtualenv_bin,
-            "state_dir": self.state_dir,
+            "gravity_data_dir": config.gravity_data_dir,
         }
-        format_vars["settings"] = service.get_settings(attribs, format_vars)
+        format_vars["settings"] = service.settings
 
         # update here from PM overrides
         format_vars.update(pm_format_vars)
 
         # template the command template
         if config.service_command_style == ServiceCommandStyle.direct:
-            format_vars["command_arguments"] = service.get_command_arguments(attribs, format_vars)
+            format_vars["command_arguments"] = service.get_command_arguments(format_vars)
             format_vars["command"] = service.command_template.format(**format_vars)
 
             # template env vars
-            environment = self._service_environment(service, attribs)
+            environment = service.environment
             virtualenv_bin = format_vars["virtualenv_bin"]  # could have been changed by pm_format_vars
             if virtualenv_bin and service.add_virtualenv_to_path:
                 path = environment.get("PATH", self._service_default_path())
                 environment["PATH"] = ":".join([virtualenv_bin, path])
         else:
-            format_vars["command"] = f"galaxyctl exec {config.instance_name} {program_name}"
-            environment = {"GRAVITY_STATE_DIR": "{state_dir}"}
+            config_file = shlex.quote(config.gravity_config_file)
+            # is there a click way to do this?
+            galaxyctl = sys.argv[0]
+            if not galaxyctl.endswith("galaxyctl"):
+                warn(f"Unable to determine galaxyctl command, sys.argv[0] is: {galaxyctl}")
+            format_vars["command"] = f"{galaxyctl} --config-file {config_file} exec {config.instance_name} {service.service_name}"
+            environment = {}
         format_vars["environment"] = self._service_environment_formatter(environment, format_vars)
 
         return format_vars
 
 
 class BaseProcessManager(BaseProcessExecutionEnvironment, metaclass=ABCMeta):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, foreground=False, **kwargs):
         super().__init__(*args, **kwargs)
         self._service_changes = None
+
+    @property
+    def _use_instance_name(self):
+        return ((not self.config_manager.single_instance)
+                or self.config_manager.get_config().instance_name != DEFAULT_INSTANCE_NAME)
 
     def _file_needs_update(self, path, contents):
         """Update if contents differ"""
@@ -169,9 +170,9 @@ class BaseProcessManager(BaseProcessExecutionEnvironment, metaclass=ABCMeta):
             tail_popen.wait()
         else:
             if not configs:
-                configs = self.config_manager.get_registered_configs()
+                configs = self.config_manager.get_configs()
             for config in configs:
-                log_dir = config.attribs["log_dir"]
+                log_dir = config.log_dir
                 if not service_names:
                     for service in config.services:
                         program_name = self._service_program_name(config.instance_name, service)
@@ -207,7 +208,7 @@ class BaseProcessManager(BaseProcessExecutionEnvironment, metaclass=ABCMeta):
         """ """
 
     @abstractmethod
-    def update(self, configs=None, service_names=None, force=False):
+    def update(self, configs=None, service_names=None, force=False, clean=False):
         """ """
 
     @abstractmethod
@@ -227,8 +228,8 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
     def _service_environment_formatter(self, environment, format_vars):
         return {k: v.format(**format_vars) for k, v in environment.items()}
 
-    def exec(self, config, service):
-        service_name = service["service_name"]
+    def exec(self, config, service, no_exec=False):
+        service_name = service.service_name
 
         # force generation of real commands
         config.service_command_style = ServiceCommandStyle.direct
@@ -242,15 +243,15 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
         info(f"Working directory: {cwd}")
         info(f"Executing: {print_env} {format_vars['command']}")
 
-        os.chdir(cwd)
-        os.execvpe(cmd[0], cmd, env)
+        if not no_exec:
+            os.chdir(cwd)
+            os.execvpe(cmd[0], cmd, env)
 
 
 class ProcessManagerRouter:
-    def __init__(self, state_dir=None, **kwargs):
-        self.config_manager = ConfigManager(state_dir=state_dir)
-        self.state_dir = self.config_manager.state_dir
-        self._load_pm_modules(state_dir=state_dir, **kwargs)
+    def __init__(self, state_dir=None, config_file=None, config_manager=None, **kwargs):
+        self.config_manager = config_manager or ConfigManager(state_dir=state_dir, config_file=config_file)
+        self._load_pm_modules(**kwargs)
         self._process_executor = ProcessExecutor(config_manager=self.config_manager)
 
     def _load_pm_modules(self, *args, **kwargs):
@@ -267,11 +268,11 @@ class ProcessManagerRouter:
     def _instance_service_names(self, names):
         instance_names = []
         service_names = []
-        registered_instance_names = self.config_manager.get_registered_instance_names()
+        configured_instance_names = self.config_manager.get_configured_instance_names()
         configured_service_names = self.config_manager.get_configured_service_names()
         if names:
             for name in names:
-                if name in registered_instance_names:
+                if name in configured_instance_names:
                     instance_names.append(name)
                 elif name in configured_service_names | VALID_SERVICE_NAMES:
                     service_names.append(name)
@@ -281,7 +282,7 @@ class ProcessManagerRouter:
                 exception("No provided names are known instance or service names")
         return (instance_names, service_names)
 
-    def exec(self, instance_names=None):
+    def exec(self, instance_names=None, no_exec=False):
         """ """
         instance_names, service_names = self._instance_service_names(instance_names)
 
@@ -290,19 +291,19 @@ class ProcessManagerRouter:
         elif len(instance_names) != 1:
             exception("Only zero or one instance name can be provided")
 
-        config = self.config_manager.get_registered_configs(instances=instance_names)[0]
-        service_list = ", ".join(s["service_name"] for s in config["services"])
+        config = self.config_manager.get_configs(instances=instance_names)[0]
+        service_list = ", ".join(s.service_name for s in config.services)
 
         if len(service_names) != 1:
             exception(f"Exactly one service name must be provided. Configured service(s): {service_list}")
 
         service_name = service_names[0]
-        services = [s for s in config["services"] if s["service_name"] == service_name]
+        services = [s for s in config.services if s.service_name == service_name]
         if not services:
             exception(f"Service '{service_name}' is not configured. Configured service(s): {service_list}")
 
         service = services[0]
-        return self._process_executor.exec(config, service)
+        return self._process_executor.exec(config, service, no_exec=no_exec)
 
     @route
     def follow(self, instance_names=None, quiet=None):
@@ -329,7 +330,7 @@ class ProcessManagerRouter:
         """ """
 
     @route_to_all
-    def update(self, instance_names=None, force=False):
+    def update(self, instance_names=None, force=False, clean=False):
         """ """
 
     @route

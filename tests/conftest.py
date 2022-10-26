@@ -1,4 +1,5 @@
 import os
+import glob
 import signal
 import shutil
 import socket
@@ -16,6 +17,7 @@ GXIT_CONFIG = """
 gravity:
   process_manager: {process_manager_name}
   service_command_style: direct
+  instance_name: {instance_name}
   gunicorn:
     bind: 'localhost:{gx_port}'
   gx_it_proxy:
@@ -29,69 +31,6 @@ galaxy:
   galaxy_infrastructure_url: http://localhost:{gx_port}
   interactivetools_upstream_proxy: false
   interactivetools_proxy_host: localhost:{gxit_port}
-"""
-
-
-# old-style string formatting is used because of curly braces in the YAML
-CONFIGSTATE_YAML_0_X = """
-config_files:
-  %(galaxy_yml)s:
-    config_type: galaxy
-    instance_name: gravity-0-x
-    attribs:
-      galaxy_infrastructure_url: ''
-      app_server: gunicorn
-      log_dir: %(state_dir)s/log
-      virtualenv:
-      gunicorn:
-        enable: true
-        bind: localhost:8080
-        workers: 1
-        timeout: 300
-        extra_args: ''
-        preload: true
-        environment: {}
-      tusd:
-        enable: false
-        tusd_path: tusd
-        host: localhost
-        port: 1080
-        upload_dir: ''
-        hooks_enabled_events: pre-create
-        extra_args: ''
-        environment: {}
-      celery:
-        enable: true
-        enable_beat: true
-        concurrency: 2
-        loglevel: DEBUG
-        queues: celery,galaxy.internal,galaxy.external
-        pool: threads
-        extra_args: ''
-        environment: {}
-      handlers: {}
-      gravity_version: 0.13.4
-      galaxy_root: %(galaxy_root_dir)s
-      gx_it_proxy:
-        enable: false
-        ip: localhost
-        port: 4002
-        sessions: database/interactivetools_map.sqlite
-        verbose: true
-        forward_ip:
-        forward_port:
-        reverse_proxy: false
-        environment: {}
-    services:
-    - config_type: galaxy
-      service_type: gunicorn
-      service_name: gunicorn
-    - config_type: galaxy
-      service_type: celery
-      service_name: celery
-    - config_type: galaxy
-      service_type: celery-beat
-      service_name: celery-beat
 """
 
 
@@ -122,9 +61,11 @@ def galaxy_yml(galaxy_root_dir):
 
 
 @pytest.fixture()
-def state_dir():
-    directory = tempfile.mkdtemp()
-    os.environ['GRAVITY_SYSTEMD_UNIT_PATH'] = f"/run/user/{os.getuid()}/systemd/user"
+def state_dir(monkeypatch):
+    directory = tempfile.mkdtemp(prefix="gravity_test")
+    unit_path = f"/run/user/{os.getuid()}/systemd/user"
+    monkeypatch.setenv("GRAVITY_STATE_DIR", directory)
+    monkeypatch.setenv("GRAVITY_SYSTEMD_UNIT_PATH", unit_path)
     try:
         yield Path(directory)
     finally:
@@ -133,21 +74,22 @@ def state_dir():
         except Exception:
             pass
         shutil.rmtree(directory)
+        instance_name = os.path.basename(directory)
+        unit_paths = glob.glob(os.path.join(unit_path, f"galaxy-{instance_name}*"))
+        if unit_paths:
+            units = list(map(os.path.basename, unit_paths))
+            try:
+                subprocess.check_call(["systemctl", "--user", "stop", *units])
+                list(map(os.unlink, unit_paths))
+                subprocess.check_call(["systemctl", "--user", "daemon-reload"])
+            except Exception:
+                subprocess.check_call(["systemctl", "--user", "list-units", "--all", "galaxy*"])
 
 
 @pytest.fixture
 def default_config_manager(state_dir):
     with config_manager.config_manager(state_dir=state_dir) as cm:
         yield cm
-
-
-@pytest.fixture
-def configstate_yaml_0_x(galaxy_root_dir, state_dir, galaxy_yml):
-    return CONFIGSTATE_YAML_0_X % {
-        "galaxy_root_dir": galaxy_root_dir,
-        "state_dir": state_dir,
-        "galaxy_yml": str(galaxy_yml)
-    }
 
 
 @pytest.fixture()
@@ -176,9 +118,10 @@ another_free_port = free_port
 
 
 @pytest.fixture()
-def startup_config(galaxy_virtualenv, free_port):
+def startup_config(state_dir, galaxy_virtualenv, free_port):
     return {
         'gravity': {
+            'service_command_style': 'direct',
             'virtualenv': galaxy_virtualenv,
             'gunicorn': {
                 'bind': f'localhost:{free_port}'}
@@ -189,20 +132,60 @@ def startup_config(galaxy_virtualenv, free_port):
     }
 
 
+@pytest.fixture()
+def reports_config(galaxy_root_dir, galaxy_virtualenv, free_port):
+    return {
+        'gravity': {
+            'service_command_style': 'direct',
+            'virtualenv': galaxy_virtualenv,
+            'gunicorn': {'enable': False},
+            'celery': {
+                'enable': False,
+                'enable_beat': False,
+            },
+            'reports': {
+                'enable': True,
+                'bind': f'localhost:{free_port}',
+                'config_file': str(galaxy_root_dir / "config" / "reports.yml.sample"),
+            }
+        }
+    }
+
+
+@pytest.fixture()
+def non_default_config():
+    return {
+        'galaxy': None,
+        'gravity': {
+            'service_command_style': 'direct',
+            'gunicorn': {
+                'bind': 'localhost:8081',
+                'environment': {'FOO': 'foo'}
+            },
+            'celery': {
+                'concurrency': 4
+            }
+        }
+    }
+
+
 @pytest.fixture
-def gxit_config(free_port, another_free_port, process_manager_name):
+def gxit_config(state_dir, free_port, another_free_port, process_manager_name):
     config_yaml = GXIT_CONFIG.format(
         gxit_port=another_free_port,
         gx_port=free_port,
-        process_manager_name=process_manager_name)
+        process_manager_name=process_manager_name,
+        instance_name=os.path.basename(state_dir),
+    )
     return yaml.safe_load(config_yaml)
 
 
 @pytest.fixture
-def tusd_config(startup_config, free_port, another_free_port, process_manager_name):
+def tusd_config(state_dir, startup_config, free_port, another_free_port, process_manager_name):
     startup_config["gravity"] = {
         "process_manager": process_manager_name,
         "service_command_style": "direct",
+        "instance_name": os.path.basename(state_dir),
         "tusd": {"enable": True, "port": another_free_port, "upload_dir": "/tmp"}}
     startup_config["galaxy"]["galaxy_infrastructure_url"] = f"http://localhost:{free_port}"
     return startup_config

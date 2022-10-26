@@ -13,6 +13,16 @@ def state_dir_option():
     )
 
 
+def config_file_option():
+    return click.option(
+        "-c",
+        "--config-file",
+        type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+        multiple=True,
+        help="Gravity (or Galaxy) config file to operate on. Can also be set with $GRAVITY_CONFIG_FILE or $GALAXY_CONFIG_FILE",
+    )
+
+
 def no_log_option():
     return click.option(
         '--quiet', is_flag=True, default=False, help="Only output supervisor logs, do not include process logs"
@@ -31,10 +41,6 @@ def required_config_arg(name="config", exists=False, nargs=None):
         return click.argument(name, type=arg_type)
     else:
         return click.argument(name, nargs=nargs, type=arg_type)
-
-
-def required_instance_arg():
-    return click.argument("instance", nargs=-1)
 
 
 def instances_services_arg():

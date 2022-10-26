@@ -5,9 +5,10 @@ from gravity import process_manager
 
 
 @click.command("exec")
+@click.option("--no-exec", "-n", is_flag=True, default=False, help="Don't exec, just print the command that would be run")
 @options.instances_services_arg()
 @click.pass_context
-def cli(ctx, instances_services):
+def cli(ctx, instances_services, no_exec):
     """Run a single Galaxy service in the foreground, with logging output to stdout/stderr.
 
     Zero or one instance names can be provided in INSTANCES, it is required if more than one Galaxy instance is
@@ -15,5 +16,5 @@ def cli(ctx, instances_services):
 
     Exactly one service name is required in SERVICES.
     """
-    with process_manager.process_manager(state_dir=ctx.parent.state_dir, start_daemon=False) as pm:
-        pm.exec(instance_names=instances_services)
+    with process_manager.process_manager(**ctx.parent.cm_kwargs) as pm:
+        pm.exec(instance_names=instances_services, no_exec=no_exec)

@@ -7,6 +7,8 @@ from typing import (
 )
 from pydantic import BaseModel, BaseSettings, Extra, Field, validator
 
+DEFAULT_INSTANCE_NAME = "_default_"
+
 
 def none_to_default(cls, v, field):
     if all(
@@ -77,6 +79,7 @@ without the Galaxy web process being available.
 You can find a list of available hooks at https://github.com/tus/tusd/blob/master/docs/hooks.md#list-of-available-hooks.
 """)
     extra_args: str = Field(default="", description="Extra arguments to pass to tusd command line.")
+    umask: Optional[str] = Field(None, description="umask under which service should be executed")
     start_timeout: int = Field(10, description="Value of supervisor startsecs, systemd TimeoutStartSec")
     stop_timeout: int = Field(10, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
     memory_limit: Optional[int] = Field(
@@ -102,6 +105,7 @@ class CelerySettings(BaseModel):
     queues: str = Field("celery,galaxy.internal,galaxy.external", description="Queues to join")
     pool: Pool = Field(Pool.threads, description="Pool implementation")
     extra_args: str = Field(default="", description="Extra arguments to pass to Celery command line.")
+    umask: Optional[str] = Field(None, description="umask under which service should be executed")
     start_timeout: int = Field(10, description="Value of supervisor startsecs, systemd TimeoutStartSec")
     stop_timeout: int = Field(10, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
     memory_limit: Optional[int] = Field(
@@ -152,8 +156,62 @@ If you disable the ``preload`` option workers need to have finished booting with
 Use Gunicorn's --preload option to fork workers after loading the Galaxy Application.
 Consumes less memory when multiple processes are configured. Default is ``false`` if using unicornherder, else ``true``.
 """)
+    umask: Optional[str] = Field(None, description="umask under which service should be executed")
     start_timeout: int = Field(15, description="Value of supervisor startsecs, systemd TimeoutStartSec")
     stop_timeout: int = Field(65, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
+    memory_limit: Optional[int] = Field(
+        None,
+        description="""
+Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
+``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
+``supervisor``.
+""")
+    environment: Dict[str, str] = Field(
+        default={},
+        description="""
+Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
+names.
+""")
+
+
+class ReportsSettings(BaseModel):
+    enable: bool = Field(False, description="Enable Galaxy Reports server.")
+    config_file: str = Field("reports.yml", description="Path to reports.yml, relative to galaxy.yml if not absolute")
+    bind: str = Field(
+        default="localhost:9001",
+        description="The socket to bind. A string of the form: ``HOST``, ``HOST:PORT``, ``unix:PATH``, ``fd://FD``. An IP is a valid HOST.",
+    )
+    workers: int = Field(
+        default=1,
+        ge=1,
+        description="""
+Controls the number of Galaxy Reports application processes Gunicorn will spawn.
+It is not generally necessary to increase this for the low-traffic Reports server.
+""")
+    timeout: int = Field(
+        default=300,
+        ge=0,
+        description="""
+Gunicorn workers silent for more than this many seconds are killed and restarted.
+Value is a positive number or 0. Setting it to 0 has the effect of infinite timeouts by disabling timeouts for all workers entirely.
+""")
+    url_prefix: Optional[str] = Field(
+        default=None,
+        description="""
+URL prefix to serve from.
+The corresponding nginx configuration is (replace <url_prefix> and <bind> with the values from these options):
+
+location /<url_prefix>/ {
+    proxy_pass http://<bind>/;
+}
+
+If <bind> is a unix socket, you will need a ``:`` after the socket path but before the trailing slash like so:
+    proxy_pass http://unix:/run/reports.sock:/;
+""")
+    extra_args: str = Field(default="", description="Extra arguments to pass to Gunicorn command line.")
+    umask: Optional[str] = Field(None, description="umask under which service should be executed")
+    start_timeout: int = Field(10, description="Value of supervisor startsecs, systemd TimeoutStartSec")
+    stop_timeout: int = Field(10, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
     memory_limit: Optional[int] = Field(
         None,
         description="""
@@ -197,6 +255,7 @@ This is an advanced option that is only needed when proxying to remote interacti
 Rewrite location blocks with proxy port.
 This is an advanced option that is only needed when proxying to remote interactive tool container that cannot be reached through the local network.
 """)
+    umask: Optional[str] = Field(None, description="umask under which service should be executed")
     start_timeout: int = Field(10, description="Value of supervisor startsecs, systemd TimeoutStartSec")
     stop_timeout: int = Field(10, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
     memory_limit: Optional[int] = Field(
@@ -221,11 +280,11 @@ class Settings(BaseSettings):
     """
 
     process_manager: ProcessManager = Field(
-        ProcessManager.supervisor,
+        None,
         description="""
 Process manager to use.
-``supervisor`` is the default process manager.
-``systemd`` is also supported.
+``supervisor`` is the default process manager when Gravity is invoked as a non-root user.
+``systemd`` is the default when Gravity is invoked as root.
 """)
 
     service_command_style: ServiceCommandStyle = Field(
@@ -236,6 +295,10 @@ What command to write to the process manager configs
 `direct` (each service's actual command) is also supported.
 """)
 
+    umask: str = Field("022", description="""
+umask under which services should be executed. Setting ``umask`` on an individual service overrides this value.
+""")
+
     memory_limit: Optional[int] = Field(
         None,
         description="""
@@ -244,6 +307,12 @@ for all services. Setting ``memory_limit`` on an individual service overrides th
 is ``supervisor``.
 """)
 
+    galaxy_config_file: Optional[str] = Field(
+        None,
+        description="""
+Specify Galaxy config file (galaxy.yml), if the Gravity config is separate from the Galaxy config. Assumed to be the
+same file as the Gravity config if a ``galaxy`` key exists at the root level, otherwise, this option is required.
+""")
     galaxy_root: Optional[str] = Field(
         None,
         description="""
@@ -266,7 +335,7 @@ Ignored if ``process_manager`` is ``supervisor`` or user-mode (non-root) ``syste
         None,
         description="""
 Set to a directory that should contain log files for the processes controlled by Gravity.
-If not specified defaults to ``<state_dir>/log``.
+If not specified defaults to ``<galaxy_data_dir>/gravity/log``.
 """)
     virtualenv: Optional[str] = Field(None, description="""
 Set to Galaxy's virtualenv directory.
@@ -281,7 +350,7 @@ Select the application server.
 ``unicornherder`` is a production-oriented manager for (G)unicorn servers that automates zero-downtime Galaxy server restarts,
 similar to uWSGI Zerg Mode used in the past.
 """)
-    instance_name: str = Field(default="_default_", description="""Override the default instance name.
+    instance_name: str = Field(default=DEFAULT_INSTANCE_NAME, description="""Override the default instance name.
 this is hidden from you when running a single instance.""")
     gunicorn: GunicornSettings = Field(default={}, description="Configuration for Gunicorn.")
     celery: CelerySettings = Field(default={}, description="Configuration for Celery Processes.")
@@ -292,6 +361,7 @@ this is hidden from you when running a single instance.""")
 Configuration for tusd server (https://github.com/tus/tusd).
 The ``tusd`` binary must be installed manually and made available on PATH (e.g in galaxy's .venv/bin directory).
 """)
+    reports: ReportsSettings = Field(default={}, description="Configuration for Galaxy Reports.")
     handlers: Dict[str, Dict[str, Any]] = Field(
         default={},
         description="""
@@ -304,6 +374,7 @@ See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defi
     _normalize_gx_it_proxy = validator("gx_it_proxy", allow_reuse=True, pre=True)(none_to_default)
     _normalize_celery = validator("celery", allow_reuse=True, pre=True)(none_to_default)
     _normalize_tusd = validator("tusd", allow_reuse=True, pre=True)(none_to_default)
+    _normalize_reports = validator("reports", allow_reuse=True, pre=True)(none_to_default)
 
     # Require galaxy_user if running as root
     @validator("galaxy_user")
@@ -314,6 +385,15 @@ See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defi
                 raise ValueError("galaxy_user is required when running as root")
             elif not is_systemd:
                 raise ValueError("Gravity cannot be run as root unless using the systemd process manager")
+        return v
+
+    @validator("process_manager")
+    def _process_manager_systemd_if_root(cls, v, values):
+        if v is None:
+            if os.geteuid() == 0:
+                v = ProcessManager.systemd.value
+            else:
+                v = ProcessManager.supervisor.value
         return v
 
     class Config:
