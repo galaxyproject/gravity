@@ -223,7 +223,7 @@ class ServiceList(BaseModel):
         gravity.io.info(f"Performing rolling restart on service: {self.service_name}")
         for instance_number, service_instance in enumerate(self.services):
             if not service_instance.is_ready(quiet=False):
-                gravity.io.exception(f"Refusing to continue rolling restart, instance {instance_number} was down before restart")
+                gravity.io.exception(f"Refusing to continue rolling restart, instance {instance_number} check failed before restart")
             gravity.io.debug(f"Calling restart callback {instance_number}: {restart_callbacks[instance_number]}")
             gravity.io.info(f"Restarting {self.service_name} instance {instance_number}")
             restart_callbacks[instance_number]()

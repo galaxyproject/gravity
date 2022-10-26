@@ -8,8 +8,13 @@ import sys
 import jsonref
 # FIXME: add to requirements
 import requests
+try:
+    import requests_unixsocket
+except ImportError:
+    requests_unixsocket = None
 import yaml
 
+import gravity.io
 from gravity.settings import Settings
 
 
@@ -88,9 +93,15 @@ def process_property(key, value, depth=0):
 
 
 def http_check(bind, path):
-    scheme = 'http'
-    if bind.startswith('unix:'):
-        raise NotImplementedError("TODO: https://github.com/msabramo/requests-unixsocket")
-    response = requests.get(f"{scheme}://{bind}{path}", timeout=30)
+    if bind.startswith("unix:"):
+        if not requests_unixsocket:
+            gravity.io.exception(
+                "The requests-unixsocket Python library is required to perform http checks on UNIX sockets, and it "
+                "does not appear to be installed")
+        socket = requests.utils.quote(bind.split(":", 1)[1], safe="")
+        session = requests_unixsocket.Session()
+        response = session.get(f"http+unix://{socket}{path}")
+    else:
+        response = requests.get(f"http://{bind}{path}", timeout=30)
     response.raise_for_status()
     return response
