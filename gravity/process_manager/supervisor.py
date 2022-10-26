@@ -17,6 +17,7 @@ from gravity.util import which
 
 from supervisor import supervisorctl  # type: ignore
 
+SUPERVISORD_START_TIMEOUT = 60
 DEFAULT_SUPERVISOR_SOCKET_PATH = os.environ.get("SUPERVISORD_SOCKET", '%(here)s/supervisor.sock')
 
 SUPERVISORD_CONF_TEMPLATE = f""";
@@ -91,6 +92,7 @@ class SupervisorProgram:
         self.config_numprocs_start = 0
 
         self.config_instance_program_name = self.config_program_name
+        self.log_file_name_template = self.config_program_name
 
         if self.config_numprocs > 1:
             if self._use_instance_name:
@@ -98,6 +100,8 @@ class SupervisorProgram:
             else:
                 self.config_process_name = "%(process_num)d"
             self.config_instance_program_name += "_%(process_num)d"
+            self.log_file_name_template += "_{instance_number}"
+        self.log_file_name_template += ".log"
 
     @property
     def config_file_name(self):
@@ -115,6 +119,10 @@ class SupervisorProgram:
             return service.service_name
 
     @property
+    def config_log_file_name(self):
+        return self.config_instance_program_name + ".log"
+
+    @property
     def program_names(self):
         """The representation when performing commands, after group and procnums expansion"""
         instance_name = None
@@ -124,6 +132,10 @@ class SupervisorProgram:
         instance_count = self.config_numprocs
         instance_number_start = self.config_numprocs_start
         return supervisor_program_names(service_name, instance_count, instance_number_start, instance_name=instance_name)
+
+    @property
+    def log_file_names(self):
+        return list(self.log_file_name_template.format(instance_number=i) for i in range(0, self.config_numprocs))
 
 
 class SupervisorProcessManager(BaseProcessManager):
@@ -179,8 +191,10 @@ class SupervisorProcessManager(BaseProcessManager):
             rc = self.__supervisord_popen.poll()
             if rc:
                 gravity.io.error("supervisord exited with code %d" % rc)
-            # FIXME: don't wait forever
+            start = time.time()
             while not exists(self.supervisord_pid_path) or not exists(self.supervisord_sock_path):
+                if (time.time() - start) > SUPERVISORD_START_TIMEOUT:
+                    gravity.io.exception("Timed out waiting for supervisord to start")
                 gravity.io.debug(f"Waiting for {self.supervisord_pid_path}")
                 time.sleep(0.5)
 
@@ -209,7 +223,7 @@ class SupervisorProcessManager(BaseProcessManager):
         # supervisor-specific format vars
         supervisor_format_vars = {
             "log_dir": config.log_dir,
-            "log_file": self._service_log_file(config.log_dir, program.config_instance_program_name),
+            "log_file": os.path.join(config.log_dir, program.config_log_file_name),
             "instance_number": "%(process_num)d",
             "supervisor_program_name": program.config_program_name,
             "supervisor_process_name": program.config_process_name,
@@ -282,7 +296,7 @@ class SupervisorProcessManager(BaseProcessManager):
                 shutil.rmtree(path)
 
     def __supervisor_programs(self, config, service_names):
-        services = [s for s in config.services if s.service_name in service_names]
+        services = config.get_services(service_names)
         return [SupervisorProgram(config, service, self._use_instance_name) for service in services]
 
     def __supervisor_program_names(self, config, service_names):
@@ -304,10 +318,7 @@ class SupervisorProcessManager(BaseProcessManager):
 
     def __reload_graceful(self, configs, service_names):
         for config in configs:
-            if service_names:
-                services = [s for s in config.services if s.service_name in service_names]
-            else:
-                services = config.services
+            services = config.get_services(service_names)
             for service in services:
                 program = self.__supervisor_programs(config, [service.service_name])[0]
                 graceful_method = service.graceful_method
@@ -321,6 +332,26 @@ class SupervisorProcessManager(BaseProcessManager):
     def __rolling_restart(self, config, service, program):
         restart_callbacks = list(partial(self.supervisorctl, "restart", p) for p in program.program_names)
         service.rolling_restart(restart_callbacks)
+
+    def follow(self, configs=None, service_names=None, quiet=False):
+        # supervisor has a built-in tail command but it only works on a single log file. `galaxyctl supervisorctl tail
+        # ...` can be used if desired, though
+        if not self.tail:
+            gravity.io.exception("`tail` not found on $PATH, please install it")
+        log_files = []
+        if quiet:
+            cmd = [self.tail, "-f", self.log_file]
+            tail_popen = subprocess.Popen(cmd)
+            tail_popen.wait()
+        else:
+            for config in configs:
+                log_dir = config.log_dir
+                programs = self.__supervisor_programs(config, service_names)
+                for program in programs:
+                    log_files.extend(os.path.join(log_dir, f) for f in program.log_file_names)
+            cmd = [self.tail, "-f"] + log_files
+            tail_popen = subprocess.Popen(cmd)
+            tail_popen.wait()
 
     def start(self, configs=None, service_names=None):
         self.__supervisord()

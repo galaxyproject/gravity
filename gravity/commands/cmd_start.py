@@ -1,8 +1,8 @@
 import click
 
-from gravity import config_manager, options
+from gravity import options
 from gravity import process_manager
-from gravity.io import info, exception
+from gravity.io import info
 
 
 @click.command("start")
@@ -17,20 +17,8 @@ def cli(ctx, instances_services, foreground, quiet=False):
 
     Specifying INSTANCES and SERVICES limits the operation to only the provided instance name(s) and/or service(s).
     """
-    auto_update = False
-    if not instances_services and not ctx.parent.cm_kwargs["config_file"]:
-        # FIXME: this doesn't do anything anymore now that the cm goes out of scope. you just init the cm twice
-        with config_manager.config_manager(**ctx.parent.cm_kwargs) as cm:
-            # If there are no configs known, we will attempt to auto-load one
-            cm.auto_load()
-            auto_update = True
-        if not cm.instance_count:
-            exception(
-                "Nothing to start: no Galaxy instances configured and no Galaxy configuration files found, "
-                "see `galaxyctl --help`")
     with process_manager.process_manager(foreground=foreground, **ctx.parent.cm_kwargs) as pm:
-        if auto_update:
-            pm.update()
+        pm.update()
         pm.start(instance_names=instances_services)
         if foreground:
             pm.follow(instance_names=instances_services, quiet=quiet)

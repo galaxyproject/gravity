@@ -6,7 +6,6 @@ import os
 import sys
 
 import jsonref
-# FIXME: add to requirements
 import requests
 try:
     import requests_unixsocket

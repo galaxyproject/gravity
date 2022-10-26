@@ -114,8 +114,9 @@ class SystemdProcessManager(BaseProcessManager):
             unit_path = "/etc/systemd/system" if not self.user_mode else os.path.expanduser("~/.config/systemd/user")
         return unit_path
 
-    def __systemctl(self, *args, ignore_rc=None, capture=False, **kwargs):
+    def __systemctl(self, *args, ignore_rc=None, not_found_rc=None, capture=False, **kwargs):
         args = list(args)
+        not_found_rc = not_found_rc or ()
         call = subprocess.check_call
         extra_args = os.environ.get("GRAVITY_SYSTEMCTL_EXTRA_ARGS")
         if extra_args:
@@ -128,6 +129,8 @@ class SystemdProcessManager(BaseProcessManager):
         try:
             return call(["systemctl"] + args, text=True)
         except subprocess.CalledProcessError as exc:
+            if exc.returncode in not_found_rc:
+                gravity.io.exception("Some expected systemd units were not found, did you forget to run `galaxyctl update`?")
             if ignore_rc is None or exc.returncode not in ignore_rc:
                 raise
 
@@ -267,7 +270,7 @@ class SystemdProcessManager(BaseProcessManager):
         if not intended_configs and not os.path.exists(self.__systemd_unit_dir):
             return
 
-        # FIXME: should use config_type, but that's per-service
+        # other config types would need to be addressed here if we added any
         _present_configs = filter(
             lambda f: (f.startswith("galaxy-") and (f.endswith(".service") or f.endswith(".target")) or f == "galaxy.target"),
             os.listdir(self.__systemd_unit_dir))
@@ -298,7 +301,7 @@ class SystemdProcessManager(BaseProcessManager):
                 if not include_services:
                     services = []
             elif service_names:
-                services = [s for s in config.services if s.service_name in service_names]
+                services = config.get_services(service_names)
             systemd_services = [SystemdService(config, s, self._use_instance_name) for s in services]
             for systemd_service in systemd_services:
                 unit_names.extend(systemd_service.unit_names)
@@ -313,17 +316,17 @@ class SystemdProcessManager(BaseProcessManager):
     def start(self, configs=None, service_names=None):
         """ """
         unit_names = self.__unit_names(configs, service_names)
-        self.__systemctl("start", *unit_names)
+        self.__systemctl("start", *unit_names, not_found_rc=(5,))
 
     def stop(self, configs=None, service_names=None):
         """ """
         unit_names = self.__unit_names(configs, service_names)
-        self.__systemctl("stop", *unit_names)
+        self.__systemctl("stop", *unit_names, not_found_rc=(5,))
 
     def restart(self, configs=None, service_names=None):
         """ """
         unit_names = self.__unit_names(configs, service_names)
-        self.__systemctl("restart", *unit_names)
+        self.__systemctl("restart", *unit_names, not_found_rc=(5,))
 
     def __graceful_service(self, config, service, service_names):
         systemd_service = SystemdService(config, service, self._use_instance_name)
@@ -331,33 +334,24 @@ class SystemdProcessManager(BaseProcessManager):
             restart_callbacks = list(partial(self.__systemctl, "reload-or-restart", u) for u in systemd_service.unit_names)
             service.rolling_restart(restart_callbacks)
         else:
-            self.__systemctl("reload-or-restart", *systemd_service.unit_names)
+            self.__systemctl("reload-or-restart", *systemd_service.unit_names, not_found_rc=(5,))
             gravity.io.info(f"Restarted: {', '.join(systemd_service.unit_names)}")
 
     def graceful(self, configs=None, service_names=None):
         """ """
         # reload-or-restart on a target does a restart on its services, so we use the services directly
         for config in configs:
-            if service_names:
-                services = [s for s in config.services if s.service_name in service_names]
-            else:
-                services = config.services
+            services = config.get_services(service_names)
             for service in services:
                 self.__graceful_service(config, service, service_names)
 
     def status(self, configs=None, service_names=None):
         """ """
         unit_names = self.__unit_names(configs, service_names, include_services=True)
-        try:
-            if service_names:
-                self.__systemctl("status", *unit_names, ignore_rc=(3,))
-            else:
-                self.__systemctl("list-units", "--all", *unit_names)
-        except subprocess.CalledProcessError as exc:
-            if exc.returncode == 4:
-                gravity.io.error("Some expected systemd units were not found, did you forget to run `galaxyctl update`?")
-            else:
-                raise
+        if service_names:
+            self.__systemctl("status", *unit_names, ignore_rc=(3,), not_found_rc=(4,))
+        else:
+            self.__systemctl("list-units", "--all", *unit_names)
 
     def update(self, configs=None, force=False, clean=False):
         """ """
@@ -382,7 +376,7 @@ class SystemdProcessManager(BaseProcessManager):
         """ """
         if self._use_instance_name:
             configs = self.config_manager.get_configs(process_manager=self.name)
-            self.__systemctl("stop", *[f"galaxy-{c.instance_name}.target" for c in configs])
+            self.__systemctl("stop", *[f"{c.config_type}-{c.instance_name}.target" for c in configs])
         else:
             self.__systemctl("stop", "galaxy.target")
 

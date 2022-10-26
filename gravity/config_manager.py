@@ -156,7 +156,7 @@ class ConfigManager(object):
         }
 
         # some things should only be included if set
-        for app_key in ("interactivetools_map",):
+        for app_key in ("interactivetools_map", "galaxy_url_prefix"):
             if app_key in app_config:
                 app_config_dict[app_key] = app_config[app_key]
 

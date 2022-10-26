@@ -85,7 +85,13 @@ class ConfigFile(BaseModel):
     _validate_log_dir = validator("log_dir", allow_reuse=True)(relative_to_galaxy_root)
 
     def get_service(self, service_name):
-        return [s for s in self.services if s.service_name == service_name][0]
+        return self.get_services([service_name])[0]
+
+    def get_services(self, service_names):
+        if service_names:
+            return [s for s in self.services if s.service_name in service_names]
+        else:
+            return self.services
 
     # this worked for me until it didn't, so we set exclude on the Service instead
     # def dict(self, *args, **kwargs):
@@ -286,9 +292,11 @@ class GalaxyGunicornService(Service):
 
     def is_ready(self, quiet=True):
         bind = self.settings["bind"]
-        # FIXME: insert app.galaxy_url_prefix
+        prefix = self.config.app_config.get("galaxy_url_prefix") or ""
+        if prefix:
+            prefix = prefix.rstrip("/")
         try:
-            response = http_check(bind, "/api/version")
+            response = http_check(bind, f"{prefix}/api/version")
             version = response.json()
         except Exception as exc:
             if not quiet:
