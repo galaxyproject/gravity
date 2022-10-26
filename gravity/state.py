@@ -16,7 +16,7 @@ from gravity.settings import (
     ProcessManager,
     ServiceCommandStyle,
 )
-from gravity.util import classproperty, http_check
+from gravity.util import http_check
 
 
 DEFAULT_GALAXY_ENVIRONMENT = {
@@ -90,7 +90,7 @@ class ConfigFile(BaseModel):
     # this worked for me until it didn't, so we set exclude on the Service instead
     # def dict(self, *args, **kwargs):
     #     exclude = kwargs.pop("exclude", None) or {}
-    #     exclude["services"] = {-1: {"config", "service_settings"}}
+    #     exclude["services"] = {-1: {"config"}}
     #     return super().dict(*args, exclude=exclude, **kwargs)
 
 
@@ -99,9 +99,6 @@ class Service(BaseModel):
     # unfortunately as a class attribute this is now excluded from dict()
     _service_type: str = "service"
     service_name: str = "_default_"
-    #service_settings: Dict[str, Any]
-
-    var_formatter: Callable[[ConfigFile, Service], Dict[str, str]] = None
 
     settings: Dict[str, Any]
 
@@ -142,29 +139,18 @@ class Service(BaseModel):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.config_type = self.config.config_type
-        # this ensures it's included in dict()
-        #self.settings = self.service_settings[self.settings_from].copy()
 
-    # these are class "properties" because they are accessed by validators
-    @classproperty
-    def service_type(cls):
-        return cls._service_type
+    @property
+    def service_type(self):
+        return self._service_type
 
-    @classproperty
-    def settings_from(cls):
-        return cls._settings_from or cls.service_type
-
-    @classproperty
-    def default_environment(cls):
-        return cls._default_environment.copy()
+    @property
+    def default_environment(self):
+        return self._default_environment.copy()
 
     @property
     def count(self):
         return 1
-
-    # @property
-    # def settings(self):
-    #     return self.service_settings[self.settings_from].copy()
 
     @property
     def environment(self):
@@ -197,11 +183,7 @@ class Service(BaseModel):
         for setting, value in self.settings.items():
             if setting in self.command_arguments:
                 if value:
-                    # FIXME: this should be unnecessary
-                    # recursively format until there are no more template placeholders left
-                    rval[setting] = self.command_arguments[setting]
-                    while "{" in rval[setting] and "}" in rval[setting]:
-                        rval[setting] = rval[setting].format(**format_vars)
+                    rval[setting] = self.command_arguments[setting].format(**format_vars)
                 else:
                     rval[setting] = ""
             else:
@@ -210,23 +192,8 @@ class Service(BaseModel):
 
     def dict(self, *args, **kwargs):
         exclude = kwargs.pop("exclude", None) or {}
-        #exclude = {"config", "service_settings"}
         exclude = {"config"}
         return super().dict(*args, exclude=exclude, **kwargs)
-
-    # FIXME: probably don't need to do all this
-    def get_format_vars(self):
-        if "_format_vars" in self.__dict__:
-            return self.__dict__["_format_vars"]
-        else:
-            self.var_formatter(self)
-            return self.__dict__["_format_vars"]
-            #raise RuntimeError("Attempt to access format_vars before they have been set")
-
-    def set_format_vars(self, value):
-        self.__dict__["_format_vars"] = value
-
-    format_vars = property(get_format_vars, set_format_vars)
 
 
 class ServiceList(BaseModel):
@@ -234,7 +201,6 @@ class ServiceList(BaseModel):
     _service_type = "_list_"
     service_name = "_list_"
     services: List[Service] = []
-    var_formatter: Callable[[ConfigFile, Service], Dict[str, str]] = None
 
     # ServiceList is *only* used when service_command_style = gravity, meaning that the only case we need to do anything
     # special with is galaxyctl exec
@@ -296,10 +262,8 @@ class GalaxyGunicornService(Service):
     @validator("settings")
     def _normalize_settings(cls, v, values):
         # TODO: should be copy?
-        #settings = v[cls.settings_from]
-        settings = v
-        if settings["preload"] is None:
-            settings["preload"] = True
+        if v["preload"] is None:
+            v["preload"] = True
         return v
 
     @property
@@ -354,10 +318,8 @@ class GalaxyUnicornHerderService(Service):
     @validator("settings")
     def _normalize_settings(cls, v, values):
         # TODO: should be copy?
-        #settings = v[cls.settings_from]
-        settings = v
-        if settings["preload"] is None:
-            settings["preload"] = False
+        if v["preload"] is None:
+            v["preload"] = False
         return v
 
     environment = GalaxyGunicornService.environment
@@ -461,14 +423,12 @@ class GalaxyReportsService(Service):
 
     @validator("settings")
     def _validate_settings(cls, v, values):
-        #settings = v[cls.settings_from]
-        settings = v
-        reports_config_file = settings["config_file"]
+        reports_config_file = v["config_file"]
         if not os.path.isabs(reports_config_file):
             reports_config_file = os.path.join(os.path.dirname(values["config"]["galaxy_config_file"]), reports_config_file)
         if not os.path.exists(reports_config_file):
             gravity.io.exception(f"Reports enabled but reports config file does not exist: {reports_config_file}")
-        settings["config_file"] = reports_config_file
+        v["config_file"] = reports_config_file
         return v
 
 

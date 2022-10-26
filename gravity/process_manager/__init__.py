@@ -37,10 +37,6 @@ def _route(func, all_process_managers=False):
         instance_names, service_names = self._instance_service_names(instance_names)
         configs = self.config_manager.get_configs(instances=instance_names or None)
         for config in configs:
-            for service in config.services:
-                # TODO: not sure this is really necessary, originally it was to store format vars on the service, but do
-                # we need that?
-                service.var_formatter = partial(self.process_managers[config.process_manager].service_format_vars, config)
             try:
                 configs_by_pm[config.process_manager].append(config)
             except KeyError:
@@ -129,9 +125,6 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
             format_vars["command"] = f"{galaxyctl} --config-file {config_file} exec{instance_number_opt} {config.instance_name} {service.service_name}"
             environment = {}
         format_vars["environment"] = self._service_environment_formatter(environment, format_vars)
-
-        # FIXME: do we actually need to do this?
-        #service.format_vars = format_vars
 
         return format_vars
 

@@ -13,11 +13,6 @@ import yaml
 from gravity.settings import Settings
 
 
-class classproperty(property):
-    def __get__(self, cls, owner):
-        return classmethod(self.fget).__get__(None, owner)()
-
-
 def recursive_update(to_update, update_from):
     """
     Update values in `to_update` with values in `update_from`.

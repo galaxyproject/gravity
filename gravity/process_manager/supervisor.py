@@ -199,7 +199,7 @@ class SupervisorProcessManager(BaseProcessManager):
             # if running in foreground, if terminate is called, then supervisord should've already received a SIGINT
             self.__supervisord_popen and self.__supervisord_popen.wait()
 
-    def service_format_vars(self, config, service):
+    def __update_service(self, config, service, instance_conf_dir, instance_name):
         program = SupervisorProgram(config, service, self._use_instance_name)
         # supervisor-specific format vars
         supervisor_format_vars = {
@@ -211,14 +211,11 @@ class SupervisorProcessManager(BaseProcessManager):
             "supervisor_numprocs_start": program.config_numprocs_start,
         }
 
-        return self._service_format_vars(config, service, supervisor_format_vars)
+        format_vars = self._service_format_vars(config, service, supervisor_format_vars)
 
-    def __update_service(self, config, service, instance_conf_dir, instance_name):
         conf = join(instance_conf_dir, f"{service.config_type}_{service.service_type}_{service.service_name}.conf")
         template = SUPERVISORD_SERVICE_TEMPLATE
-        # FIXME: uses var_formatter magic in the route decorator
-        #contents = template.format(**service.format_vars)
-        contents = template.format(**self.service_format_vars(config, service))
+        contents = template.format(**format_vars)
         name = service.service_name if not self._use_instance_name else f"{instance_name}:{service.service_name}"
         self._update_file(conf, contents, name, "service")
         return conf
