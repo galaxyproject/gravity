@@ -180,14 +180,6 @@ Memory limit (in GB). If the service exceeds the limit, it will be killed. Defau
 Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
 names.
 """)
-    instance_name: Optional[Union[int, str]] = Field(
-        default=0,
-        description="""
-If the ``gunicorn`` section is a list, then mutliple gunicorns will be started. If set, this option controls the name of
-the "instance" of gunicorn. How this is represented depends on your process manager. In ``systemd``, most alphanumeric
-characters and a few special characters are valid. In ``supervisor`` only integers are valid, and only the first
-gunicorn's ``instance_name`` will be used (the other instances are incremented by 1).
-""")
 
 
 class ReportsSettings(BaseModel):
@@ -251,7 +243,8 @@ class GxItProxySettings(BaseModel):
         default="database/interactivetools_map.sqlite",
         description="""
 Routes file to monitor.
-Should be set to the same path as ``interactivetools_map`` in the ``galaxy:`` section.
+Should be set to the same path as ``interactivetools_map`` in the ``galaxy:`` section. This is ignored if
+``interactivetools_map is set``.
 """)
     verbose: bool = Field(default=True, description="Include verbose messages in gx-it-proxy")
     forward_ip: Optional[str] = Field(

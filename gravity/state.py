@@ -40,6 +40,7 @@ class GracefulMethod(str, enum.Enum):
 
 class ConfigFile(BaseModel):
     config_type: str
+    app_config: Dict[str, Any]
     gravity_config_file: str
     galaxy_config_file: str
     instance_name: str
@@ -47,7 +48,6 @@ class ConfigFile(BaseModel):
     service_command_style: ServiceCommandStyle
     app_server: AppServer
     virtualenv: Optional[str]
-    galaxy_infrastructure_url: str
     galaxy_root: Optional[str]
     galaxy_user: Optional[str]
     galaxy_group: Optional[str]
@@ -108,11 +108,36 @@ class Service(BaseModel):
     config_type: str = None
 
     _default_environment: Dict[str, str] = {}
+
     _settings_from: Optional[str] = None
+    _enable_attribute = "enable"
+    _service_list_allowed = False
+
     _graceful_method: GracefulMethod = GracefulMethod.DEFAULT
     _add_virtualenv_to_path = False
     _command_arguments: Dict[str, str] = {}
     _command_template: str = None
+
+    @classmethod
+    def services_if_enabled(cls, config, gravity_settings=None, settings=None, service_name=None):
+        settings_from = cls._settings_from or cls._service_type
+        settings = settings or getattr(gravity_settings, settings_from)
+        service_name = service_name or cls._service_type
+        services = []
+        if isinstance(settings, list):
+            if not cls._service_list_allowed:
+                gravity.io.exception(
+                    f"Settings for {cls._service_type} is a list, but lists are not allowed for this service type")
+            for i, instance_settings in enumerate(settings):
+                services.extend(cls.services_if_enabled(config, settings=instance_settings, service_name=f"{service_name}{i}"))
+            if gravity_settings.service_command_style == ServiceCommandStyle.gravity:
+                services = [ServiceList(services=services, service_name=service_name)]
+        elif isinstance(settings, dict) and settings[cls._enable_attribute]:
+            # settings is already a dict e.g. in the case of handlers
+            services = [cls(config=config, settings=settings, service_name=service_name)]
+        elif getattr(settings, cls._enable_attribute):
+            services = [cls(config=config, settings=settings.dict(), service_name=service_name)]
+        return services
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -216,7 +241,7 @@ class ServiceList(BaseModel):
 
     @property
     def graceful_method(self):
-        if self.count > 1:
+        if self.count > 1 and hasattr(self.services[0], "is_ready"):
             return GracefulMethod.ROLLING
         else:
             return self.services[0].graceful_method
@@ -245,7 +270,6 @@ class ServiceList(BaseModel):
             if not instance_is_ready:
                 gravity.io.exception(f"Refusing to continue rolling restart, instance failed to respond after {timeout} seconds")
 
-
     # everything else falls through to the first configured service
     def __getattr__(self, name):
         return getattr(self.services[0], name)
@@ -254,6 +278,7 @@ class ServiceList(BaseModel):
 class GalaxyGunicornService(Service):
     _service_type = "gunicorn"
     service_name = "gunicorn"
+    _service_list_allowed = True
     _default_environment = DEFAULT_GALAXY_ENVIRONMENT
     _command_arguments = {
         "preload": "--preload",
@@ -356,6 +381,7 @@ class GalaxyCeleryBeatService(Service):
     _service_type = "celery-beat"
     service_name = "celery-beat"
     _settings_from = "celery"
+    _enable_attribute = "enable_beat"
     _default_environment = DEFAULT_GALAXY_ENVIRONMENT
     _command_template = "{virtualenv_bin}celery" \
                         " --app galaxy.celery" \
@@ -367,6 +393,7 @@ class GalaxyCeleryBeatService(Service):
 class GalaxyGxItProxyService(Service):
     _service_type = "gx-it-proxy"
     service_name = "gx-it-proxy"
+    _settings_from = "gx_it_proxy"
     _default_environment = {
         "npm_config_yes": "true",
     }
@@ -383,20 +410,31 @@ class GalaxyGxItProxyService(Service):
                         " {command_arguments[forward_ip]} {command_arguments[forward_port]}" \
                         " {command_arguments[reverse_proxy]}"
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # override from Galaxy config if set
+        self.settings["sessions"] = self.config.app_config.get("interactivetools_map", self.settings["sessions"])
+
+    @validator("settings")
+    def _validate_settings(cls, v, values):
+        if not values["config"].app_config["interactivetools_enable"]:
+            gravity.io.exception("To run gx-it-proxy you need to set interactivetools_enable in the galaxy section of galaxy.yml")
+        return v
+
 
 class GalaxyTUSDService(Service):
     _service_type = "tusd"
     service_name = "tusd"
     _command_template = "{settings[tusd_path]} -host={settings[host]} -port={settings[port]}" \
                         " -upload-dir={settings[upload_dir]}" \
-                        " -hooks-http={galaxy_infrastructure_url}/api/upload/hooks" \
+                        " -hooks-http={app_config[galaxy_infrastructure_url]}/api/upload/hooks" \
                         " -hooks-http-forward-headers=X-Api-Key,Cookie {settings[extra_args]}" \
                         " -hooks-enabled-events {settings[hooks_enabled_events]}"
 
     @validator("settings")
     def _validate_settings(cls, v, values):
-        if not values["config"].galaxy_infrastructure_url:
-            gravity.io.exception("To run the tusd server you need to set galaxy_infrastructure_url in the galaxy section of galaxy.yml")
+        if not values["config"].app_config["galaxy_infrastructure_url"]:
+            gravity.io.exception("To run tusd syou need to set galaxy_infrastructure_url in the galaxy section of galaxy.yml")
         return v
 
 
@@ -437,20 +475,23 @@ class GalaxyReportsService(Service):
 class GalaxyStandaloneService(Service):
     _service_type = "standalone"
     service_name = "standalone"
-    # TODO: add these to Galaxy docs, test that they are settable in all the ways they should be
+    # TODO: add these to Galaxy docs
     _default_settings = {
         "start_timeout": 20,
         "stop_timeout": 65,
     }
-    _command_template = "{virtualenv_bin}python ./lib/galaxy/main.py -c {galaxy_conf} --server-name={server_name}" \
-                        " {command_arguments[attach_to_pool]}"
+    _service_list_allowed = True
+    _command_template = "{virtualenv_bin}python ./lib/galaxy/main.py -c {galaxy_conf}" \
+                        " --server-name={settings[server_name]}{command_arguments[attach_to_pool]}"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # overwrite the default method of setting settings, we need to include defaults sinc standalone does not have
-        # gravity settings
-        self.settings = self._default_settings.copy()
-        self.settings.update(self.service_settings[self.settings_from])
+        # ensure defaults are part of settings, this is not automatic since standalone does not have gravity settings
+        settings = self._default_settings.copy()
+        settings.update(self.settings)
+        self.settings = settings
+        if "server_name" not in self.settings:
+            self.settings["server_name"] = self.service_name
 
     def get_command_arguments(self, format_vars):
         # full override to do the join
@@ -482,7 +523,7 @@ SERVICE_CLASS_MAP = {
     "tusd": GalaxyTUSDService,
     "reports": GalaxyReportsService,
     "standalone": GalaxyStandaloneService,
-    "_list_": ServiceList,
+    #"_list_": ServiceList,
 }
 
 VALID_SERVICE_NAMES = set(SERVICE_CLASS_MAP)

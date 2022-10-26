@@ -92,12 +92,12 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
         format_vars = {
             "config_type": service.config_type,
             "server_name": service.service_name,
-            "galaxy_infrastructure_url": config.galaxy_infrastructure_url,
             "galaxy_umask": service.settings.get("umask") or config.umask,
             "galaxy_conf": config.galaxy_config_file,
             "galaxy_root": config.galaxy_root,
             "virtualenv_bin": virtualenv_bin,
             "gravity_data_dir": config.gravity_data_dir,
+            "app_config": config.app_config,
         }
 
         format_vars["settings"] = service.settings
@@ -309,7 +309,7 @@ class ProcessManagerRouter:
                 exception("No provided names are known instance or service names")
         return (instance_names, service_names)
 
-    def exec(self, instance_names=None, service_instance=None, no_exec=False):
+    def exec(self, instance_names=None, service_instance_number=None, no_exec=False):
         """ """
         instance_names, service_names = self._instance_service_names(instance_names)
 
@@ -330,12 +330,6 @@ class ProcessManagerRouter:
             exception(f"Service '{service_name}' is not configured. Configured service(s): {service_list}")
 
         service = services[0]
-
-        # translate the instance name from the PM back into a list index
-        pm = self.process_managers[config.process_manager]
-        service_instance_number = pm.service_instance_number(config, service, service_instance)
-        debug(f"Service instance name '{service_instance}' -> number '{service_instance_number}'")
-
         return self._process_executor.exec(config, service, service_instance_number=service_instance_number, no_exec=no_exec)
 
     @route

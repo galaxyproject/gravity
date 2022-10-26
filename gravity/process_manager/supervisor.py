@@ -98,11 +98,6 @@ class SupervisorProgram:
             else:
                 self.config_process_name = "%(process_num)d"
             self.config_instance_program_name += "_%(process_num)d"
-            # gets from the first
-            try:
-                self.config_numprocs_start = int(service.settings["instance_name"])
-            except (TypeError, ValueError) as exc:
-                gravity.io.exception(f"Invalid value for instance_name (must be an integer with supervisor): {exc}")
 
     @property
     def config_program_name(self):
@@ -124,20 +119,6 @@ class SupervisorProgram:
         instance_count = self.config_numprocs
         instance_number_start = self.config_numprocs_start
         return supervisor_program_names(service_name, instance_count, instance_number_start, instance_name=instance_name)
-
-    def instance_number(self, instance_name):
-        try:
-            return int(instance_name) - self.config_numprocs_start
-        except (TypeError, ValueError) as exc:
-            gravity.io.exception(f"Invalid value for instance_name (must be an integer with supervisor): {exc}")
-
-    #@property
-    #def program_instances(self):
-    #    """ """
-    #    #instance_count = service_settings.get("instance_count", 1)
-    #    instance_number_start = self.service.settings.get("instance_number_start", 0)
-    #    return [(instance_number_start + i, name) for i, name in enumerate(self.program_names)]
-
 
 
 class SupervisorProcessManager(BaseProcessManager):
@@ -212,10 +193,6 @@ class SupervisorProcessManager(BaseProcessManager):
 
     def _service_environment_formatter(self, environment, format_vars):
         return ",".join("{}={}".format(k, shlex.quote(v.format(**format_vars))) for k, v in environment.items())
-
-    def service_instance_number(self, config, service, instance_name):
-        program = SupervisorProgram(config, service, self._use_instance_name)
-        return program.instance_number(instance_name)
 
     def terminate(self):
         if self.foreground:
