@@ -10,7 +10,6 @@ import requests
 import requests_unixsocket
 import yaml
 
-import gravity.io
 from gravity.settings import Settings
 
 
