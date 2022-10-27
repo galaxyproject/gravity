@@ -7,10 +7,7 @@ import sys
 
 import jsonref
 import requests
-try:
-    import requests_unixsocket
-except ImportError:
-    requests_unixsocket = None
+import requests_unixsocket
 import yaml
 
 import gravity.io
@@ -93,10 +90,6 @@ def process_property(key, value, depth=0):
 
 def http_check(bind, path):
     if bind.startswith("unix:"):
-        if not requests_unixsocket:
-            gravity.io.exception(
-                "The requests-unixsocket Python library is required to perform http checks on UNIX sockets, and it "
-                "does not appear to be installed")
         socket = requests.utils.quote(bind.split(":", 1)[1], safe="")
         session = requests_unixsocket.Session()
         response = session.get(f"http+unix://{socket}{path}")

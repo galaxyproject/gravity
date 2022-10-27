@@ -37,10 +37,16 @@ setup(
     license="MIT",
     keywords="gravity galaxy",
     python_requires=">=3.6",
-    install_requires=["Click", "supervisor", "pyyaml", "packaging", "pydantic", "jsonref", "requests"],
-    extras_require={
-        "unixsocket": ["requests-unixsocket"],
-    },
+    install_requires=[
+        "Click",
+        "supervisor",
+        "pyyaml",
+        "packaging",
+        "pydantic",
+        "jsonref",
+        "requests",
+        "requests-unixsocket",
+    ],
     entry_points={"console_scripts": [
         "galaxy = gravity.cli:galaxy",
         "galaxyctl = gravity.cli:galaxyctl",
