@@ -298,14 +298,6 @@ Your proxy server can balance load between the two gunicorns. For example, with 
         }
     }
 
-To perform the readiness check on a gunicorn using a UNIX domain socket as in this example, the `requests-unixsocket`_
-Python library must be installed. This is not installed by default so as not to add an additional dependency to Galaxy,
-but you can install it when installing Gravity with:
-
-.. code:: console
-
-    $ pip install 'gravity[unixsocket]'
-
 Service Instances
 -----------------
 
@@ -912,4 +904,3 @@ is changed.
 .. _job handler assignment method: https://docs.galaxyproject.org/en/master/admin/scaling.html#job-handler-assignment-methods
 .. _dynamically defined handlers: https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defined-handlers
 .. _Ansible: http://www.ansible.com/
-.. _requests-unixsocket: https://github.com/msabramo/requests-unixsocket
