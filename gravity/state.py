@@ -3,6 +3,7 @@ state data.
 """
 from __future__ import annotations
 import enum
+import hashlib
 import os
 import sys
 import time
@@ -56,6 +57,13 @@ class ConfigFile(BaseModel):
     gravity_data_dir: str
     log_dir: str
     services: List[Service] = []
+
+    def __hash__(self):
+        return id(self)
+
+    @property
+    def path_hash(self):
+        return hashlib.sha1(self.gravity_config_file.encode("UTF-8")).hexdigest()
 
     @property
     def galaxy_version(self):

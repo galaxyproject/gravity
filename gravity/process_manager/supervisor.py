@@ -1,6 +1,5 @@
 """
 """
-import errno
 import os
 import shlex
 import shutil
@@ -247,11 +246,6 @@ class SupervisorProcessManager(BaseProcessManager):
         instance_name = config.instance_name
         instance_conf_dir = join(self.supervisord_conf_dir, f"{instance_name}.d")
         intended_configs = set()
-        try:
-            os.makedirs(instance_conf_dir)
-        except OSError as exc:
-            if exc.errno != errno.EEXIST:
-                raise
 
         programs = []
         for service in config.services:
