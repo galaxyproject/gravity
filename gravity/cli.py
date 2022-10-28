@@ -61,6 +61,7 @@ class GravityCLI(click.MultiCommand):
 
 # Shortcut for running Galaxy in the foreground
 @click.command(context_settings=CONTEXT_SETTINGS)
+@click.version_option()
 @options.debug_option()
 @options.config_file_option()
 @options.state_dir_option()
@@ -78,6 +79,7 @@ def galaxy(ctx, debug, config_file, state_dir, quiet):
 
 
 @click.command(cls=GravityCLI, context_settings=CONTEXT_SETTINGS)
+@click.version_option()
 @options.debug_option()
 @options.config_file_option()
 @options.state_dir_option()
