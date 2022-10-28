@@ -257,6 +257,92 @@ commands:
 ``galayxctl follow``                ``journalctl -f -u 'galaxy-*'``
 =================================== ==================================================================
 
+Zero-Downtime Restarts
+----------------------
+
+Prior to Gravity 1.0, the preferred solution for performing zero-downtime restarts was `unicornherder`_. However, due to
+limitations in the unicornherder software, it does not always successfully perform zero-downtime restarts. Because of
+this, Gravity is now able to perform rolling restarts of gunicorn services if more than one gunicorn is configured.
+
+To run multiple gunicorn processes, configure the ``gunicorn`` section of the Gravity configuration as a *list*. Each
+item in the list is a gunicorn configuration, and can have all of the same parameters as a single gunicorn
+configuration:
+
+.. code:: yaml
+
+    gravity:
+      gunicorn:
+        - bind: unix:/srv/galaxy/var/gunicorn0.sock
+          workers: 4
+        - bind: unix:/srv/galaxy/var/gunicorn1.sock
+          workers: 4
+
+.. caution::
+
+   This will start multiple Galaxy servers with the same ``server_name``. If you have not configured separate Galaxy
+   processes to act as job handlers, your gunicorn processes will handle them, resulting in job errors due to handling
+   the same job multiple times. See the Gravity and Galaxy documentation on configuring handlers.
+
+Your proxy server can balance load between the two gunicorns. For example, with nginx:
+
+.. code:: nginx
+
+    upstream galaxy {
+        server unix:/srv/galaxy/var/gunicorn0.sock;
+        server unix:/srv/galaxy/var/gunicorn1.sock;
+    }
+
+    http {
+        location / {
+            proxy_pass http://galaxy;
+        }
+    }
+
+Service Instances
+-----------------
+
+In the case of multiple gunicorn instances as described in :ref:`Zero-Downtime Restarts` and multiple dynamic handlers
+as described in :ref:`Galaxy Job Handlers`, Gravity will create multiple *service instances* of each service. This
+allows multiple processes to be run from a single service definition.
+
+In supervisor, this means that the service names as presented by supervisor are appended with ``:INSTANCE_NUMBER``,
+e.g.:
+
+.. code:: console
+
+    $ galaxyctl status
+    celery                           RUNNING   pid 121363, uptime 0:02:33
+    celery-beat                      RUNNING   pid 121364, uptime 0:02:33
+    gunicorn:0                       RUNNING   pid 121365, uptime 0:02:33
+    gunicorn:1                       RUNNING   pid 121366, uptime 0:02:33
+
+However, ``galaxyctl`` commands that take a service name still use the base service name, e.g.:
+
+.. code:: console
+
+    $ galaxyctl stop gunicorn
+    gunicorn:0: stopped
+    gunicorn:1: stopped
+    Not all processes stopped, supervisord not shut down (hint: see `galaxyctl status`)
+
+In systemd, the service names as presented by systemd are appended with ``@INSTANCE_NUMBER``,
+e.g.:
+
+.. code:: console
+
+    $ galaxyctl status
+      UNIT                       LOAD   ACTIVE SUB     DESCRIPTION
+      galaxy-celery-beat.service loaded active running Galaxy celery-beat
+      galaxy-celery.service      loaded active running Galaxy celery
+      galaxy-gunicorn@0.service  loaded active running Galaxy gunicorn (process 0)
+      galaxy-gunicorn@1.service  loaded active running Galaxy gunicorn (process 1)
+      galaxy.target              loaded active active  Galaxy
+
+As with supervisor, ``galaxyctl`` commands that take a service name still use the base service name.
+
+If you prefer not to work with service instances and want Galaxy to write a service configuration file for each instance
+of each service, you can do so by setting ``service_command_style`` in the Gravity configuration to ``direct``.
+
 Managing Multiple Galaxies
 --------------------------
 
@@ -343,16 +429,25 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
   gravity:
 
     # Process manager to use.
-    # ``supervisor`` is the default process manager.
-    # ``systemd`` is also supported.
+    # ``supervisor`` is the default process manager when Gravity is invoked as a non-root user.
+    # ``systemd`` is the default when Gravity is invoked as root.
     # Valid options are: supervisor, systemd
-    # process_manager: supervisor
+    # process_manager:
 
     # What command to write to the process manager configs
     # `gravity` (`galaxyctl exec <service-name>`) is the default
     # `direct` (each service's actual command) is also supported.
-    # Valid options are: gravity, direct
+    # Valid options are: gravity, direct, exec
     # service_command_style: gravity
+
+    # Use the process manager's *service instance* functionality for services that can run multiple instances.
+    # Presently this includes services like gunicorn and Galaxy dynamic job handlers. Service instances are only supported if
+    # ``service_command_style`` is ``gravity``, and so this option is automatically set to ``false`` if
+    # ``service_command_style`` is set to ``direct``.
+    # use_service_instances: true
+
+    # umask under which services should be executed. Setting ``umask`` on an individual service overrides this value.
+    # umask: '022'
 
     # Memory limit (in GB), processes exceeding the limit will be killed. Default is no limit. If set, this is default value
     # for all services. Setting ``memory_limit`` on an individual service overrides this value. Ignored if ``process_manager``
@@ -395,7 +490,7 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
     # this is hidden from you when running a single instance.
     # instance_name: _default_
 
-    # Configuration for Gunicorn.
+    # Configuration for Gunicorn. Can be a list to run multiple gunicorns for rolling restarts.
     gunicorn:
 
       # Enable Galaxy gunicorn server.
@@ -463,6 +558,9 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
       # Extra arguments to pass to Celery command line.
       # extra_args:
 
+      # umask under which service should be executed
+      # umask:
+
       # Value of supervisor startsecs, systemd TimeoutStartSec
       # start_timeout: 10
 
@@ -491,7 +589,8 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
       # port: 4002
 
       # Routes file to monitor.
-      # Should be set to the same path as ``interactivetools_map`` in the ``galaxy:`` section.
+      # Should be set to the same path as ``interactivetools_map`` in the ``galaxy:`` section. This is ignored if
+      # ``interactivetools_map is set``.
       # sessions: database/interactivetools_map.sqlite
 
       # Include verbose messages in gx-it-proxy
@@ -508,6 +607,9 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
       # Rewrite location blocks with proxy port.
       # This is an advanced option that is only needed when proxying to remote interactive tool container that cannot be reached through the local network.
       # reverse_proxy: false
+
+      # umask under which service should be executed
+      # umask:
 
       # Value of supervisor startsecs, systemd TimeoutStartSec
       # start_timeout: 10
@@ -560,6 +662,9 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
       # Extra arguments to pass to tusd command line.
       # extra_args:
 
+      # umask under which service should be executed
+      # umask:
+
       # Value of supervisor startsecs, systemd TimeoutStartSec
       # start_timeout: 10
 
@@ -608,6 +713,9 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
 
       # Extra arguments to pass to Gunicorn command line.
       # extra_args:
+
+      # umask under which service should be executed
+      # umask:
 
       # Value of supervisor startsecs, systemd TimeoutStartSec
       # start_timeout: 10
@@ -718,10 +826,18 @@ to exit, and then are restarted. See the ``graceful`` subcommand to restart grac
 graceful
 --------
 
-Restart Galaxy with minimal interruption. If running with `gunicorn`_ this means holding the web socket open while
-restarting (connections to Galaxy will block). If running with `unicornherder`_, a new Galaxy application will be
-started and the old one shut down only once the new one is accepting connections. A graceful restart with unicornherder
-should be transparent to clients.
+Restart Galaxy with minimal interruption.
+
+If running with a single `gunicorn`_ without ``preload``, this means holding the web socket open while restarting
+(connections to Galaxy will block). With ``preload``, gunicorn is restarted and some clients may experience connection
+failures.
+
+If running with multiple gunicorns, a rolling restart is performed, where Gravity restarts each gunicorn, waits for it
+to respond to requests after restarting, and then moves to the next one. This process should be transparent to clients.
+
+If running with `unicornherder`_, a new Galaxy application will be started and the old one shut down only once the new
+one is accepting connections. This should also be transparent to clients, but limitations in the unicornherder software
+may allow interruptions to occur.
 
 update
 ------
@@ -788,4 +904,3 @@ is changed.
 .. _job handler assignment method: https://docs.galaxyproject.org/en/master/admin/scaling.html#job-handler-assignment-methods
 .. _dynamically defined handlers: https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defined-handlers
 .. _Ansible: http://www.ansible.com/
-.. _Issue #6: https://github.com/galaxyproject/gravity/issues/6

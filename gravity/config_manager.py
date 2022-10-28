@@ -7,10 +7,11 @@ import os
 import xml.etree.ElementTree as elementtree
 from typing import Union
 
+from pydantic import ValidationError
 from yaml import safe_load
 
+import gravity.io
 from gravity.settings import Settings
-from gravity.io import debug, error, exception, warn
 from gravity.state import (
     ConfigFile,
     service_for_service_type,
@@ -41,7 +42,7 @@ class ConfigManager(object):
             # convert from pathlib.Path
             self.state_dir = str(state_dir)
 
-        debug(f"Gravity state dir: {state_dir}")
+        gravity.io.debug(f"Gravity state dir: {state_dir}")
 
         if config_file:
             for cf in config_file:
@@ -59,11 +60,11 @@ class ConfigManager(object):
                 config_dict = safe_load(config_fh)
             except Exception as exc:
                 # this should always be a parse error, access errors will be caught by click
-                error(f"Failed to parse config: {config_file}")
-                exception(exc)
+                gravity.io.error(f"Failed to parse config: {config_file}")
+                gravity.io.exception(exc)
 
         if type(config_dict) is not dict:
-            exception(f"Config file does not look like valid Galaxy or Gravity configuration file: {config_file}")
+            gravity.io.exception(f"Config file does not look like valid Galaxy or Gravity configuration file: {config_file}")
 
         gravity_config_dict = config_dict.get(self.gravity_config_section) or {}
 
@@ -78,15 +79,15 @@ class ConfigManager(object):
             if app_config_file:
                 app_config = self.__load_app_config_file(config_file, app_config_file)
             else:
-                warn(
+                gravity.io.warn(
                     f"Config file appears to be a Gravity config but contains no {server_section} section, "
                     f"Galaxy defaults will be used: {config_file}")
         elif self.gravity_config_section not in config_dict and server_section in config_dict:
-            warn(
+            gravity.io.warn(
                 f"Config file appears to be a Galaxy config but contains no {self.gravity_config_section} section, "
                 f"Gravity defaults will be used: {config_file}")
         elif self.gravity_config_section not in config_dict and server_section not in config_dict:
-            exception(f"Config file does not look like valid Galaxy or Gravity configuration file: {config_file}")
+            gravity.io.exception(f"Config file does not look like valid Galaxy or Gravity configuration file: {config_file}")
 
         app_config = app_config or config_dict.get(server_section) or {}
         gravity_config_dict["__file__"] = config_file
@@ -102,12 +103,12 @@ class ConfigManager(object):
                 if server_section not in _app_config_dict:
                     # we let a missing galaxy config slide in other scenarios but if you set the option to something
                     # that doesn't contain a galaxy section that's almost surely a mistake
-                    exception(f"Galaxy config file does not contain a {server_section} section: {app_config_file}")
+                    gravity.io.exception(f"Galaxy config file does not contain a {server_section} section: {app_config_file}")
             app_config = _app_config_dict[server_section] or {}
             app_config["__file__"] = app_config_file
             return app_config
         except Exception as exc:
-            exception(exc)
+            gravity.io.exception(exc)
 
     def __load_config_list(self, config_file, config_dict):
         try:
@@ -124,131 +125,134 @@ class ConfigManager(object):
                 gravity_config_dict["__file__"] = config_file
                 self.__load_config(gravity_config_dict, app_config)
         except AssertionError as exc:
-            exception(exc)
+            gravity.io.exception(exc)
 
     def __load_config(self, gravity_config_dict, app_config):
         defaults = {}
-        gravity_config = Settings(**recursive_update(defaults, gravity_config_dict))
+        try:
+            gravity_settings = Settings(**recursive_update(defaults, gravity_config_dict))
+        except ValidationError as exc:
+            # suppress the traceback and just report the error
+            gravity.io.exception(exc)
 
-        if gravity_config.instance_name in self.__configs:
-            error(
-                f"Galaxy instance {gravity_config.instance_name} already loaded from file: "
-                f"{self.__configs[gravity_config.instance_name].gravity_config_file}")
-            exception(f"Duplicate instance name {gravity_config.instance_name}, instance names must be unique")
+        if gravity_settings.instance_name in self.__configs:
+            gravity.io.error(
+                f"Galaxy instance {gravity_settings.instance_name} already loaded from file: "
+                f"{self.__configs[gravity_settings.instance_name].gravity_config_file}")
+            gravity.io.exception(f"Duplicate instance name {gravity_settings.instance_name}, instance names must be unique")
 
         gravity_config_file = gravity_config_dict["__file__"]
         galaxy_config_file = app_config.get("__file__", gravity_config_file)
-
-        service_settings = {}
-        service_settings["gunicorn"] = gravity_config.gunicorn.dict()
-        service_settings["tusd"] = gravity_config.tusd.dict()
-        service_settings["celery"] = gravity_config.celery.dict()
-        service_settings["reports"] = gravity_config.reports.dict()
-
-        galaxy_root = gravity_config.galaxy_root or app_config.get("root")
+        galaxy_root = gravity_settings.galaxy_root or app_config.get("root")
 
         # TODO: document that the default state_dir is data_dir/gravity and that setting state_dir overrides this
         gravity_data_dir = self.state_dir or os.path.join(app_config.get("data_dir", "database"), "gravity")
-        log_dir = gravity_config.log_dir or os.path.join(gravity_data_dir, "log")
+        log_dir = gravity_settings.log_dir or os.path.join(gravity_data_dir, "log")
+
+        # TODO: this should use galaxy.util.properties.load_app_properties() so that env vars work
+        app_config_dict = {
+            "galaxy_infrastructure_url": app_config.get("galaxy_infrastructure_url", "").rstrip("/"),
+            "interactivetools_enable": app_config.get("interactivetools_enable"),
+        }
+
+        # some things should only be included if set
+        for app_key in ("interactivetools_map", "galaxy_url_prefix"):
+            if app_key in app_config:
+                app_config_dict[app_key] = app_config[app_key]
 
         config = ConfigFile(
             config_type=self.galaxy_server_config_section,
+            app_config=app_config_dict,
             gravity_config_file=gravity_config_file,
             galaxy_config_file=galaxy_config_file,
-            instance_name=gravity_config.instance_name,
-            process_manager=gravity_config.process_manager,
-            service_command_style=gravity_config.service_command_style,
-            app_server=gravity_config.app_server,
-            virtualenv=gravity_config.virtualenv,
-            galaxy_infrastructure_url=app_config.get("galaxy_infrastructure_url", "").rstrip("/"),
+            instance_name=gravity_settings.instance_name,
+            process_manager=gravity_settings.process_manager,
+            service_command_style=gravity_settings.service_command_style,
+            app_server=gravity_settings.app_server,
+            virtualenv=gravity_settings.virtualenv,
             galaxy_root=galaxy_root,
-            galaxy_user=gravity_config.galaxy_user,
-            galaxy_group=gravity_config.galaxy_group,
-            umask=gravity_config.umask,
-            memory_limit=gravity_config.memory_limit,
+            galaxy_user=gravity_settings.galaxy_user,
+            galaxy_group=gravity_settings.galaxy_group,
+            umask=gravity_settings.umask,
+            memory_limit=gravity_settings.memory_limit,
             gravity_data_dir=gravity_data_dir,
             log_dir=log_dir,
         )
 
-        service_kwargs = {
-            "config": config,
-            "service_settings": service_settings,
-        }
+        # add standard services if enabled
+        for service_type in (config.app_server, "celery", "celery-beat", "tusd", "gx-it-proxy", "reports"):
+            config.services.extend(service_for_service_type(service_type).services_if_enabled(config, gravity_settings))
 
-        if gravity_config.gunicorn.enable:
-            config.services.append(service_for_service_type(config.app_server)(**service_kwargs))
-        if gravity_config.celery.enable:
-            config.services.append(service_for_service_type("celery")(**service_kwargs))
-        if gravity_config.celery.enable_beat:
-            config.services.append(service_for_service_type("celery-beat")(**service_kwargs))
-        if gravity_config.tusd.enable:
-            config.services.append(service_for_service_type("tusd")(**service_kwargs))
-        if gravity_config.reports.enable:
-            config.services.append(service_for_service_type("reports")(**service_kwargs))
+        # TODO: document that only environment can be configured on static handlers, dynamic handlers can have any of
+        # the common settings (memory_limit, etc.)
 
+        # load any static handlers defined in the galaxy job config
+        assign_with = self.create_static_handler_services(config, app_config)
+
+        # load any dynamic handlers defined in the gravity config
+        self.create_dynamic_handler_services(gravity_settings, config, assign_with)
+
+        for service in config.services:
+            gravity.io.debug(f"Configured {service.service_type} type service: {service.service_name}")
+        gravity.io.debug(f"Loaded instance {config.instance_name} from Gravity config file: {config.gravity_config_file}")
+
+        self.__configs[config.instance_name] = config
+        return config
+
+    def create_static_handler_services(self, config: ConfigFile, app_config: dict):
+        assign_with = None
         if not app_config.get("job_config_file") and app_config.get("job_config"):
             # config embedded directly in Galaxy config
             job_config = app_config["job_config"]
         else:
-            # If this is a Galaxy config, parse job_conf.xml for any *static* standalone handlers
+            # config in an external file
             job_config = app_config.get("job_config_file", DEFAULT_JOB_CONFIG_FILE)
             if not os.path.isabs(job_config):
                 job_config = os.path.abspath(os.path.join(os.path.dirname(config.galaxy_config_file), job_config))
                 if not os.path.exists(job_config):
                     job_config = None
-        if config.config_type == "galaxy" and job_config:
-            for handler_settings in ConfigManager.get_job_config(job_config):
+        if job_config:
+            # parse job conf for any *static* standalone handlers
+            assign_with, handler_settings_list = ConfigManager.get_job_config(job_config)
+            for handler_settings in handler_settings_list:
                 config.services.append(service_for_service_type("standalone")(
                     config=config,
                     service_name=handler_settings.pop("service_name"),
-                    service_settings={"standalone": handler_settings},
+                    settings=handler_settings,
                 ))
+        return assign_with
 
-        # FIXME: This should imply explicit configuration of the handler assignment method. If not explicitly set, the
-        # web process will be a handler, which is not desirable when dynamic handlers are used. Currently Gravity
-        # doesn't parse that part of the job config. See logic in lib/galaxy/web_stack/handlers.py _get_is_handler() to
-        # see how this is determined.
-        self.create_handler_services(gravity_config, config)
-        self.create_gxit_services(gravity_config, app_config, config)
-        self.__configs[config.instance_name] = config
-        debug(f"Loaded instance {config.instance_name} from Gravity config file: {config.gravity_config_file}")
-        return config
-
-    def create_handler_services(self, gravity_config: Settings, config):
-        # we pull push environment from settings to services but the rest of the services pull their env options from
+    def create_dynamic_handler_services(self, gravity_settings: Settings, config: ConfigFile, assign_with):
+        # we push environment from settings to services but the rest of the services pull their env options from
         # settings directly. this can be a bit confusing but is probably ok since there are 3 ways to configure
         # handlers, and gravity is only 1 of them.
-        expanded_handlers = self.expand_handlers(gravity_config, config)
+        assign_with = assign_with or []
+        expanded_handlers = self.expand_handlers(gravity_settings, config)
+        if expanded_handlers and "db-skip-locked" not in assign_with and "db-transaction-isolation" not in assign_with:
+            gravity.io.warn(
+                "Dynamic handlers are configured in Gravity but Galaxy is not configured to assign jobs to handlers "
+                "dynamically, so these handlers will not handle jobs. Set the job handler assignment method in the "
+                "Galaxy job configuration to `db-skip-locked` or `db-transaction-isolation` to fix this.")
         for service_name, handler_settings in expanded_handlers.items():
-            if "pools" in handler_settings:
-                handler_settings["server_pools"] = handler_settings.pop("pools")
-            config.services.append(
-                service_for_service_type("standalone")(
-                    config=config,
+            config.services.extend(
+                service_for_service_type("standalone").services_if_enabled(
+                    config,
+                    gravity_settings=gravity_settings,
+                    settings=handler_settings,
                     service_name=service_name,
-                    service_settings={"standalone": handler_settings},
                 ))
 
-    def create_gxit_services(self, gravity_config: Settings, app_config, config):
-        interactivetools_enable = app_config.get("interactivetools_enable")
-        if gravity_config.gx_it_proxy.enable and not interactivetools_enable:
-            exception("To run the gx-it-proxy server you need to set interactivetools_enable in the galaxy section of galaxy.yml")
-        if gravity_config.gx_it_proxy.enable:
-            # TODO: resolve against data_dir, or bring in galaxy-config ?
-            # CWD in supervisor template is galaxy_root, so this should work for simple cases as is
-            gxit_config = gravity_config.gx_it_proxy
-            gxit_config.sessions = app_config.get("interactivetools_map", gxit_config.sessions)
-            # technically the tusd service doesn't have access to the rest of the settings like other services do, but it doesn't need it
-            service_kwargs = dict(config=config, service_settings={"gx-it-proxy": gravity_config.gx_it_proxy.dict()})
-            config.services.append(service_for_service_type("gx-it-proxy")(**service_kwargs))
-
     @staticmethod
-    def expand_handlers(gravity_config: Settings, config):
-        handlers = gravity_config.handlers or {}
+    def expand_handlers(gravity_settings: Settings, config: ConfigFile):
+        use_list = gravity_settings.use_service_instances
+        handlers = gravity_settings.handlers or {}
         expanded_handlers = {}
         default_name_template = "{name}_{process}"
         for service_name, handler_config in handlers.items():
+            handler_config["enable"] = True
             count = handler_config.get("processes", 1)
+            if "pools" in handler_config:
+                handler_config["server_pools"] = handler_config.pop("pools")
             name_template = handler_config.get("name_template")
             if name_template is None:
                 if count == 1 and service_name[-1].isdigit():
@@ -256,37 +260,51 @@ class ConfigManager(object):
                     expanded_handlers[service_name] = handler_config
                     continue
             name_template = (name_template or default_name_template).strip()
+            instances = []
             for index in range(count):
                 expanded_service_name = name_template.format(name=service_name, process=index, instance_name=config.instance_name)
-                if expanded_service_name not in expanded_handlers:
+                if use_list:
+                    instance = handler_config.copy()
+                    instance["server_name"] = expanded_service_name
+                    instances.append(instance)
+                elif expanded_service_name not in expanded_handlers:
                     expanded_handlers[expanded_service_name] = handler_config
+                else:
+                    gravity.io.warn(f"Duplicate handler name after expansion: {expanded_service_name}")
+            if use_list:
+                expanded_handlers[service_name] = instances
         return expanded_handlers
 
     @staticmethod
     def get_job_config(conf: Union[str, dict]):
         """Extract handler names from job_conf.xml"""
         # TODO: use galaxy job conf parsing
+        assign_with = None
         rval = []
         if isinstance(conf, str):
             if conf.endswith('.xml'):
                 root = elementtree.parse(conf).getroot()
-                for handler in (root.find("handlers") or []):
+                handlers = root.find("handlers")
+                assign_with = (handlers or {}).get("assign_with")
+                if assign_with:
+                    assign_with = [a.strip() for a in assign_with.split(",")]
+                for handler in (handlers or []):
                     rval.append({"service_name": handler.attrib["id"]})
-                return rval
             elif conf.endswith(('.yml', '.yaml')):
                 with open(conf) as job_conf_fh:
                     conf = safe_load(job_conf_fh.read())
             else:
-                exception(f"Unknown job config file type: {conf}")
+                gravity.io.exception(f"Unknown job config file type: {conf}")
         if isinstance(conf, dict):
             handling = conf.get('handling') or {}
+            assign_with = handling.get('assign', [])
             processes = handling.get('processes') or {}
             for handler_name, handler_options in processes.items():
                 rval.append({
                     "service_name": handler_name,
                     "environment": (handler_options or {}).get("environment", None)
                 })
-        return rval
+        return (assign_with, rval)
 
     @property
     def instance_count(self):
@@ -314,14 +332,14 @@ class ConfigManager(object):
     def get_config(self, instance_name=None):
         if instance_name is None:
             if self.instance_count > 1:
-                exception("An instance name is required when more than one instance is configured")
+                gravity.io.exception("An instance name is required when more than one instance is configured")
             elif self.instance_count == 0:
-                exception("No configured Galaxy instances")
+                gravity.io.exception("No configured Galaxy instances")
             instance_name = list(self.__configs.keys())[0]
         try:
             return self.__configs[instance_name]
         except KeyError:
-            exception(f"Unknown instance name: {instance_name}")
+            gravity.io.exception(f"Unknown instance name: {instance_name}")
 
     def get_configured_service_names(self):
         rval = set()

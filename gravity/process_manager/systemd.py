@@ -5,8 +5,9 @@ import os
 import shlex
 import subprocess
 from glob import glob
+from functools import partial
 
-from gravity.io import debug, error, exception, info, warn
+import gravity.io
 from gravity.process_manager import BaseProcessManager
 from gravity.settings import ProcessManager
 from gravity.state import GracefulMethod
@@ -57,6 +58,47 @@ WantedBy=multi-user.target
 """
 
 
+class SystemdService:
+    # converts between different formats
+    def __init__(self, config, service, use_instance_name):
+        self.config = config
+        self.service = service
+        self._use_instance_name = use_instance_name
+
+        if use_instance_name:
+            prefix_instance_name = f"-{config.instance_name}"
+            description_instance_name = f" {config.instance_name}"
+        else:
+            prefix_instance_name = ""
+            description_instance_name = ""
+
+        if self.service.count > 1:
+            description_process = " (process %i)"
+        else:
+            description_process = ""
+
+        self.unit_prefix = f"{service.config_type}{prefix_instance_name}-{service.service_name}"
+        self.description = f"{config.config_type.capitalize()}{description_instance_name} {service.service_name}{description_process}"
+
+    @property
+    def unit_file_name(self):
+        instance_count = self.service.count
+        if instance_count > 1:
+            return f"{self.unit_prefix}@.service"
+        else:
+            return f"{self.unit_prefix}.service"
+
+    @property
+    def unit_names(self):
+        """The representation when performing commands, after instance expansion"""
+        instance_count = self.service.count
+        if instance_count > 1:
+            unit_names = [f"{self.unit_prefix}@{i}.service" for i in range(0, instance_count)]
+        else:
+            unit_names = [f"{self.unit_prefix}.service"]
+        return unit_names
+
+
 class SystemdProcessManager(BaseProcessManager):
 
     name = ProcessManager.systemd
@@ -72,20 +114,23 @@ class SystemdProcessManager(BaseProcessManager):
             unit_path = "/etc/systemd/system" if not self.user_mode else os.path.expanduser("~/.config/systemd/user")
         return unit_path
 
-    def __systemctl(self, *args, ignore_rc=None, capture=False, **kwargs):
+    def __systemctl(self, *args, ignore_rc=None, not_found_rc=None, capture=False, **kwargs):
         args = list(args)
+        not_found_rc = not_found_rc or ()
         call = subprocess.check_call
         extra_args = os.environ.get("GRAVITY_SYSTEMCTL_EXTRA_ARGS")
         if extra_args:
             args = shlex.split(extra_args) + args
         if self.user_mode:
             args = ["--user"] + args
-        debug("Calling systemctl with args: %s", args)
+        gravity.io.debug("Calling systemctl with args: %s", args)
         if capture:
             call = subprocess.check_output
         try:
             return call(["systemctl"] + args, text=True)
         except subprocess.CalledProcessError as exc:
+            if exc.returncode in not_found_rc:
+                gravity.io.exception("Some expected systemd units were not found, did you forget to run `galaxyctl update`?")
             if ignore_rc is None or exc.returncode not in ignore_rc:
                 raise
 
@@ -93,7 +138,7 @@ class SystemdProcessManager(BaseProcessManager):
         args = list(args)
         if self.user_mode:
             args = ["--user"] + args
-        debug("Calling journalctl with args: %s", args)
+        gravity.io.debug("Calling journalctl with args: %s", args)
         subprocess.check_call(["journalctl"] + args)
 
     def _service_default_path(self):
@@ -109,35 +154,35 @@ class SystemdProcessManager(BaseProcessManager):
         # this is used to stop a foreground supervisord in the supervisor PM, so it is a no-op here
         pass
 
-    def __unit_name(self, instance_name, service, unit_type="service"):
-        unit_name = f"{service.config_type}"
-        if self._use_instance_name:
-            unit_name += f"-{instance_name}"
-        if unit_type == "service":
-            unit_name += f"-{service.service_name}"
-        unit_name += f".{unit_type}"
-        return unit_name
+    def __target_unit_name(self, config):
+        instance_name = f"-{config.instance_name}" if self._use_instance_name else ""
+        return f"{config.config_type}{instance_name}.target"
 
-    def __update_service(self, config, service, instance_name):
-        program_name = service.service_name
-        unit_name = self.__unit_name(instance_name, service)
+    def __unit_files_to_active_unit_names(self, *unit_files):
+        unit_names = []
+        for unit_file in unit_files:
+            unit_file = os.path.basename(unit_file)
+            if "@" in unit_file:
+                at_position = unit_file.index("@")
+                unit_arg = unit_file[:at_position + 1] + "*" + unit_file[at_position + 1:]
+            else:
+                unit_arg = unit_file
+            list_output = self.__systemctl("list-units", "--plain", "--no-legend", unit_arg, capture=True)
+            unit_names.extend(line.split()[0] for line in list_output.splitlines())
+        return unit_names
 
+    def __update_service(self, config, service, systemd_service: SystemdService):
         # under supervisor we expect that gravity is installed in the galaxy venv and the venv is active when gravity
         # runs, but under systemd this is not the case. we do assume $VIRTUAL_ENV is the galaxy venv if running as an
         # unprivileged user, though.
         virtualenv_dir = config.virtualenv
         environ_virtual_env = os.environ.get("VIRTUAL_ENV")
         if not virtualenv_dir and self.user_mode and environ_virtual_env:
-            warn(f"Assuming Galaxy virtualenv is value of $VIRTUAL_ENV: {environ_virtual_env}")
-            warn("Set `virtualenv` in Gravity configuration to override")
+            gravity.io.warn(f"Assuming Galaxy virtualenv is value of $VIRTUAL_ENV: {environ_virtual_env}")
+            gravity.io.warn("Set `virtualenv` in Gravity configuration to override")
             virtualenv_dir = environ_virtual_env
         elif not virtualenv_dir:
-            exception("The `virtualenv` Gravity config option must be set when using the systemd process manager")
-
-        if self._use_instance_name:
-            description = f"{config.config_type.capitalize()} {instance_name} {program_name}"
-        else:
-            description = f"{config.config_type.capitalize()} {program_name}"
+            gravity.io.exception("The `virtualenv` Gravity config option must be set when using the systemd process manager")
 
         memory_limit = service.settings.get("memory_limit") or config.memory_limit
         if memory_limit:
@@ -150,38 +195,33 @@ class SystemdProcessManager(BaseProcessManager):
         # systemd-specific format vars
         systemd_format_vars = {
             "virtualenv_bin": f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}' if virtualenv_dir else "",
+            "instance_number": "%i",
             "systemd_user_group": "",
             "systemd_exec_reload": exec_reload or "",
             "systemd_memory_limit": memory_limit or "",
-            "systemd_description": description,
-            "systemd_target": self.__unit_name(instance_name, config, unit_type="target"),
+            "systemd_description": systemd_service.description,
+            "systemd_target": self.__target_unit_name(config),
         }
         if not self.user_mode:
             systemd_format_vars["systemd_user_group"] = f"User={config.galaxy_user}"
             if config.galaxy_group is not None:
                 systemd_format_vars["systemd_user_group"] += f"\nGroup={config.galaxy_group}"
 
-        format_vars = self._service_format_vars(config, service, program_name, systemd_format_vars)
+        format_vars = self._service_format_vars(config, service, systemd_format_vars)
 
         if not format_vars["command"].startswith("/"):
             format_vars["command"] = f"{format_vars['virtualenv_bin']}{format_vars['command']}"
 
-        conf = os.path.join(self.__systemd_unit_dir, unit_name)
+        unit_file = systemd_service.unit_file_name
+        conf = os.path.join(self.__systemd_unit_dir, unit_file)
         template = SYSTEMD_SERVICE_TEMPLATE
         contents = template.format(**format_vars)
-        self._update_file(conf, contents, unit_name, "systemd unit")
+        self._update_file(conf, contents, unit_file, "systemd unit")
 
         return conf
 
-    def follow(self, configs=None, service_names=None, quiet=False):
-        """ """
-        unit_names = self.__unit_names(configs, service_names, use_target=False)
-        u_args = [i for sl in list(zip(["-u"] * len(unit_names), unit_names)) for i in sl]
-        self.__journalctl("-f", *u_args)
-
     def _process_config(self, config, clean=False, **kwargs):
         """ """
-        instance_name = config.instance_name
         intended_configs = set()
 
         try:
@@ -192,22 +232,23 @@ class SystemdProcessManager(BaseProcessManager):
 
         service_units = []
         for service in config.services:
+            systemd_service = SystemdService(config, service, self._use_instance_name)
             if clean:
-                intended_configs.add(os.path.join(self.__systemd_unit_dir, self.__unit_name(instance_name, service)))
+                intended_configs.add(os.path.join(self.__systemd_unit_dir, systemd_service.unit_file_name))
             else:
-                conf = self.__update_service(config, service, instance_name)
+                conf = self.__update_service(config, service, systemd_service)
                 intended_configs.add(conf)
-                service_units.append(os.path.basename(conf))
+                service_units.extend(systemd_service.unit_names)
 
         # create systemd target
-        target_unit_name = self.__unit_name(instance_name, config, unit_type="target")
+        target_unit_name = self.__target_unit_name(config)
         target_conf = os.path.join(self.__systemd_unit_dir, target_unit_name)
         format_vars = {
             "systemd_description": config.config_type.capitalize(),
             "systemd_target_wants": " ".join(service_units),
         }
         if self._use_instance_name:
-            format_vars["systemd_description"] += f" {instance_name}"
+            format_vars["systemd_description"] += f" {config.instance_name}"
         contents = SYSTEMD_TARGET_TEMPLATE.format(**format_vars)
         updated = False
         if not clean:
@@ -229,7 +270,7 @@ class SystemdProcessManager(BaseProcessManager):
         if not intended_configs and not os.path.exists(self.__systemd_unit_dir):
             return
 
-        # FIXME: should use config_type, but that's per-service
+        # other config types would need to be addressed here if we added any
         _present_configs = filter(
             lambda f: (f.startswith("galaxy-") and (f.endswith(".service") or f.endswith(".target")) or f == "galaxy.target"),
             os.listdir(self.__systemd_unit_dir))
@@ -241,11 +282,14 @@ class SystemdProcessManager(BaseProcessManager):
         else:
             unintended_configs = present_configs - intended_configs
 
-        for file in unintended_configs:
-            unit_name = os.path.basename(file)
-            self.__systemctl("disable", "--now", unit_name)
-            info("Removing systemd config %s", file)
-            os.unlink(file)
+        if unintended_configs:
+            unit_files = sorted(unintended_configs)
+            unit_names = self.__unit_files_to_active_unit_names(*unit_files)
+            if unit_names:
+                gravity.io.info(f"Stopping active units: {', '.join(unit_names)}")
+                self.__systemctl("disable", "--now", *unit_names)
+            gravity.io.info(f"Removing systemd configs: {', '.join(unit_files)}")
+            list(map(os.unlink, unit_files))
             self._service_changes = True
 
     def __unit_names(self, configs, service_names, use_target=True, include_services=False):
@@ -253,45 +297,61 @@ class SystemdProcessManager(BaseProcessManager):
         for config in configs:
             services = config.services
             if not service_names and use_target:
-                unit_names.append(self.__unit_name(config.instance_name, config, unit_type="target"))
+                unit_names.append(self.__target_unit_name(config))
                 if not include_services:
                     services = []
             elif service_names:
-                services = [s for s in config.services if s.service_name in service_names]
-            unit_names.extend([self.__unit_name(config.instance_name, s) for s in services])
+                services = config.get_services(service_names)
+            systemd_services = [SystemdService(config, s, self._use_instance_name) for s in services]
+            for systemd_service in systemd_services:
+                unit_names.extend(systemd_service.unit_names)
         return unit_names
+
+    def follow(self, configs=None, service_names=None, quiet=False):
+        """ """
+        unit_names = self.__unit_names(configs, service_names, use_target=False)
+        u_args = [i for sl in list(zip(["-u"] * len(unit_names), unit_names)) for i in sl]
+        self.__journalctl("-f", *u_args)
 
     def start(self, configs=None, service_names=None):
         """ """
         unit_names = self.__unit_names(configs, service_names)
-        self.__systemctl("start", *unit_names)
+        self.__systemctl("start", *unit_names, not_found_rc=(5,))
 
     def stop(self, configs=None, service_names=None):
         """ """
         unit_names = self.__unit_names(configs, service_names)
-        self.__systemctl("stop", *unit_names)
+        self.__systemctl("stop", *unit_names, not_found_rc=(5,))
 
     def restart(self, configs=None, service_names=None):
         """ """
         unit_names = self.__unit_names(configs, service_names)
-        self.__systemctl("restart", *unit_names)
+        self.__systemctl("restart", *unit_names, not_found_rc=(5,))
+
+    def __graceful_service(self, config, service, service_names):
+        systemd_service = SystemdService(config, service, self._use_instance_name)
+        if service.graceful_method == GracefulMethod.ROLLING:
+            restart_callbacks = list(partial(self.__systemctl, "reload-or-restart", u) for u in systemd_service.unit_names)
+            service.rolling_restart(restart_callbacks)
+        else:
+            self.__systemctl("reload-or-restart", *systemd_service.unit_names, not_found_rc=(5,))
+            gravity.io.info(f"Restarted: {', '.join(systemd_service.unit_names)}")
 
     def graceful(self, configs=None, service_names=None):
         """ """
         # reload-or-restart on a target does a restart on its services, so we use the services directly
-        unit_names = self.__unit_names(configs, service_names, use_target=False)
-        self.__systemctl("reload-or-restart", *unit_names)
+        for config in configs:
+            services = config.get_services(service_names)
+            for service in services:
+                self.__graceful_service(config, service, service_names)
 
     def status(self, configs=None, service_names=None):
         """ """
         unit_names = self.__unit_names(configs, service_names, include_services=True)
-        try:
-            self.__systemctl("status", "--lines=0", *unit_names, ignore_rc=(3,))
-        except subprocess.CalledProcessError as exc:
-            if exc.returncode == 4:
-                error("Some expected systemd units were not found, did you forget to run `galaxyctl update`?")
-            else:
-                raise
+        if service_names:
+            self.__systemctl("status", *unit_names, ignore_rc=(3,), not_found_rc=(4,))
+        else:
+            self.__systemctl("list-units", "--all", *unit_names)
 
     def update(self, configs=None, force=False, clean=False):
         """ """
@@ -302,7 +362,7 @@ class SystemdProcessManager(BaseProcessManager):
                          glob(os.path.join(self.__systemd_unit_dir, f"{config.config_type}.target")))
                 if units:
                     newline = '\n'
-                    info(f"Removing systemd units due to --force option:{newline}{newline.join(units)}")
+                    gravity.io.info(f"Removing systemd units due to --force option:{newline}{newline.join(units)}")
                     [self.__systemctl("disable", os.path.basename(u)) for u in units]
                     list(map(os.unlink, units))
                     self._service_changes = True
@@ -310,13 +370,13 @@ class SystemdProcessManager(BaseProcessManager):
         if self._service_changes:
             self.__systemctl("daemon-reload")
         else:
-            debug("No service changes, daemon-reload not performed")
+            gravity.io.debug("No service changes, daemon-reload not performed")
 
     def shutdown(self):
         """ """
         if self._use_instance_name:
             configs = self.config_manager.get_configs(process_manager=self.name)
-            self.__systemctl("stop", *[f"galaxy-{c.instance_name}.target" for c in configs])
+            self.__systemctl("stop", *[f"{c.config_type}-{c.instance_name}.target" for c in configs])
         else:
             self.__systemctl("stop", "galaxy.target")
 

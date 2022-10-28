@@ -4,15 +4,13 @@ import collections.abc
 import copy
 import os
 import sys
-import yaml
 
 import jsonref
+import requests
+import requests_unixsocket
+import yaml
+
 from gravity.settings import Settings
-
-
-class classproperty(property):
-    def __get__(self, cls, owner):
-        return classmethod(self.fget).__get__(None, owner)()
 
 
 def recursive_update(to_update, update_from):
@@ -87,3 +85,14 @@ def process_property(key, value, depth=0):
             value_sep = " "
         description = f"{description}\n{extra_white_space}{comment}{key}:{value_sep}{default}\n"
     return description
+
+
+def http_check(bind, path):
+    if bind.startswith("unix:"):
+        socket = requests.utils.quote(bind.split(":", 1)[1], safe="")
+        session = requests_unixsocket.Session()
+        response = session.get(f"http+unix://{socket}{path}")
+    else:
+        response = requests.get(f"http://{bind}{path}", timeout=30)
+    response.raise_for_status()
+    return response

@@ -3,7 +3,9 @@ from enum import Enum
 from typing import (
     Any,
     Dict,
+    List,
     Optional,
+    Union,
 )
 from pydantic import BaseModel, BaseSettings, Extra, Field, validator
 
@@ -38,6 +40,7 @@ class ProcessManager(str, Enum):
 class ServiceCommandStyle(str, Enum):
     gravity = "gravity"
     direct = "direct"
+    exec = "exec"
 
 
 class AppServer(str, Enum):
@@ -159,6 +162,11 @@ Consumes less memory when multiple processes are configured. Default is ``false`
     umask: Optional[str] = Field(None, description="umask under which service should be executed")
     start_timeout: int = Field(15, description="Value of supervisor startsecs, systemd TimeoutStartSec")
     stop_timeout: int = Field(65, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
+    restart_timeout: int = Field(
+        default=300,
+        description="""
+Amount of time to wait for a server to become alive when performing rolling restarts.
+""")
     memory_limit: Optional[int] = Field(
         None,
         description="""
@@ -235,7 +243,8 @@ class GxItProxySettings(BaseModel):
         default="database/interactivetools_map.sqlite",
         description="""
 Routes file to monitor.
-Should be set to the same path as ``interactivetools_map`` in the ``galaxy:`` section.
+Should be set to the same path as ``interactivetools_map`` in the ``galaxy:`` section. This is ignored if
+``interactivetools_map is set``.
 """)
     verbose: bool = Field(default=True, description="Include verbose messages in gx-it-proxy")
     forward_ip: Optional[str] = Field(
@@ -295,6 +304,15 @@ What command to write to the process manager configs
 `direct` (each service's actual command) is also supported.
 """)
 
+    use_service_instances: bool = Field(
+        True,
+        description="""
+Use the process manager's *service instance* functionality for services that can run multiple instances.
+Presently this includes services like gunicorn and Galaxy dynamic job handlers. Service instances are only supported if
+``service_command_style`` is ``gravity``, and so this option is automatically set to ``false`` if
+``service_command_style`` is set to ``direct``.
+""")
+
     umask: str = Field("022", description="""
 umask under which services should be executed. Setting ``umask`` on an individual service overrides this value.
 """)
@@ -352,7 +370,9 @@ similar to uWSGI Zerg Mode used in the past.
 """)
     instance_name: str = Field(default=DEFAULT_INSTANCE_NAME, description="""Override the default instance name.
 this is hidden from you when running a single instance.""")
-    gunicorn: GunicornSettings = Field(default={}, description="Configuration for Gunicorn.")
+    gunicorn: Union[List[GunicornSettings], GunicornSettings] = Field(default={}, description="""
+Configuration for Gunicorn. Can be a list to run multiple gunicorns for rolling restarts.
+""")
     celery: CelerySettings = Field(default={}, description="Configuration for Celery Processes.")
     gx_it_proxy: GxItProxySettings = Field(default={}, description="Configuration for gx-it-proxy.")
     # The default value for tusd is a little awkward, but is a convenient way to ensure that if
@@ -387,6 +407,7 @@ See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defi
                 raise ValueError("Gravity cannot be run as root unless using the systemd process manager")
         return v
 
+    # automatically set process_manager to systemd if unset and running is root
     @validator("process_manager")
     def _process_manager_systemd_if_root(cls, v, values):
         if v is None:
@@ -394,6 +415,13 @@ See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defi
                 v = ProcessManager.systemd.value
             else:
                 v = ProcessManager.supervisor.value
+        return v
+
+    # disable service instances unless command style is gravity
+    @validator("use_service_instances")
+    def _disable_service_instances_if_direct(cls, v, values):
+        if values["service_command_style"] != ServiceCommandStyle.gravity:
+            v = False
         return v
 
     class Config:

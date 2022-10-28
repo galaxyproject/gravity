@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from gravity import process_manager
+from gravity.process_manager.supervisor import supervisor_program_names
 from yaml import safe_load
 
 
@@ -357,7 +358,7 @@ def test_default_memory_limit(galaxy_yml, default_config_manager):
     conf_dir = service_conf_dir(state_dir, process_manager_name)
     gunicorn_conf_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'gunicorn')
     assert 'MemoryLimit=2G' in gunicorn_conf_path.open().read()
-    handler0_config_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'handler_0', service_type='standalone')
+    handler0_config_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'handler', service_type='standalone')
     assert handler0_config_path.exists(), os.listdir(conf_dir)
     assert 'MemoryLimit=2G' in handler0_config_path.open().read()
 
@@ -378,7 +379,7 @@ def test_service_memory_limit(galaxy_yml, default_config_manager):
     conf_dir = service_conf_dir(state_dir, process_manager_name)
     gunicorn_conf_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'gunicorn')
     assert 'MemoryLimit=4G' in gunicorn_conf_path.open().read()
-    handler0_config_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'handler_0', service_type='standalone')
+    handler0_config_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'handler', service_type='standalone')
     assert handler0_config_path.exists(), os.listdir(conf_dir)
     assert 'MemoryLimit' not in handler0_config_path.open().read()
 
@@ -400,7 +401,7 @@ def test_override_memory_limit(galaxy_yml, default_config_manager):
     conf_dir = service_conf_dir(state_dir, process_manager_name)
     gunicorn_conf_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'gunicorn')
     assert 'MemoryLimit=4G' in gunicorn_conf_path.open().read()
-    handler0_config_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'handler_0', service_type='standalone')
+    handler0_config_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'handler', service_type='standalone')
     assert handler0_config_path.exists(), os.listdir(conf_dir)
     assert 'MemoryLimit=2G' in handler0_config_path.open().read()
 
@@ -420,7 +421,7 @@ def test_default_umask(galaxy_yml, default_config_manager):
     conf_dir = service_conf_dir(state_dir, process_manager_name)
     gunicorn_conf_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'gunicorn')
     assert 'UMask=022' in gunicorn_conf_path.open().read()
-    handler0_config_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'handler_0', service_type='standalone')
+    handler0_config_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'handler', service_type='standalone')
     assert handler0_config_path.exists(), os.listdir(conf_dir)
     assert 'UMask=022' in handler0_config_path.open().read()
 
@@ -441,7 +442,7 @@ def test_service_umask(galaxy_yml, default_config_manager):
     conf_dir = service_conf_dir(state_dir, process_manager_name)
     gunicorn_conf_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'gunicorn')
     assert 'UMask=077' in gunicorn_conf_path.open().read()
-    handler0_config_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'handler_0', service_type='standalone')
+    handler0_config_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'handler', service_type='standalone')
     assert handler0_config_path.exists(), os.listdir(conf_dir)
     assert 'UMask=022' in handler0_config_path.open().read()
 
@@ -463,9 +464,18 @@ def test_override_umask(galaxy_yml, default_config_manager):
     conf_dir = service_conf_dir(state_dir, process_manager_name)
     gunicorn_conf_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'gunicorn')
     assert 'UMask=077' in gunicorn_conf_path.open().read()
-    handler0_config_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'handler_0', service_type='standalone')
+    handler0_config_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'handler', service_type='standalone')
     assert handler0_config_path.exists(), os.listdir(conf_dir)
     assert 'UMask=027' in handler0_config_path.open().read()
+
+
+def test_supervisor_program_names():
+    assert supervisor_program_names("gunicorn", 1, 0) == ["gunicorn"]
+    assert supervisor_program_names("gunicorn", 2, 0) == ["gunicorn:0", "gunicorn:1"]
+    assert supervisor_program_names("gunicorn", 2, 8080) == ["gunicorn:8080", "gunicorn:8081"]
+    assert supervisor_program_names("gunicorn", 1, 0, instance_name="main") == ["main:gunicorn"]
+    assert supervisor_program_names("gunicorn", 2, 0, instance_name="main") == ["main:gunicorn0", "main:gunicorn1"]
+    assert supervisor_program_names("gunicorn", 2, 8080, instance_name="main") == ["main:gunicorn8080", "main:gunicorn8081"]
 
 
 # TODO: test switching PMs in between invocations, test multiple instances

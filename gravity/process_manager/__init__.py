@@ -6,7 +6,6 @@ import importlib
 import inspect
 import os
 import shlex
-import subprocess
 import sys
 from abc import ABCMeta, abstractmethod
 from functools import partial, wraps
@@ -75,34 +74,33 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
     def _service_default_path(self):
         return os.environ["PATH"]
 
-    def _service_log_file(self, log_dir, program_name):
-        return os.path.join(log_dir, program_name + ".log")
-
     def _service_program_name(self, instance_name, service):
         return f"{instance_name}_{service.config_type}_{service.service_type}_{service.service_name}"
 
-    def _service_format_vars(self, config, service, program_name, pm_format_vars):
+    def _service_format_vars(self, config, service, pm_format_vars=None):
+        pm_format_vars = pm_format_vars or {}
         virtualenv_dir = config.virtualenv
         virtualenv_bin = f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}' if virtualenv_dir else ""
 
         format_vars = {
             "config_type": service.config_type,
             "server_name": service.service_name,
-            "program_name": program_name,
-            "galaxy_infrastructure_url": config.galaxy_infrastructure_url,
             "galaxy_umask": service.settings.get("umask") or config.umask,
             "galaxy_conf": config.galaxy_config_file,
             "galaxy_root": config.galaxy_root,
             "virtualenv_bin": virtualenv_bin,
             "gravity_data_dir": config.gravity_data_dir,
+            "app_config": config.app_config,
         }
+
         format_vars["settings"] = service.settings
+        format_vars["service_instance_count"] = service.count
 
         # update here from PM overrides
         format_vars.update(pm_format_vars)
 
         # template the command template
-        if config.service_command_style == ServiceCommandStyle.direct:
+        if config.service_command_style in (ServiceCommandStyle.direct, ServiceCommandStyle.exec):
             format_vars["command_arguments"] = service.get_command_arguments(format_vars)
             format_vars["command"] = service.command_template.format(**format_vars)
 
@@ -118,7 +116,10 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
             galaxyctl = sys.argv[0]
             if not galaxyctl.endswith("galaxyctl"):
                 warn(f"Unable to determine galaxyctl command, sys.argv[0] is: {galaxyctl}")
-            format_vars["command"] = f"{galaxyctl} --config-file {config_file} exec {config.instance_name} {service.service_name}"
+            instance_number_opt = ""
+            if service.count > 1:
+                instance_number_opt = f" --service-instance {pm_format_vars['instance_number']}"
+            format_vars["command"] = f"{galaxyctl} --config-file {config_file} exec{instance_number_opt} {config.instance_name} {service.service_name}"
             environment = {}
         format_vars["environment"] = self._service_environment_formatter(environment, format_vars)
 
@@ -158,33 +159,12 @@ class BaseProcessManager(BaseProcessExecutionEnvironment, metaclass=ABCMeta):
             debug("No changes to existing config for %s %s at %s", file_type, name, path)
             return False
 
-    def follow(self, configs=None, service_names=None, quiet=False):
-        # supervisor has a built-in tail command but it only works on a single log file. `galaxyctl supervisorctl tail
-        # ...` can be used if desired, though
-        if not self.tail:
-            exception("`tail` not found on $PATH, please install it")
-        log_files = []
-        if quiet:
-            cmd = [self.tail, "-f", self.log_file]
-            tail_popen = subprocess.Popen(cmd)
-            tail_popen.wait()
-        else:
-            if not configs:
-                configs = self.config_manager.get_configs()
-            for config in configs:
-                log_dir = config.log_dir
-                if not service_names:
-                    for service in config.services:
-                        program_name = self._service_program_name(config.instance_name, service)
-                        log_files.append(self._service_log_file(log_dir, program_name))
-                else:
-                    log_files.extend([self._service_log_file(log_dir, s) for s in service_names])
-                cmd = [self.tail, "-f"] + log_files
-                tail_popen = subprocess.Popen(cmd)
-                tail_popen.wait()
-
     @abstractmethod
     def _process_config(self, config_file, config, **kwargs):
+        """ """
+
+    @abstractmethod
+    def follow(self, configs=None, service_names=None, quiet=False):
         """ """
 
     @abstractmethod
@@ -228,12 +208,24 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
     def _service_environment_formatter(self, environment, format_vars):
         return {k: v.format(**format_vars) for k, v in environment.items()}
 
-    def exec(self, config, service, no_exec=False):
+    def exec(self, config, service, service_instance_number=None, no_exec=False):
         service_name = service.service_name
 
+        # if this is an instance of a service, we need to ensure that instance_number is formatted in as needed
+        instance_count = service.count
+        if instance_count > 1:
+            msg = f"Cannot exec '{service_name}': This service is configured to use multiple instances and "
+            if service_instance_number is None:
+                exception(msg + "--service-instance was not set")
+            if service_instance_number not in range(0, instance_count):
+                exception(msg + "--service-instance is out of range")
+            service_instance = service.get_service_instance(service_instance_number)
+        else:
+            service_instance = service
+
         # force generation of real commands
-        config.service_command_style = ServiceCommandStyle.direct
-        format_vars = self._service_format_vars(config, service, service_name, {})
+        config.service_command_style = ServiceCommandStyle.exec
+        format_vars = self._service_format_vars(config, service_instance)
         print_env = ' '.join('{}={}'.format(k, shlex.quote(v)) for k, v in format_vars["environment"].items())
 
         cmd = shlex.split(format_vars["command"])
@@ -282,7 +274,7 @@ class ProcessManagerRouter:
                 exception("No provided names are known instance or service names")
         return (instance_names, service_names)
 
-    def exec(self, instance_names=None, no_exec=False):
+    def exec(self, instance_names=None, service_instance_number=None, no_exec=False):
         """ """
         instance_names, service_names = self._instance_service_names(instance_names)
 
@@ -298,12 +290,12 @@ class ProcessManagerRouter:
             exception(f"Exactly one service name must be provided. Configured service(s): {service_list}")
 
         service_name = service_names[0]
-        services = [s for s in config.services if s.service_name == service_name]
+        services = config.get_services(service_names)
         if not services:
             exception(f"Service '{service_name}' is not configured. Configured service(s): {service_list}")
 
         service = services[0]
-        return self._process_executor.exec(config, service, no_exec=no_exec)
+        return self._process_executor.exec(config, service, service_instance_number=service_instance_number, no_exec=no_exec)
 
     @route
     def follow(self, instance_names=None, quiet=None):
@@ -326,7 +318,7 @@ class ProcessManagerRouter:
         """ """
 
     @route
-    def status(self):
+    def status(self, instance_names=None):
         """ """
 
     @route_to_all
