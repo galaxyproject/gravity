@@ -358,6 +358,7 @@ class SupervisorProcessManager(BaseProcessManager):
             tail_popen.wait()
 
     def start(self, configs=None, service_names=None):
+        self.update(configs=configs)
         self.__supervisord()
         self.__op_on_programs("start", configs, service_names)
         self.supervisorctl("status")
@@ -375,6 +376,7 @@ class SupervisorProcessManager(BaseProcessManager):
                 gravity.io.info("Not all processes stopped, supervisord not shut down (hint: see `galaxyctl status`)")
 
     def restart(self, configs=None, service_names=None):
+        self.update(configs=configs)
         if not self.__supervisord_is_running():
             self.__supervisord()
             gravity.io.warn("supervisord was not previously running; it has been started, so the 'restart' command has been ignored")
@@ -382,6 +384,7 @@ class SupervisorProcessManager(BaseProcessManager):
             self.__op_on_programs("restart", configs, service_names)
 
     def graceful(self, configs=None, service_names=None):
+        self.update(configs=configs)
         if not self.__supervisord_is_running():
             self.__supervisord()
             gravity.io.warn("supervisord was not previously running; it has been started, so the 'graceful' command has been ignored")

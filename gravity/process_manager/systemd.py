@@ -322,18 +322,24 @@ class SystemdProcessManager(BaseProcessManager):
 
     def start(self, configs=None, service_names=None):
         """ """
+        self.update(configs=configs)
         unit_names = self.__unit_names(configs, service_names)
         self.__systemctl("start", *unit_names, not_found_rc=(5,))
+        self.status(configs=configs, service_names=service_names)
 
     def stop(self, configs=None, service_names=None):
         """ """
         unit_names = self.__unit_names(configs, service_names)
         self.__systemctl("stop", *unit_names, not_found_rc=(5,))
+        self.status(configs=configs, service_names=service_names)
 
     def restart(self, configs=None, service_names=None):
         """ """
+        # this can result in a double restart if your configs changed, not ideal but we can't really control that
+        self.update(configs=configs)
         unit_names = self.__unit_names(configs, service_names)
         self.__systemctl("restart", *unit_names, not_found_rc=(5,))
+        self.status(configs=configs, service_names=service_names)
 
     def __graceful_service(self, config, service, service_names):
         systemd_service = SystemdService(config, service, self._use_instance_name)
@@ -346,6 +352,7 @@ class SystemdProcessManager(BaseProcessManager):
 
     def graceful(self, configs=None, service_names=None):
         """ """
+        self.update(configs=configs)
         # reload-or-restart on a target does a restart on its services, so we use the services directly
         for config in configs:
             services = config.get_services(service_names)
