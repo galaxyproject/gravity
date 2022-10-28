@@ -176,7 +176,7 @@ class SystemdProcessManager(BaseProcessManager):
             unit_names.extend(line.split()[0] for line in list_output.splitlines())
         return unit_names
 
-    def __disable_and_remove_unit_files(self, unit_files):
+    def _disable_and_remove_pm_files(self, unit_files):
         for target in [u for u in unit_files if u.endswith(".target")]:
             self.__systemctl("disable", "--now", os.path.basename(target))
         # stopping all the targets should also stop all the services, but we'll check to be sure
@@ -202,7 +202,7 @@ class SystemdProcessManager(BaseProcessManager):
                 if match:
                     return match.group(1)
 
-    def __present_unit_files_for_config(self, config):
+    def _present_pm_files_for_config(self, config):
         unit_files = set()
         instance_name = f"-{config.instance_name}" if self._use_instance_name else ""
         target = os.path.join(self.__systemd_unit_dir, f"{config.config_type}{instance_name}.target")
@@ -213,7 +213,7 @@ class SystemdProcessManager(BaseProcessManager):
                 unit_files.update(glob(f"{os.path.splitext(target)[0]}-*.service"))
         return unit_files
 
-    def __intended_unit_files_for_config(self, config):
+    def _intended_pm_files_for_config(self, config):
         unit_files = set()
         for service in config.services:
             systemd_service = SystemdService(config, service, self._use_instance_name)
@@ -222,30 +222,12 @@ class SystemdProcessManager(BaseProcessManager):
         unit_files.add(os.path.join(self.__systemd_unit_dir, target_unit_name))
         return unit_files
 
-    def __remove_unintended_unit_files_for_configs(self, configs):
-        unintended_unit_files = set()
-        for config in configs:
-            intended_unit_files = self.__intended_unit_files_for_config(config)
-            present_unit_files = self.__present_unit_files_for_config(config)
-            unintended_unit_files.update(present_unit_files - intended_unit_files)
-        self.__disable_and_remove_unit_files(unintended_unit_files)
-
-    def __remove_all_unit_files_for_configs(self, configs):
-        for config in configs:
-            unit_files = self.__present_unit_files_for_config(config)
-            self.__disable_and_remove_unit_files(unit_files)
-
-    def __all_present_unit_files(self):
+    def _all_present_pm_files(self):
         return (glob(os.path.join(self.__systemd_unit_dir, "galaxy-*.service")) +
                 glob(os.path.join(self.__systemd_unit_dir, "galaxy-*.target")) +
                 glob(os.path.join(self.__systemd_unit_dir, "galaxy.target")))
 
-    def __remove_all_unit_files(self):
-        # the kevin uxbridge method
-        unit_files = self.__all_present_unit_files()
-        self.__disable_and_remove_unit_files(unit_files)
-
-    def __update_service(self, config, service, systemd_service: SystemdService):
+    def __update_service(self, config, service, systemd_service: SystemdService, force: bool):
         # under supervisor we expect that gravity is installed in the galaxy venv and the venv is active when gravity
         # runs, but under systemd this is not the case. we do assume $VIRTUAL_ENV is the galaxy venv if running as an
         # unprivileged user, though.
@@ -290,13 +272,13 @@ class SystemdProcessManager(BaseProcessManager):
         conf = os.path.join(self.__systemd_unit_dir, unit_file)
         template = SYSTEMD_SERVICE_TEMPLATE
         contents = template.format(**format_vars)
-        self._update_file(conf, contents, unit_file, "systemd unit")
+        self._update_file(conf, contents, unit_file, "systemd unit", force)
 
-    def __process_config(self, config):
+    def __process_config(self, config, force):
         service_units = []
         for service in config.services:
             systemd_service = SystemdService(config, service, self._use_instance_name)
-            self.__update_service(config, service, systemd_service)
+            self.__update_service(config, service, systemd_service, force)
             service_units.extend(systemd_service.unit_names)
 
         # create systemd target
@@ -310,12 +292,12 @@ class SystemdProcessManager(BaseProcessManager):
         if self._use_instance_name:
             format_vars["systemd_description"] += f" {config.instance_name}"
         contents = SYSTEMD_TARGET_TEMPLATE.format(**format_vars)
-        if self._update_file(target_conf, contents, target_unit_name, "systemd unit"):
+        if self._update_file(target_conf, contents, target_unit_name, "systemd unit", force):
             self.__systemctl("enable", target_conf)
 
-    def __process_configs(self, configs):
+    def __process_configs(self, configs, force):
         for config in configs:
-            self.__process_config(config)
+            self.__process_config(config, force)
 
     def __unit_names(self, configs, service_names, use_target=True, include_services=False):
         unit_names = []
@@ -380,26 +362,9 @@ class SystemdProcessManager(BaseProcessManager):
 
     def update(self, configs=None, force=False, clean=False):
         """ """
-        # --force on its own is meaningless now that configstate is gone. it used to be necessary since we only tried an
-        # update when the configstate changed, but now we try it every time and automatically update if there are
-        # changes.
-        all_configs = set(self.config_manager.get_configs())
+        self._pre_update(configs, force, clean)
         if not clean:
-            # no --clean and either possibility of --force
-            # remove any unit files for configs known to this gravity but managed by other PMs
-            self.__remove_all_unit_files_for_configs(all_configs - set(configs))
-            # always remove any unintended unit files for known configs managed by this PM
-            self.__remove_unintended_unit_files_for_configs(configs)
-            self.__process_configs(configs)
-        elif not force:
-            # --clean but no --force, so remove everything we know about
-            self.__remove_all_unit_files_for_configs(all_configs)
-            unit_files = self.__all_present_unit_files()
-            if unit_files:
-                gravity.io.warn(f"Configs not managed by this Gravity remain after cleaning, use --force to remove: {', '.join(unit_files)}")
-        else:
-            # --clean and --force
-            self.__remove_all_unit_files()
+            self.__process_configs(configs, force)
         if self._service_changes:
             self.__systemctl("daemon-reload")
         else:

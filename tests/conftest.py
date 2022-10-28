@@ -84,6 +84,11 @@ def state_dir(monkeypatch):
                 subprocess.check_call(["systemctl", "--user", "daemon-reload"])
             except Exception:
                 subprocess.check_call(["systemctl", "--user", "list-units", "--all", "galaxy*"])
+        try:
+            # unfortunately these aren't created in /run
+            os.unlink(os.path.expanduser(f"~/.config/systemd/user/multi-user.target.wants/galaxy-{instance_name}.target"))
+        except Exception:
+            pass
 
 
 @pytest.fixture

@@ -35,6 +35,8 @@ def _route(func, all_process_managers=False):
         pm_names = self.process_managers.keys()
         instance_names, service_names = self._instance_service_names(instance_names)
         configs = self.config_manager.get_configs(instances=instance_names or None)
+        if not configs:
+            gravity.io.exception("No configured Galaxy instances")
         for config in configs:
             try:
                 configs_by_pm[config.process_manager].append(config)
@@ -136,6 +138,42 @@ class BaseProcessManager(BaseProcessExecutionEnvironment, metaclass=ABCMeta):
         return ((not self.config_manager.single_instance)
                 or self.config_manager.get_config().instance_name != DEFAULT_INSTANCE_NAME)
 
+    def _remove_unintended_pm_files_for_configs(self, configs):
+        unintended_pm_files = set()
+        for config in configs:
+            intended_pm_files = self._intended_pm_files_for_config(config)
+            present_pm_files = self._present_pm_files_for_config(config)
+            unintended_pm_files.update(present_pm_files - intended_pm_files)
+        self._disable_and_remove_pm_files(unintended_pm_files)
+
+    def _remove_all_pm_files_for_configs(self, configs):
+        for config in configs:
+            pm_files = self._present_pm_files_for_config(config)
+            self._disable_and_remove_pm_files(pm_files)
+
+    def _remove_all_pm_files(self):
+        # the kevin uxbridge method
+        pm_files = self._all_present_pm_files()
+        self._disable_and_remove_pm_files(pm_files)
+
+    def _pre_update(self, configs, force, clean):
+        all_configs = set(self.config_manager.get_configs())
+        if not clean:
+            # no --clean and either possibility of --force
+            # remove any pm files for configs known to this gravity but managed by other PMs
+            self._remove_all_pm_files_for_configs(all_configs - set(configs))
+            # always remove any unintended pm files for known configs managed by this PM
+            self._remove_unintended_pm_files_for_configs(configs)
+        elif not force:
+            # --clean but no --force, so remove everything we know about
+            self._remove_all_pm_files_for_configs(all_configs)
+            pm_files = self._all_present_pm_files()
+            if pm_files:
+                gravity.io.warn(f"Configs not managed by this Gravity remain after cleaning, use --force to remove: {', '.join(pm_files)}")
+        else:
+            # --clean and --force
+            self._remove_all_pm_files()
+
     def _create_dir_for(self, path):
         try:
             os.makedirs(os.path.dirname(path))
@@ -152,8 +190,8 @@ class BaseProcessManager(BaseProcessExecutionEnvironment, metaclass=ABCMeta):
             return existing_contents != contents
         return True
 
-    def _update_file(self, path, contents, name, file_type):
-        if self._file_needs_update(path, contents):
+    def _update_file(self, path, contents, name, file_type, force):
+        if force or self._file_needs_update(path, contents):
             verb = "Updating" if os.path.exists(path) else "Adding"
             gravity.io.info(f"{verb} {file_type} {name}")
             self._create_dir_for(path)
