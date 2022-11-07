@@ -1,7 +1,7 @@
 """ Galaxy Process Management superclass and utilities
 """
-
 import contextlib
+import errno
 import importlib
 import inspect
 import os
@@ -10,8 +10,8 @@ import sys
 from abc import ABCMeta, abstractmethod
 from functools import partial, wraps
 
+import gravity.io
 from gravity.config_manager import ConfigManager
-from gravity.io import debug, exception, info, warn
 from gravity.settings import DEFAULT_INSTANCE_NAME, ServiceCommandStyle
 from gravity.state import VALID_SERVICE_NAMES
 from gravity.util import which
@@ -35,6 +35,8 @@ def _route(func, all_process_managers=False):
         pm_names = self.process_managers.keys()
         instance_names, service_names = self._instance_service_names(instance_names)
         configs = self.config_manager.get_configs(instances=instance_names or None)
+        if not configs:
+            gravity.io.exception("No configured Galaxy instances")
         for config in configs:
             try:
                 configs_by_pm[config.process_manager].append(config)
@@ -48,9 +50,9 @@ def _route(func, all_process_managers=False):
             if "configs" in routed_func_params:
                 pm_configs = configs_by_pm.get(pm_name, [])
                 kwargs["configs"] = pm_configs
-                debug(f"Calling {func.__name__} in process manager {pm_name} for instances: {[c.instance_name for c in pm_configs]}")
+                gravity.io.debug(f"Calling {func.__name__} in process manager {pm_name} for instances: {[c.instance_name for c in pm_configs]}")
             else:
-                debug(f"Calling {func.__name__} in process manager {pm_name} for all instances")
+                gravity.io.debug(f"Calling {func.__name__} in process manager {pm_name} for all instances")
             if "service_names" in routed_func_params:
                 kwargs["service_names"] = service_names
             routed_func(*args, **kwargs)
@@ -115,7 +117,7 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
             # is there a click way to do this?
             galaxyctl = sys.argv[0]
             if not galaxyctl.endswith("galaxyctl"):
-                warn(f"Unable to determine galaxyctl command, sys.argv[0] is: {galaxyctl}")
+                gravity.io.warn(f"Unable to determine galaxyctl command, sys.argv[0] is: {galaxyctl}")
             instance_number_opt = ""
             if service.count > 1:
                 instance_number_opt = f" --service-instance {pm_format_vars['instance_number']}"
@@ -136,32 +138,70 @@ class BaseProcessManager(BaseProcessExecutionEnvironment, metaclass=ABCMeta):
         return ((not self.config_manager.single_instance)
                 or self.config_manager.get_config().instance_name != DEFAULT_INSTANCE_NAME)
 
+    def _remove_unintended_pm_files_for_configs(self, configs):
+        unintended_pm_files = set()
+        for config in configs:
+            intended_pm_files = self._intended_pm_files_for_config(config)
+            present_pm_files = self._present_pm_files_for_config(config)
+            unintended_pm_files.update(present_pm_files - intended_pm_files)
+        self._disable_and_remove_pm_files(unintended_pm_files)
+
+    def _remove_all_pm_files_for_configs(self, configs):
+        for config in configs:
+            pm_files = self._present_pm_files_for_config(config)
+            self._disable_and_remove_pm_files(pm_files)
+
+    def _remove_all_pm_files(self):
+        # the kevin uxbridge method
+        pm_files = self._all_present_pm_files()
+        self._disable_and_remove_pm_files(pm_files)
+
+    def _pre_update(self, configs, force, clean):
+        all_configs = set(self.config_manager.get_configs())
+        if not clean:
+            # no --clean and either possibility of --force
+            # remove any pm files for configs known to this gravity but managed by other PMs
+            self._remove_all_pm_files_for_configs(all_configs - set(configs))
+            # always remove any unintended pm files for known configs managed by this PM
+            self._remove_unintended_pm_files_for_configs(configs)
+        elif not force:
+            # --clean but no --force, so remove everything we know about
+            self._remove_all_pm_files_for_configs(all_configs)
+            pm_files = self._all_present_pm_files()
+            if pm_files:
+                gravity.io.warn(f"Configs not managed by this Gravity remain after cleaning, use --force to remove: {', '.join(pm_files)}")
+        else:
+            # --clean and --force
+            self._remove_all_pm_files()
+
+    def _create_dir_for(self, path):
+        try:
+            os.makedirs(os.path.dirname(path))
+        except OSError as exc:
+            if exc.errno != errno.EEXIST:
+                raise
+
     def _file_needs_update(self, path, contents):
         """Update if contents differ"""
         if os.path.exists(path):
             # check first whether there are changes
             with open(path) as fh:
                 existing_contents = fh.read()
-            if existing_contents == contents:
-                return False
+            return existing_contents != contents
         return True
 
-    def _update_file(self, path, contents, name, file_type):
-        exists = os.path.exists(path)
-        if (exists and self._file_needs_update(path, contents)) or not exists:
-            verb = "Updating" if exists else "Adding"
-            info("%s %s %s", verb, file_type, name)
+    def _update_file(self, path, contents, name, file_type, force):
+        if force or self._file_needs_update(path, contents):
+            verb = "Updating" if os.path.exists(path) else "Adding"
+            gravity.io.info(f"{verb} {file_type} {name}")
+            self._create_dir_for(path)
             with open(path, "w") as out:
                 out.write(contents)
             self._service_changes = True
             return True
         else:
-            debug("No changes to existing config for %s %s at %s", file_type, name, path)
+            gravity.io.debug(f"No changes to existing config for {file_type} {name}: {path}")
             return False
-
-    @abstractmethod
-    def _process_config(self, config_file, config, **kwargs):
-        """ """
 
     @abstractmethod
     def follow(self, configs=None, service_names=None, quiet=False):
@@ -216,9 +256,9 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
         if instance_count > 1:
             msg = f"Cannot exec '{service_name}': This service is configured to use multiple instances and "
             if service_instance_number is None:
-                exception(msg + "--service-instance was not set")
+                gravity.io.exception(msg + "--service-instance was not set")
             if service_instance_number not in range(0, instance_count):
-                exception(msg + "--service-instance is out of range")
+                gravity.io.exception(msg + "--service-instance is out of range")
             service_instance = service.get_service_instance(service_instance_number)
         else:
             service_instance = service
@@ -232,8 +272,8 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
         env = {**format_vars["environment"], **dict(os.environ)}
         cwd = format_vars["galaxy_root"]
 
-        info(f"Working directory: {cwd}")
-        info(f"Executing: {print_env} {format_vars['command']}")
+        gravity.io.info(f"Working directory: {cwd}")
+        gravity.io.info(f"Executing: {print_env} {format_vars['command']}")
 
         if not no_exec:
             os.chdir(cwd)
@@ -269,9 +309,9 @@ class ProcessManagerRouter:
                 elif name in configured_service_names | VALID_SERVICE_NAMES:
                     service_names.append(name)
                 else:
-                    warn(f"Warning: Not a known instance or service name: {name}")
+                    gravity.io.warn(f"Warning: Not a known instance or service name: {name}")
             if not instance_names and not service_names:
-                exception("No provided names are known instance or service names")
+                gravity.io.exception("No provided names are known instance or service names")
         return (instance_names, service_names)
 
     def exec(self, instance_names=None, service_instance_number=None, no_exec=False):
@@ -281,18 +321,18 @@ class ProcessManagerRouter:
         if len(instance_names) == 0 and self.config_manager.single_instance:
             instance_names = None
         elif len(instance_names) != 1:
-            exception("Only zero or one instance name can be provided")
+            gravity.io.exception("Only zero or one instance name can be provided")
 
         config = self.config_manager.get_configs(instances=instance_names)[0]
         service_list = ", ".join(s.service_name for s in config.services)
 
         if len(service_names) != 1:
-            exception(f"Exactly one service name must be provided. Configured service(s): {service_list}")
+            gravity.io.exception(f"Exactly one service name must be provided. Configured service(s): {service_list}")
 
         service_name = service_names[0]
         services = config.get_services(service_names)
         if not services:
-            exception(f"Service '{service_name}' is not configured. Configured service(s): {service_list}")
+            gravity.io.exception(f"Service '{service_name}' is not configured. Configured service(s): {service_list}")
 
         service = services[0]
         return self._process_executor.exec(config, service, service_instance_number=service_instance_number, no_exec=no_exec)
