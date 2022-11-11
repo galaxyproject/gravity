@@ -37,6 +37,7 @@ class GracefulMethod(str, enum.Enum):
     DEFAULT = "default"
     SIGHUP = "sighup"
     ROLLING = "rolling"
+    NONE = "none"
 
 
 class ConfigFile(BaseModel):
@@ -405,6 +406,7 @@ class GalaxyGxItProxyService(Service):
 class GalaxyTUSDService(Service):
     _service_type = "tusd"
     service_name = "tusd"
+    _graceful_method = GracefulMethod.NONE
     _command_template = "{settings[tusd_path]} -host={settings[host]} -port={settings[port]}" \
                         " -upload-dir={settings[upload_dir]}" \
                         " -hooks-http={app_config[galaxy_infrastructure_url]}/api/upload/hooks" \

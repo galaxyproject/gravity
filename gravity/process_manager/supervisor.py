@@ -330,7 +330,7 @@ class SupervisorProcessManager(BaseProcessManager):
                     self.supervisorctl("signal", "SIGHUP", *program.program_names)
                 elif graceful_method == GracefulMethod.ROLLING:
                     self.__rolling_restart(config, service, program)
-                else:
+                elif graceful_method != GracefulMethod.NONE:
                     self.supervisorctl("restart", *program.program_names)
 
     def __rolling_restart(self, config, service, program):
