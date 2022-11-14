@@ -346,7 +346,7 @@ class SystemdProcessManager(BaseProcessManager):
         if service.graceful_method == GracefulMethod.ROLLING:
             restart_callbacks = list(partial(self.__systemctl, "reload-or-restart", u) for u in systemd_service.unit_names)
             service.rolling_restart(restart_callbacks)
-        else:
+        elif service.graceful_method != GracefulMethod.NONE:
             self.__systemctl("reload-or-restart", *systemd_service.unit_names, not_found_rc=(5,))
             gravity.io.info(f"Restarted: {', '.join(systemd_service.unit_names)}")
 

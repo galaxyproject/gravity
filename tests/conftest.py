@@ -202,6 +202,13 @@ def gxit_startup_config(galaxy_virtualenv, gxit_config):
     return gxit_config
 
 
+@pytest.fixture
+def tusd_startup_config(galaxy_virtualenv, tusd_config, free_port):
+    tusd_config['gravity']['gunicorn'] = {'bind': f'localhost:{free_port}'}
+    tusd_config['gravity']['virtualenv'] = galaxy_virtualenv
+    return tusd_config
+
+
 @pytest.fixture(scope="session")
 def galaxy_virtualenv(galaxy_root_dir):
     virtual_env_dir = str(TEST_DIR / "galaxy_venv")
