@@ -20,7 +20,9 @@ from gravity.util import recursive_update
 
 log = logging.getLogger(__name__)
 
-DEFAULT_JOB_CONFIG_FILE = "config/job_conf.xml"
+# Falling back to job_conf.xml when job_config_file is unset and job_conf.yml doesn't exist is deprecated in Galaxy, and
+# support for it can be removed from Gravity when it is removed from Galaxy
+DEFAULT_JOB_CONFIG_FILES = ("job_conf.yml", "job_conf.xml")
 if "XDG_CONFIG_HOME" in os.environ:
     DEFAULT_STATE_DIR = os.path.join(os.environ["XDG_CONFIG_HOME"], "galaxy-gravity")
 
@@ -183,9 +185,6 @@ class ConfigManager(object):
         for service_type in (config.app_server, "celery", "celery-beat", "tusd", "gx-it-proxy", "reports"):
             config.services.extend(service_for_service_type(service_type).services_if_enabled(config, gravity_settings))
 
-        # TODO: document that only environment can be configured on static handlers, dynamic handlers can have any of
-        # the common settings (memory_limit, etc.)
-
         # load any static handlers defined in the galaxy job config
         assign_with = self.create_static_handler_services(config, app_config)
 
@@ -206,9 +205,16 @@ class ConfigManager(object):
             job_config = app_config["job_config"]
         else:
             # config in an external file
-            job_config = app_config.get("job_config_file", DEFAULT_JOB_CONFIG_FILE)
-            if not os.path.isabs(job_config):
-                job_config = os.path.abspath(os.path.join(os.path.dirname(config.galaxy_config_file), job_config))
+            config_dir = os.path.dirname(config.galaxy_config_file)
+            job_config = app_config.get("job_config_file")
+            if not job_config:
+                for job_config in [os.path.abspath(os.path.join(config_dir, c)) for c in DEFAULT_JOB_CONFIG_FILES]:
+                    if os.path.exists(job_config):
+                        break
+                else:
+                    job_config = None
+            elif not os.path.isabs(job_config):
+                job_config = os.path.abspath(os.path.join(config_dir, job_config))
                 if not os.path.exists(job_config):
                     job_config = None
         if job_config:
