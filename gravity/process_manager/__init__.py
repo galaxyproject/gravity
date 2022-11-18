@@ -82,7 +82,7 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
     def _service_format_vars(self, config, service, pm_format_vars=None):
         pm_format_vars = pm_format_vars or {}
         virtualenv_dir = config.virtualenv
-        virtualenv_bin = f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}' if virtualenv_dir else ""
+        virtualenv_bin = shlex.quote(f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}') if virtualenv_dir else ""
 
         format_vars = {
             "config_type": service.config_type,
@@ -91,7 +91,7 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
             "galaxy_conf": config.galaxy_config_file,
             "galaxy_root": config.galaxy_root,
             "virtualenv_bin": virtualenv_bin,
-            "gravity_data_dir": config.gravity_data_dir,
+            "gravity_data_dir": shlex.quote(config.gravity_data_dir),
             "app_config": config.app_config,
         }
 
@@ -105,6 +105,9 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
         if config.service_command_style in (ServiceCommandStyle.direct, ServiceCommandStyle.exec):
             format_vars["command_arguments"] = service.get_command_arguments(format_vars)
             format_vars["command"] = service.command_template.format(**format_vars)
+            # normalize quoting to replace '/foo/bar baz'/quux with '/foo/bar baz/quux', either is valid but the former
+            # is ugly and difficult to read
+            format_vars["command"] = shlex.join(shlex.split(format_vars["command"]))
 
             # template env vars
             environment = service.environment
@@ -116,12 +119,17 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
             config_file = shlex.quote(config.gravity_config_file)
             # is there a click way to do this?
             galaxyctl = sys.argv[0]
-            if not galaxyctl.endswith("galaxyctl"):
+            if galaxyctl.endswith(f"{os.path.sep}galaxy"):
+                # handle when called using the `galaxy` entrypoint
+                galaxyctl += "ctl"
+            if not galaxyctl.endswith(f"{os.path.sep}galaxyctl"):
                 gravity.io.warn(f"Unable to determine galaxyctl command, sys.argv[0] is: {galaxyctl}")
+            galaxyctl = shlex.quote(galaxyctl)
             instance_number_opt = ""
             if service.count > 1:
                 instance_number_opt = f" --service-instance {pm_format_vars['instance_number']}"
             format_vars["command"] = f"{galaxyctl} --config-file {config_file} exec{instance_number_opt} {config.instance_name} {service.service_name}"
+            format_vars["command"] = shlex.join(shlex.split(format_vars["command"]))
             environment = {}
         format_vars["environment"] = self._service_environment_formatter(environment, format_vars)
 

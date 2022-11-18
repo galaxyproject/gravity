@@ -250,7 +250,7 @@ class SystemdProcessManager(BaseProcessManager):
 
         # systemd-specific format vars
         systemd_format_vars = {
-            "virtualenv_bin": f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}' if virtualenv_dir else "",
+            "virtualenv_bin": shlex.quote(f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}'),
             "instance_number": "%i",
             "systemd_user_group": "",
             "systemd_exec_reload": exec_reload or "",
@@ -264,9 +264,6 @@ class SystemdProcessManager(BaseProcessManager):
                 systemd_format_vars["systemd_user_group"] += f"\nGroup={config.galaxy_group}"
 
         format_vars = self._service_format_vars(config, service, systemd_format_vars)
-
-        if not format_vars["command"].startswith("/"):
-            format_vars["command"] = f"{format_vars['virtualenv_bin']}{format_vars['command']}"
 
         unit_file = systemd_service.unit_file_name
         conf = os.path.join(self.__systemd_unit_dir, unit_file)
