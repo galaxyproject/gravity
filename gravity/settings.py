@@ -63,7 +63,7 @@ Enable tusd server.
 If enabled, you also need to set up your proxy as outlined in https://docs.galaxyproject.org/en/latest/admin/nginx.html#receiving-files-via-the-tus-protocol.
 """)
     tusd_path: str = Field(default="tusd", description="""Path to tusd binary""")
-    host: str = Field("localhost", description="Host to bind the tusd server to")
+    host: str = Field("::1", description="Host to bind the tusd server to")
     port: int = Field(1080, description="Port to bind the tusd server to")
     upload_dir: str = Field(description="""
 Directory to store uploads in.
@@ -132,7 +132,7 @@ names.
 class GunicornSettings(BaseModel):
     enable: bool = Field(True, description="Enable Galaxy gunicorn server.")
     bind: str = Field(
-        default="localhost:8080",
+        default="::1:8080",
         description="The socket to bind. A string of the form: ``HOST``, ``HOST:PORT``, ``unix:PATH``, ``fd://FD``. An IP is a valid HOST.",
     )
     workers: int = Field(
@@ -186,7 +186,7 @@ class ReportsSettings(BaseModel):
     enable: bool = Field(False, description="Enable Galaxy Reports server.")
     config_file: str = Field("reports.yml", description="Path to reports.yml, relative to galaxy.yml if not absolute")
     bind: str = Field(
-        default="localhost:9001",
+        default="::1:9001",
         description="The socket to bind. A string of the form: ``HOST``, ``HOST:PORT``, ``unix:PATH``, ``fd://FD``. An IP is a valid HOST.",
     )
     workers: int = Field(
@@ -237,7 +237,7 @@ names.
 
 class GxItProxySettings(BaseModel):
     enable: bool = Field(default=False, description="Set to true to start gx-it-proxy")
-    ip: str = Field(default="localhost", description="Public-facing IP of the proxy")
+    ip: str = Field(default="::1", description="Public-facing IP of the proxy")
     port: int = Field(default=4002, description="Public-facing port of the proxy")
     sessions: str = Field(
         default="database/interactivetools_map.sqlite",

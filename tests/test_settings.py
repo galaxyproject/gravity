@@ -18,18 +18,18 @@ def test_extra_fields_allowed():
 
 def test_defaults_loaded():
     settings = Settings()
-    assert settings.gunicorn.bind == "localhost:8080"
+    assert settings.gunicorn.bind == "::1:8080"
 
 
 def test_defaults_override_constructor():
-    settings = Settings(**{"gunicorn": {"bind": "localhost:8081"}})
-    assert settings.gunicorn.bind == "localhost:8081"
+    settings = Settings(**{"gunicorn": {"bind": "::1:8081"}})
+    assert settings.gunicorn.bind == "::1:8081"
 
 
 def test_defaults_override_env_var(monkeypatch):
-    monkeypatch.setenv("GRAVITY_GUNICORN.BIND", "localhost:8081")
+    monkeypatch.setenv("GRAVITY_GUNICORN.BIND", "::1:8081")
     settings = Settings()
-    assert settings.gunicorn.bind == "localhost:8081"
+    assert settings.gunicorn.bind == "::1:8081"
 
 
 def test_schema_to_sample():
