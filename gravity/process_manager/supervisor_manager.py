@@ -152,6 +152,7 @@ environment     = {environment}
 numprocs        = 1
 stdout_logfile  = {log_file}
 redirect_stderr = true
+stopasgroup     = true
 {process_name_opt}
 """
 
