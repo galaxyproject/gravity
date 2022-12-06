@@ -61,13 +61,16 @@ def process_property(key, value, depth=0):
         if default.endswith("\n...\n"):
             default = default[: -(len("\n...\n"))]
         default = default.strip()
-    description = "\n".join(f"{extra_white_space}# {desc}" for desc in value["description"].strip().split("\n"))
-    allOff = value.get("allOf", [])
-    if allOff and allOff[0].get("properties"):
+    description = "\n".join(f"{extra_white_space}# {desc}".rstrip() for desc in value["description"].strip().split("\n"))
+    combined = value.get("allOf", [])
+    if not combined and value.get("anyOf"):
+        # we've got a union
+        combined = [c for c in value["anyOf"] if c["type"] == "object"]
+    if combined and combined[0].get("properties"):
         # we've got a nested map, add key once
         description = f"{description}\n{extra_white_space}{key}:\n"
     has_child = False
-    for item in allOff:
+    for item in combined:
         if "enum" in item:
             enum_items = [i for i in item["enum"] if not i.startswith("_")]
             description = f'{description}\n{extra_white_space}# Valid options are: {", ".join(enum_items)}'
