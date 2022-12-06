@@ -517,11 +517,17 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
       # Consumes less memory when multiple processes are configured. Default is ``false`` if using unicornherder, else ``true``.
       # preload:
 
+      # umask under which service should be executed
+      # umask:
+
       # Value of supervisor startsecs, systemd TimeoutStartSec
       # start_timeout: 15
 
       # Value of supervisor stopwaitsecs, systemd TimeoutStopSec
       # stop_timeout: 65
+
+      # Amount of time to wait for a server to become alive when performing rolling restarts.
+      # restart_timeout: 300
 
       # Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
       # ``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
