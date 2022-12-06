@@ -437,7 +437,7 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
     # What command to write to the process manager configs
     # `gravity` (`galaxyctl exec <service-name>`) is the default
     # `direct` (each service's actual command) is also supported.
-    # Valid options are: gravity, direct, exec
+    # Valid options are: gravity, direct
     # service_command_style: gravity
 
     # Use the process manager's *service instance* functionality for services that can run multiple instances.

@@ -40,7 +40,7 @@ class ProcessManager(str, Enum):
 class ServiceCommandStyle(str, Enum):
     gravity = "gravity"
     direct = "direct"
-    exec = "exec"
+    exec = "_exec"
 
 
 class AppServer(str, Enum):
