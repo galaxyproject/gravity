@@ -51,6 +51,7 @@ directory       = {galaxy_root}
 umask           = {galaxy_umask}
 autostart       = true
 autorestart     = true
+stopasgroup     = true
 startsecs       = {settings[start_timeout]}
 stopwaitsecs    = {settings[stop_timeout]}
 environment     = {environment}
