@@ -69,7 +69,8 @@ def process_property(key, value, depth=0):
     has_child = False
     for item in allOff:
         if "enum" in item:
-            description = f'{description}\n{extra_white_space}# Valid options are: {", ".join(item["enum"])}'
+            enum_items = [i for i in item["enum"] if not i.startswith("_")]
+            description = f'{description}\n{extra_white_space}# Valid options are: {", ".join(enum_items)}'
         if "properties" in item:
             has_child = True
             for _key, _value in item["properties"].items():
