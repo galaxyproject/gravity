@@ -326,8 +326,11 @@ def test_gxit_handler(default_config_manager, galaxy_yml, gxit_config, process_m
         gxit_config_path = service_conf_path(state_dir, process_manager_name, 'gx-it-proxy')
         assert gxit_config_path.exists()
         gxit_port = gxit_config["gravity"]["gx_it_proxy"]["port"]
+        gxit_base_path = gxit_config["galaxy"]["interactivetools_base_path"]
+        gxit_prefix = gxit_config["galaxy"]["interactivetools_prefix"]
         sessions = "database/interactivetools_map.sqlite"
-        assert f'npx gx-it-proxy --ip localhost --port {gxit_port} --sessions {sessions}' in gxit_config_path.read_text()
+        proxy_path_prefix = f'{gxit_base_path}{gxit_prefix}/access/interactivetoolentrypoint'
+        assert f'npx gx-it-proxy --ip localhost --port {gxit_port} --sessions {sessions} --proxyPathPrefix {proxy_path_prefix}' in gxit_config_path.read_text()
 
 
 @pytest.mark.parametrize('process_manager_name', ['supervisor', 'systemd'])

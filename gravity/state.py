@@ -393,12 +393,19 @@ class GalaxyGxItProxyService(Service):
     _command_template = "{virtualenv_bin}npx gx-it-proxy --ip {settings[ip]} --port {settings[port]}" \
                         " --sessions {settings[sessions]} {command_arguments[verbose]}" \
                         " {command_arguments[forward_ip]} {command_arguments[forward_port]}" \
-                        " {command_arguments[reverse_proxy]}"
+                        " {command_arguments[reverse_proxy]} {command_arguments[proxy_path_prefix]}"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # override from Galaxy config if set
         self.settings["sessions"] = self.config.app_config.get("interactivetools_map", self.settings["sessions"])
+        # this can only be set in Galaxy config
+        it_base_path = self.config.app_config.get("interactivetools_base_path")
+        if it_base_path is not None:
+            it_prefix = app_config.get("interactivetools_prefix", "interactivetool")
+            self.settings["proxy_path_prefix"] = f"/{it_base_path.strip('/')}/{it_prefix}/access/interactivetoolentrypoint"
+        else:
+            self.settings["proxy_path_prefix"] = None
 
     @validator("settings")
     def _validate_settings(cls, v, values):
