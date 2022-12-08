@@ -159,7 +159,9 @@ class GalaxyGxItProxyService(Service):
         "reverse_proxy": "--reverseProxy",
     }
     command_template = "{virtualenv_bin}npx gx-it-proxy --ip {gx_it_proxy[ip]} --port {gx_it_proxy[port]}" \
-                       " --sessions {gx_it_proxy[sessions]} {gx_it_proxy[verbose]}" \
+                       " --sessions {gx_it_proxy[sessions]}" \
+                       " --proxyPathPrefix {proxy_path_prefix}" \
+                       " {gx_it_proxy[verbose]}" \
                        " {command_arguments[forward_ip]} {command_arguments[forward_port]}" \
                        " {command_arguments[reverse_proxy]}"
 

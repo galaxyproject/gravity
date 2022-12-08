@@ -252,8 +252,11 @@ def test_gxit_handler(default_config_manager, galaxy_yml, gxit_config):
         gxit_config_path = instance_conf_dir / 'galaxy_gx-it-proxy_gx-it-proxy.conf'
         assert gxit_config_path.exists()
         gxit_port = gxit_config["gravity"]["gx_it_proxy"]["port"]
+        gxit_base_path = gxit_config["galaxy"]["interactivetools_base_path"]
+        gxit_prefix = gxit_config["galaxy"]["interactivetools_prefix"]
         sessions = "database/interactivetools_map.sqlite"
-        assert f'npx gx-it-proxy --ip localhost --port {gxit_port} --sessions {sessions}' in gxit_config_path.read_text()
+        proxy_path_prefix = f'{gxit_base_path}{gxit_prefix}/access/interactivetoolentrypoint'
+        assert f'npx gx-it-proxy --ip localhost --port {gxit_port} --sessions {sessions} --proxyPathPrefix {proxy_path_prefix}' in gxit_config_path.read_text()
 
 
 def test_tusd_process(default_config_manager, galaxy_yml, tusd_config):

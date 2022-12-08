@@ -178,6 +178,10 @@ class ConfigManager(object):
             gxit_config.sessions = app_config.get("interactivetools_map", gxit_config.sessions)
             gxit_config.verbose = '--verbose' if gxit_config.verbose else ''
             config.services.append(service_for_service_type("gx-it-proxy")(config_type=config.config_type))
+            it_base_path_stripped = app_config.get("interactivetools_base_path", "/").rstrip("/").lstrip("/")
+            it_base_path = '/' + f'/{it_base_path_stripped}/'.lstrip('/')
+            it_prefix = app_config.get("interactivetools_prefix", "interactivetool")
+            config.attribs["proxy_path_prefix"] = f'{it_base_path}{it_prefix}/access/interactivetoolentrypoint'
         config.attribs["gx-it-proxy"] = gravity_config.gx_it_proxy.dict()
 
     @staticmethod
