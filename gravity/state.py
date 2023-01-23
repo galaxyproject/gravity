@@ -126,7 +126,7 @@ class Service(BaseModel):
     _service_list_allowed = False
 
     _graceful_method: GracefulMethod = GracefulMethod.DEFAULT
-    _add_virtualenv_to_path = False
+    _add_virtualenv_to_path = True
     _command_arguments: Dict[str, str] = {}
     _command_template: str = None
 
