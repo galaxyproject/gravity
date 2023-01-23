@@ -170,6 +170,8 @@ class Service(BaseModel):
     @property
     def environment(self):
         environment = self.default_environment
+        if self.config.virtualenv:
+            environment["VIRTUAL_ENV"] = self.config.virtualenv
         environment.update(self.settings.get("environment") or {})
         return environment
 
@@ -296,6 +298,8 @@ class GalaxyGunicornService(Service):
         environment = self.default_environment
         if sys.platform == 'darwin':
             environment["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
+        if self.config.virtualenv:
+            environment["VIRTUAL_ENV"] = self.config.virtualenv
         environment.update(self.settings.get("environment", {}))
         return environment
 
