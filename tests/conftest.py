@@ -31,8 +31,6 @@ galaxy:
   galaxy_infrastructure_url: http://localhost:{gx_port}
   interactivetools_upstream_proxy: false
   interactivetools_proxy_host: localhost:{gxit_port}
-  interactivetools_base_path: /
-  interactivetools_prefix: interactivetool
 """
 
 

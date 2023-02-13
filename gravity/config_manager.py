@@ -26,6 +26,13 @@ DEFAULT_JOB_CONFIG_FILES = ("job_conf.yml", "job_conf.xml")
 if "XDG_CONFIG_HOME" in os.environ:
     DEFAULT_STATE_DIR = os.path.join(os.environ["XDG_CONFIG_HOME"], "galaxy-gravity")
 
+OPTIONAL_APP_KEYS = (
+    "interactivetools_map",
+    "interactivetools_base_path",
+    "interactivetools_prefix",
+    "galaxy_url_prefix",
+)
+
 
 @contextlib.contextmanager
 def config_manager(config_file=None, state_dir=None):
@@ -158,7 +165,7 @@ class ConfigManager(object):
         }
 
         # some things should only be included if set
-        for app_key in ("interactivetools_map", "galaxy_url_prefix"):
+        for app_key in OPTIONAL_APP_KEYS:
             if app_key in app_config:
                 app_config_dict[app_key] = app_config[app_key]
 

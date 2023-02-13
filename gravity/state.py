@@ -389,6 +389,7 @@ class GalaxyGxItProxyService(Service):
         "forward_ip": "--forwardIP {settings[forward_ip]}",
         "forward_port": "--forwardPort {settings[forward_port]}",
         "reverse_proxy": "--reverseProxy",
+        "proxy_path_prefix": "--proxyPathPrefix {settings[proxy_path_prefix]}",
     }
     _command_template = "{virtualenv_bin}npx gx-it-proxy --ip {settings[ip]} --port {settings[port]}" \
                         " --sessions {settings[sessions]} {command_arguments[verbose]}" \
@@ -402,8 +403,9 @@ class GalaxyGxItProxyService(Service):
         # this can only be set in Galaxy config
         it_base_path = self.config.app_config.get("interactivetools_base_path")
         if it_base_path is not None:
-            it_prefix = app_config.get("interactivetools_prefix", "interactivetool")
-            self.settings["proxy_path_prefix"] = f"/{it_base_path.strip('/')}/{it_prefix}/access/interactivetoolentrypoint"
+            it_base_path = "/" + f"/{it_base_path.strip('/')}/".lstrip("/")
+            it_prefix = self.config.app_config.get("interactivetools_prefix", "interactivetool")
+            self.settings["proxy_path_prefix"] = f"{it_base_path}{it_prefix}/access/interactivetoolentrypoint"
         else:
             self.settings["proxy_path_prefix"] = None
 
