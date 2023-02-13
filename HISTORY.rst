@@ -2,6 +2,24 @@
  History
 =========
 
+1.0.0
+=====
+
+Version 1.0.0 represents a significant update to Gravity, its features and functionality. Although Gravity 1.x is intended to be backwards compatible with 0.x, you are strongly encouraged to [read the documentation](https://gravity.readthedocs.io/en/latest/) if upgrading to Gravity 1.x or to Galaxy 23.0 (which depends on Gravity 1.x) in order to get the most out of the new features.
+
+- Support systemd as a process manager by @natefoo in https://github.com/galaxyproject/gravity/pull/77
+- Full stateless mode when working with single instances and other improvements for 1.0 by @natefoo in https://github.com/galaxyproject/gravity/pull/80
+- Multi-unicorn rolling restart and general multi-instance service support by @natefoo in https://github.com/galaxyproject/gravity/pull/81
+- Don't clobber other Galaxies' systemd units when managed by different Gravity config files by @natefoo in https://github.com/galaxyproject/gravity/pull/83
+- Don't restart tusd on graceful by @natefoo in https://github.com/galaxyproject/gravity/pull/85
+- Read job_conf.yml by default if job_config_file is unset by @natefoo in https://github.com/galaxyproject/gravity/pull/86
+- Fixes for spaces in the galaxy root path, fix the `galaxy` entrypoint by @natefoo in https://github.com/galaxyproject/gravity/pull/87
+- Update existing env with program env when running exec, rather than the other way around by @natefoo in https://github.com/galaxyproject/gravity/pull/93
+- Hide the "exec" ServiceCommandStyle from documentation since it is only used internally by @natefoo in https://github.com/galaxyproject/gravity/pull/94
+- Updates for settings documentation generation by @natefoo in https://github.com/galaxyproject/gravity/pull/95
+- Set `$VIRTUAL_ENV` if `virtualenv` is set in config by @natefoo in https://github.com/galaxyproject/gravity/pull/97
+- Always add venv bin dir to `$PATH` if `virtualenv` is set by @natefoo in https://github.com/galaxyproject/gravity/pull/98
+
 0.13.6
 ======
 
