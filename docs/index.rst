@@ -6,8 +6,13 @@ Gravity
    :maxdepth: 2
    :caption: Contents:
 
-.. include:: ../README.rst
-.. include:: ../HISTORY.rst
+   readme
+   conventions
+   installation
+   basic_usage
+   advanced_usage
+   subcommands
+   history
 
 
 Indices and tables
