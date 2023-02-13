@@ -1,0 +1,26 @@
+name: Package Test
+on: [push, pull_request]
+concurrency:
+  group: package-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  package:
+    name: Package Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.7', '3.10']
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --upgrade pip setuptools
+          python3 -m pip install --upgrade twine wheel
+      - name: Create and check packages
+        run: |
+          python3 setup.py sdist bdist_wheel
+          twine check dist/*
+          ls -l dist
