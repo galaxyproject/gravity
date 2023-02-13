@@ -2,6 +2,13 @@
  History
 =========
 
+0.13.6
+======
+
+- Fix graceful method for gunicorn ``--preload`` by @Slugger70 in https://github.com/galaxyproject/gravity/pull/76
+- Add ``--version`` option to get Gravity version by @natefoo in https://github.com/galaxyproject/gravity/pull/79
+- Fix stopping of gx-it-proxy by @abretaud in https://github.com/galaxyproject/gravity/pull/91
+
 0.13.5
 ======
 
