@@ -329,7 +329,7 @@ def test_gxit_handler(default_config_manager, galaxy_yml, gxit_config, process_m
         sessions = "database/interactivetools_map.sqlite"
         gxit_config_contents = gxit_config_path.read_text()
         assert f'npx gx-it-proxy --ip localhost --port {gxit_port} --sessions {sessions}' in gxit_config_contents
-        assert '--proxyPathPrefix' not in gxit_config_contents
+        assert '--proxyPathPrefix /' in gxit_config_contents
 
 
 @pytest.mark.parametrize('process_manager_name', ['supervisor', 'systemd'])
