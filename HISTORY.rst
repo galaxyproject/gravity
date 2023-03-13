@@ -2,6 +2,11 @@
  History
 =========
 
+1.0.1
+=====
+
+- Added configuration of gx-it-proxy to support path-based proxying by @sveinugu in https://github.com/galaxyproject/gravity/pull/100
+
 1.0.0
 =====
 
