@@ -3,3 +3,4 @@ line-length = 160
 
 [tool.pytest.ini_options]
 norecursedirs = "tests/galaxy.git/* tests/galaxy_venv"
+timeout = 300
