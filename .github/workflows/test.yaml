@@ -12,6 +12,10 @@ jobs:
       matrix:
         python-version: ['3.7', '3.10']
         galaxy-branch: ['release_22.01', 'dev']
+        exclude:
+          # this results in lengthy and expensive numpy wheel builds
+          - python-version: '3.10'
+            galaxy-branch: 'release_22.01'
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v2
