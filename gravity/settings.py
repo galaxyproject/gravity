@@ -10,6 +10,7 @@ from typing import (
 from pydantic import BaseModel, BaseSettings, Extra, Field, validator
 
 DEFAULT_INSTANCE_NAME = "_default_"
+GX_IT_PROXY_MIN_VERSION = "0.0.5"
 
 
 def none_to_default(cls, v, field):
@@ -237,6 +238,7 @@ names.
 
 class GxItProxySettings(BaseModel):
     enable: bool = Field(default=False, description="Set to true to start gx-it-proxy")
+    version: str = Field(default=f">={GX_IT_PROXY_MIN_VERSION}", description="gx-it-proxy version")
     ip: str = Field(default="localhost", description="Public-facing IP of the proxy")
     port: int = Field(default=4002, description="Public-facing port of the proxy")
     sessions: str = Field(
