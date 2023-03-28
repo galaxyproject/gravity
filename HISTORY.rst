@@ -2,6 +2,11 @@
  History
 =========
 
+1.0.2
+=====
+
+- Pin a minimum package version of gx-it-proxy by @natefoo in https://github.com/galaxyproject/gravity/pull/102
+
 1.0.1
 =====
 
