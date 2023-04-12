@@ -2,6 +2,7 @@
 """
 import os
 import shlex
+import shutil
 import subprocess
 import time
 from functools import partial
@@ -162,6 +163,13 @@ class SupervisorProcessManager(BaseProcessManager):
         self.foreground = foreground
 
         if not os.path.exists(self.supervisord_conf_dir):
+            if not os.path.exists(state_dir):
+                os.makedirs(state_dir)
+                shutil.chown(
+                    state_dir,
+                    self.config_manager.get_config().galaxy_user,
+                    self.config_manager.get_config().galaxy_group,
+                )
             os.makedirs(self.supervisord_conf_dir)
 
     @property
