@@ -276,6 +276,13 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
         env = {**dict(os.environ), **format_vars["environment"]}
         cwd = format_vars["galaxy_root"]
 
+        # ensure the data dir exists
+        try:
+            os.makedirs(config.gravity_data_dir)
+        except OSError as exc:
+            if exc.errno != errno.EEXIST:
+                raise
+
         gravity.io.info(f"Working directory: {cwd}")
         gravity.io.info(f"Executing: {print_env} {format_vars['command']}")
 
