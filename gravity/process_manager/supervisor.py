@@ -161,9 +161,6 @@ class SupervisorProcessManager(BaseProcessManager):
         self.__supervisord_popen = None
         self.foreground = foreground
 
-        if not os.path.exists(self.supervisord_conf_dir):
-            os.makedirs(self.supervisord_conf_dir)
-
     @property
     def log_file(self):
         return os.path.join(self.supervisor_state_dir, "supervisord.log")
@@ -184,6 +181,8 @@ class SupervisorProcessManager(BaseProcessManager):
             supervisord_cmd.append('--nodaemon')
         if not self.__supervisord_is_running():
             # any time that supervisord is not running, let's rewrite supervisord.conf
+            if not os.path.exists(self.supervisord_conf_dir):
+                os.makedirs(self.supervisord_conf_dir)
             open(self.supervisord_conf_path, "w").write(SUPERVISORD_CONF_TEMPLATE.format(**format_vars))
             self.__supervisord_popen = subprocess.Popen(supervisord_cmd, env=os.environ)
             rc = self.__supervisord_popen.poll()
