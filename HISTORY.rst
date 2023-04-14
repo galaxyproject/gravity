@@ -2,6 +2,11 @@
  History
 =========
 
+1.0.3
+=====
+
+- Don't create supervisor conf dir unless necessary, create the gravity data dir as the correct user by @natefoo in https://github.com/galaxyproject/gravity/pull/105
+
 1.0.2
 =====
 
