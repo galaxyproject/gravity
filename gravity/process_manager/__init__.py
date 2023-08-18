@@ -87,7 +87,7 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
         format_vars = {
             "config_type": service.config_type,
             "server_name": service.service_name,
-            "galaxy_umask": service.settings.get("umask") or config.umask,
+            "galaxy_umask": service.settings_.get("umask") or config.umask,
             "galaxy_conf": config.galaxy_config_file,
             "galaxy_root": config.galaxy_root,
             "virtualenv_bin": virtualenv_bin,
@@ -95,7 +95,7 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
             "app_config": config.app_config,
         }
 
-        format_vars["settings"] = service.settings
+        format_vars["settings"] = service.settings_
         format_vars["service_instance_count"] = service.count
 
         # update here from PM overrides

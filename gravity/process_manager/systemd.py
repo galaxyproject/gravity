@@ -240,7 +240,7 @@ class SystemdProcessManager(BaseProcessManager):
         elif not virtualenv_dir:
             gravity.io.exception("The `virtualenv` Gravity config option must be set when using the systemd process manager")
 
-        memory_limit = service.settings.get("memory_limit") or config.memory_limit
+        memory_limit = service.settings_.get("memory_limit") or config.memory_limit
         if memory_limit:
             memory_limit = f"MemoryLimit={memory_limit}G"
 

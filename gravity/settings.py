@@ -7,7 +7,7 @@ from typing import (
     Optional,
     Union,
 )
-from pydantic import ConfigDict, BaseModel, Field, FieldValidationInfo, field_validator
+from pydantic import ConfigDict, BaseModel, Field, FieldValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_INSTANCE_NAME = "_default_"
@@ -46,7 +46,17 @@ class Pool(str, Enum):
     threads = "threads"
 
 
-class TusdSettings(BaseModel):
+class SettingsModel(BaseModel):
+    @model_validator(mode="before")
+    @classmethod
+    def none_to_default(cls, data: Any, info: FieldValidationInfo):
+        if data is None:
+            if info.config.get("title") == "TusdSettings":
+                return {"upload_dir": ""}
+            return {}
+        return data
+
+class TusdSettings(SettingsModel):
     enable: bool = Field(False, description="""
 Enable tusd server.
 If enabled, you also need to set up your proxy as outlined in https://docs.galaxyproject.org/en/latest/admin/nginx.html#receiving-files-via-the-tus-protocol.
@@ -89,7 +99,7 @@ names.
 """)
 
 
-class CelerySettings(BaseModel):
+class CelerySettings(SettingsModel):
     enable: bool = Field(True, description="Enable Celery distributed task queue.")
     enable_beat: bool = Field(True, description="Enable Celery Beat periodic task runner.")
     concurrency: int = Field(2, ge=0, description="Number of Celery Workers to start.")
@@ -116,7 +126,7 @@ names.
     model_config = ConfigDict(use_enum_values=True)
 
 
-class GunicornSettings(BaseModel):
+class GunicornSettings(SettingsModel):
     enable: bool = Field(True, description="Enable Galaxy gunicorn server.")
     bind: str = Field(
         default="localhost:8080",
@@ -169,7 +179,7 @@ names.
 """)
 
 
-class ReportsSettings(BaseModel):
+class ReportsSettings(SettingsModel):
     enable: bool = Field(False, description="Enable Galaxy Reports server.")
     config_file: str = Field("reports.yml", description="Path to reports.yml, relative to galaxy.yml if not absolute")
     bind: str = Field(
@@ -222,7 +232,7 @@ names.
 """)
 
 
-class GxItProxySettings(BaseModel):
+class GxItProxySettings(SettingsModel):
     enable: bool = Field(default=False, description="Set to true to start gx-it-proxy")
     version: str = Field(default=f">={GX_IT_PROXY_MIN_VERSION}", description="gx-it-proxy version")
     ip: str = Field(default="localhost", description="Public-facing IP of the proxy")
@@ -276,7 +286,7 @@ class Settings(BaseSettings):
     ``uwsgi:`` section will be ignored if Galaxy is started via Gravity commands (e.g ``./run.sh``, ``galaxy`` or ``galaxyctl``).
     """
 
-    process_manager: ProcessManager = Field(
+    process_manager: Optional[ProcessManager] = Field(
         None,
         description="""
 Process manager to use.
@@ -363,14 +373,12 @@ Configuration for Gunicorn. Can be a list to run multiple gunicorns for rolling 
 """)
     celery: CelerySettings = Field(default={}, description="Configuration for Celery Processes.")
     gx_it_proxy: GxItProxySettings = Field(default={}, description="Configuration for gx-it-proxy.")
-    # The default value for tusd is a little awkward, but is a convenient way to ensure that if
-    # a user enables tusd that they most also set upload_dir, and yet have the default be valid.
-    tusd: TusdSettings = Field(default={'upload_dir': ''}, description="""
+    tusd: TusdSettings = Field({"upload_dir": ""}, description="""
 Configuration for tusd server (https://github.com/tus/tusd).
 The ``tusd`` binary must be installed manually and made available on PATH (e.g in galaxy's .venv/bin directory).
 """)
     reports: ReportsSettings = Field(default={}, description="Configuration for Galaxy Reports.")
-    handlers: Dict[str, Dict[str, Any]] = Field(
+    handlers: Optional[Dict[str, Dict[str, Any]]] = Field(
         default={},
         description="""
 Configure dynamic handlers in this section.

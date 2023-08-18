@@ -19,13 +19,13 @@ def test_load_defaults(galaxy_yml, galaxy_root_dir, state_dir, default_config_ma
     assert config.app_server == 'gunicorn'
     assert Path(config.log_dir) == Path(state_dir) / 'log'
     assert Path(config.galaxy_root) == galaxy_root_dir
-    gunicorn_settings = config.get_service('gunicorn').settings
+    gunicorn_settings = config.get_service('gunicorn').settings_
     assert gunicorn_settings['bind'] == default_settings.gunicorn.bind
     assert gunicorn_settings['workers'] == default_settings.gunicorn.workers
     assert gunicorn_settings['timeout'] == default_settings.gunicorn.timeout
     assert gunicorn_settings['extra_args'] == default_settings.gunicorn.extra_args
     assert gunicorn_settings['preload'] is True
-    celery_settings = config.get_service('celery').settings
+    celery_settings = config.get_service('celery').settings_
     assert celery_settings == default_settings.celery.dict()
     with pytest.raises(IndexError):
         config.get_service('tusd')
@@ -41,7 +41,7 @@ def test_preload_default(galaxy_yml, default_config_manager):
     }))
     default_config_manager.load_config_file(str(galaxy_yml))
     config = default_config_manager.get_config()
-    unicornherder_settings = config.get_service('unicornherder').settings
+    unicornherder_settings = config.get_service('unicornherder').settings_
     assert unicornherder_settings['preload'] is False
 
 
@@ -50,12 +50,12 @@ def test_load_non_default(galaxy_yml, default_config_manager, non_default_config
         galaxy_yml.write(json.dumps(non_default_config))
         default_config_manager.load_config_file(str(galaxy_yml))
     config = default_config_manager.get_config()
-    gunicorn_settings = config.get_service('gunicorn').settings
+    gunicorn_settings = config.get_service('gunicorn').settings_
     assert gunicorn_settings['bind'] == non_default_config['gravity']['gunicorn']['bind']
     assert gunicorn_settings['environment'] == non_default_config['gravity']['gunicorn']['environment']
     default_settings = Settings()
     assert gunicorn_settings['workers'] == default_settings.gunicorn.workers
-    celery_settings = config.get_service('celery').settings
+    celery_settings = config.get_service('celery').settings_
     assert celery_settings['concurrency'] == non_default_config['gravity']['celery']['concurrency']
 
 

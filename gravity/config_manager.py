@@ -231,7 +231,7 @@ class ConfigManager(object):
                 config.services.append(service_for_service_type("standalone")(
                     config=config,
                     service_name=handler_settings.pop("service_name"),
-                    settings=handler_settings,
+                    settings_=handler_settings,
                 ))
         return assign_with
 
