@@ -7,23 +7,11 @@ from typing import (
     Optional,
     Union,
 )
-from pydantic import BaseModel, BaseSettings, Extra, Field, validator
+from pydantic import ConfigDict, BaseModel, Field, FieldValidationInfo, field_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_INSTANCE_NAME = "_default_"
 GX_IT_PROXY_MIN_VERSION = "0.0.5"
-
-
-def none_to_default(cls, v, field):
-    if all(
-        (
-            # Cater for the occasion where field.default in (0, False)
-            getattr(field, "default", None) is not None,
-            v is None,
-        )
-    ):
-        return field.default
-    else:
-        return v
 
 
 class LogLevel(str, Enum):
@@ -125,9 +113,7 @@ Memory limit (in GB). If the service exceeds the limit, it will be killed. Defau
 Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
 names.
 """)
-
-    class Config:
-        use_enum_values = True
+    model_config = ConfigDict(use_enum_values=True)
 
 
 class GunicornSettings(BaseModel):
@@ -391,27 +377,20 @@ Configure dynamic handlers in this section.
 See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defined-handlers for details.
 """)
 
-    # Use validators to turn None to default value
-    _normalize_gunicorn = validator("gunicorn", allow_reuse=True, pre=True)(none_to_default)
-    _normalize_gx_it_proxy = validator("gx_it_proxy", allow_reuse=True, pre=True)(none_to_default)
-    _normalize_celery = validator("celery", allow_reuse=True, pre=True)(none_to_default)
-    _normalize_tusd = validator("tusd", allow_reuse=True, pre=True)(none_to_default)
-    _normalize_reports = validator("reports", allow_reuse=True, pre=True)(none_to_default)
-
-    # Require galaxy_user if running as root
-    @validator("galaxy_user")
-    def _user_required_if_root(cls, v, values):
+    @field_validator("galaxy_user")
+    @classmethod
+    def _user_required_if_root(cls, v, info: FieldValidationInfo):
         if os.geteuid() == 0:
-            is_systemd = values["process_manager"] == ProcessManager.systemd
+            is_systemd = info.data["process_manager"] == ProcessManager.systemd
             if is_systemd and not v:
                 raise ValueError("galaxy_user is required when running as root")
             elif not is_systemd:
                 raise ValueError("Gravity cannot be run as root unless using the systemd process manager")
         return v
 
-    # automatically set process_manager to systemd if unset and running is root
-    @validator("process_manager")
-    def _process_manager_systemd_if_root(cls, v, values):
+    @field_validator("process_manager")
+    @classmethod
+    def _process_manager_systemd_if_root(cls, v):
         if v is None:
             if os.geteuid() == 0:
                 v = ProcessManager.systemd.value
@@ -419,18 +398,9 @@ See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defi
                 v = ProcessManager.supervisor.value
         return v
 
-    # disable service instances unless command style is gravity
-    @validator("use_service_instances")
-    def _disable_service_instances_if_direct(cls, v, values):
-        if values["service_command_style"] != ServiceCommandStyle.gravity:
+    @field_validator("use_service_instances")
+    def _disable_service_instances_if_direct(cls, v, info: FieldValidationInfo):
+        if info.data["service_command_style"] != ServiceCommandStyle.gravity:
             v = False
         return v
-
-    class Config:
-        env_prefix = "gravity_"
-        env_nested_delimiter = "."
-        case_sensitive = False
-        use_enum_values = True
-        # Ignore extra fields so you can switch from gravity versions that recognize new fields
-        # to an older version that does not specify the fields, without having to comment them out.
-        extra = Extra.ignore
+    model_config = SettingsConfigDict(env_prefix="gravity_", env_nested_delimiter=".", case_sensitive=False, use_enum_values=True, extra="ignore")

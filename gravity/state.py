@@ -9,7 +9,7 @@ import sys
 import time
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, FieldValidationInfo, field_validator
 
 import gravity.io
 from gravity.settings import (
@@ -27,9 +27,10 @@ DEFAULT_GALAXY_ENVIRONMENT = {
 CELERY_BEAT_DB_FILENAME = "celery-beat-schedule"
 
 
-def relative_to_galaxy_root(cls, v, values):
+@classmethod
+def relative_to_galaxy_root(cls, v, info: FieldValidationInfo):
     if not os.path.isabs(v):
-        v = os.path.abspath(os.path.join(values["galaxy_root"], v))
+        v = os.path.abspath(os.path.join(info.data["galaxy_root"], v))
     return v
 
 
@@ -49,12 +50,12 @@ class ConfigFile(BaseModel):
     process_manager: ProcessManager
     service_command_style: ServiceCommandStyle
     app_server: AppServer
-    virtualenv: Optional[str]
-    galaxy_root: Optional[str]
-    galaxy_user: Optional[str]
-    galaxy_group: Optional[str]
-    umask: Optional[str]
-    memory_limit: Optional[int]
+    virtualenv: Optional[str] = None
+    galaxy_root: Optional[str] = None
+    galaxy_user: Optional[str] = None
+    galaxy_group: Optional[str] = None
+    umask: Optional[str] = None
+    memory_limit: Optional[int] = None
     gravity_data_dir: str
     log_dir: str
     services: List[Service] = []
@@ -74,10 +75,11 @@ class ConfigFile(BaseModel):
             exec(fh.read(), {}, locs)
             return locs["VERSION"]
 
-    @validator("galaxy_root")
-    def _galaxy_root_required(cls, v, values):
+    @field_validator("galaxy_root")
+    @classmethod
+    def _galaxy_root_required(cls, v, info: FieldValidationInfo):
         if v is None:
-            galaxy_config_file = values["galaxy_config_file"]
+            galaxy_config_file = info.data["galaxy_config_file"]
             if os.environ.get("GALAXY_ROOT_DIR"):
                 v = os.path.abspath(os.environ["GALAXY_ROOT_DIR"])
             elif os.path.exists(os.path.join(os.path.dirname(galaxy_config_file), os.pardir, "lib", "galaxy")):
@@ -90,8 +92,8 @@ class ConfigFile(BaseModel):
                     "`root' in the Galaxy config")
         return v
 
-    _validate_gravity_data_dir = validator("gravity_data_dir", allow_reuse=True)(relative_to_galaxy_root)
-    _validate_log_dir = validator("log_dir", allow_reuse=True)(relative_to_galaxy_root)
+    _validate_gravity_data_dir = field_validator("gravity_data_dir")(relative_to_galaxy_root)
+    _validate_log_dir = field_validator("log_dir")(relative_to_galaxy_root)
 
     def get_service(self, service_name):
         return self.get_services([service_name])[0]
@@ -148,7 +150,7 @@ class Service(BaseModel):
             # settings is already a dict e.g. in the case of handlers
             services = [cls(config=config, settings=settings, service_name=service_name)]
         elif getattr(settings, cls._enable_attribute):
-            services = [cls(config=config, settings=settings.dict(), service_name=service_name)]
+            services = [cls(config=config, settings=settings.model_dump(), service_name=service_name)]
         return services
 
     def __init__(self, *args, **kwargs):
@@ -210,13 +212,13 @@ class Service(BaseModel):
     def dict(self, *args, **kwargs):
         exclude = kwargs.pop("exclude", None) or {}
         exclude = {"config"}
-        return super().dict(*args, exclude=exclude, **kwargs)
+        return super().model_dump(*args, exclude=exclude, **kwargs)
 
 
 class ServiceList(BaseModel):
-    config = ConfigFile
-    _service_type = "_list_"
-    service_name = "_list_"
+    config: ConfigFile
+    _service_type: str = "_list_"
+    service_name: str = "_list_"
     services: List[Service] = []
 
     # ServiceList is *only* used when service_command_style = gravity, meaning that the only case we need to do anything
@@ -261,10 +263,10 @@ class ServiceList(BaseModel):
 
 
 class GalaxyGunicornService(Service):
-    _service_type = "gunicorn"
-    service_name = "gunicorn"
-    _service_list_allowed = True
-    _default_environment = DEFAULT_GALAXY_ENVIRONMENT
+    _service_type: str = "gunicorn"
+    service_name: str = "gunicorn"
+    _service_list_allowed: bool = True
+    _default_environment: Dict[str, str] = DEFAULT_GALAXY_ENVIRONMENT
     _command_arguments = {
         "preload": "--preload",
     }
@@ -278,8 +280,9 @@ class GalaxyGunicornService(Service):
                         " {command_arguments[preload]}" \
                         " {settings[extra_args]}"
 
-    @validator("settings")
-    def _normalize_settings(cls, v, values):
+    @field_validator("settings")
+    @classmethod
+    def _normalize_settings(cls, v):
         # TODO: should be copy?
         if v["preload"] is None:
             v["preload"] = True
@@ -322,11 +325,11 @@ class GalaxyGunicornService(Service):
 
 
 class GalaxyUnicornHerderService(Service):
-    _service_type = "unicornherder"
-    service_name = "unicornherder"
-    _settings_from = "gunicorn"
-    _graceful_method = GracefulMethod.SIGHUP
-    _default_environment = DEFAULT_GALAXY_ENVIRONMENT
+    _service_type: str = "unicornherder"
+    service_name: str = "unicornherder"
+    _settings_from: str = "gunicorn"
+    _graceful_method: GracefulMethod = GracefulMethod.SIGHUP
+    _default_environment: Dict[str, str] = DEFAULT_GALAXY_ENVIRONMENT
     _command_template = "{virtualenv_bin}unicornherder --" \
                         " 'galaxy.webapps.galaxy.fast_factory:factory()'" \
                         " --timeout {settings[timeout]}" \
@@ -338,8 +341,9 @@ class GalaxyUnicornHerderService(Service):
                         " {command_arguments[preload]}" \
                         " {settings[extra_args]}"
 
-    @validator("settings")
-    def _normalize_settings(cls, v, values):
+    @field_validator("settings")
+    @classmethod
+    def _normalize_settings(cls, v):
         # TODO: should be copy?
         if v["preload"] is None:
             v["preload"] = False
@@ -350,8 +354,8 @@ class GalaxyUnicornHerderService(Service):
 
 
 class GalaxyCeleryService(Service):
-    _service_type = "celery"
-    service_name = "celery"
+    _service_type: str = "celery"
+    service_name: str = "celery"
     _default_environment = DEFAULT_GALAXY_ENVIRONMENT
     _command_template = "{virtualenv_bin}celery" \
                         " --app galaxy.celery worker" \
@@ -363,11 +367,11 @@ class GalaxyCeleryService(Service):
 
 
 class GalaxyCeleryBeatService(Service):
-    _service_type = "celery-beat"
-    service_name = "celery-beat"
-    _settings_from = "celery"
-    _enable_attribute = "enable_beat"
-    _default_environment = DEFAULT_GALAXY_ENVIRONMENT
+    _service_type: str = "celery-beat"
+    service_name: str = "celery-beat"
+    _settings_from: str = "celery"
+    _enable_attribute: str = "enable_beat"
+    _default_environment: Dict[str, str] = DEFAULT_GALAXY_ENVIRONMENT
     _command_template = "{virtualenv_bin}celery" \
                         " --app galaxy.celery" \
                         " beat" \
@@ -376,15 +380,15 @@ class GalaxyCeleryBeatService(Service):
 
 
 class GalaxyGxItProxyService(Service):
-    _service_type = "gx-it-proxy"
-    service_name = "gx-it-proxy"
-    _settings_from = "gx_it_proxy"
-    _default_environment = {
+    _service_type: str = "gx-it-proxy"
+    service_name: str = "gx-it-proxy"
+    _settings_from: str = "gx_it_proxy"
+    _default_environment: Dict[str, str] = {
         "npm_config_yes": "true",
     }
     # the npx shebang is $!/usr/bin/env node, so $PATH has to be correct
-    _add_virtualenv_to_path = True
-    _command_arguments = {
+    _add_virtualenv_to_path: bool = True
+    _command_arguments: Dict[str, str] = {
         "verbose": "--verbose",
         "forward_ip": "--forwardIP {settings[forward_ip]}",
         "forward_port": "--forwardPort {settings[forward_port]}",
@@ -406,39 +410,41 @@ class GalaxyGxItProxyService(Service):
         it_prefix = self.config.app_config.get("interactivetools_prefix", "interactivetool")
         self.settings["proxy_path_prefix"] = f"{it_base_path}{it_prefix}/access/interactivetoolentrypoint"
 
-    @validator("settings")
-    def _validate_settings(cls, v, values):
-        if not values["config"].app_config["interactivetools_enable"]:
+    @field_validator("settings")
+    @classmethod
+    def _validate_settings(cls, v, info: FieldValidationInfo):
+        if not info.data["config"].app_config["interactivetools_enable"]:
             gravity.io.exception("To run gx-it-proxy you need to set interactivetools_enable in the galaxy section of galaxy.yml")
         return v
 
 
 class GalaxyTUSDService(Service):
-    _service_type = "tusd"
-    service_name = "tusd"
-    _graceful_method = GracefulMethod.NONE
+    _service_type: str = "tusd"
+    service_name: str = "tusd"
+    _graceful_method: GracefulMethod = GracefulMethod.NONE
     _command_template = "{settings[tusd_path]} -host={settings[host]} -port={settings[port]}" \
                         " -upload-dir={settings[upload_dir]}" \
                         " -hooks-http={app_config[galaxy_infrastructure_url]}/api/upload/hooks" \
                         " -hooks-http-forward-headers=X-Api-Key,Cookie {settings[extra_args]}" \
                         " -hooks-enabled-events {settings[hooks_enabled_events]}"
 
-    @validator("settings")
-    def _validate_settings(cls, v, values):
-        if not values["config"].app_config["galaxy_infrastructure_url"]:
+    @field_validator("settings")
+    @classmethod
+    def _validate_settings(cls, v, info: FieldValidationInfo):
+        if not info.data["config"].app_config["galaxy_infrastructure_url"]:
             gravity.io.exception("To run tusd syou need to set galaxy_infrastructure_url in the galaxy section of galaxy.yml")
         return v
 
 
 class GalaxyReportsService(Service):
-    _service_type = "reports"
-    service_name = "reports"
-    _graceful_method = GracefulMethod.SIGHUP
-    _default_environment = {
+    _service_type: str = "reports"
+    service_name: str = "reports"
+    _graceful_method: str = GracefulMethod.SIGHUP
+    _default_environment: Dict[str, str] = {
         "PYTHONPATH": "lib",
         "GALAXY_REPORTS_CONFIG": "{settings[config_file]}",
     }
-    _command_arguments = {
+    _command_arguments: Dict[str, str] = {
         "url_prefix": "--env SCRIPT_NAME={settings[url_prefix]}",
     }
     _command_template = "{virtualenv_bin}gunicorn 'galaxy.webapps.reports.fast_factory:factory()'" \
@@ -451,7 +457,8 @@ class GalaxyReportsService(Service):
                         " {command_arguments[url_prefix]}" \
                         " {settings[extra_args]}"
 
-    @validator("settings")
+    @field_validator("settings")
+    @classmethod
     def _validate_settings(cls, v, values):
         reports_config_file = v["config_file"]
         if not os.path.isabs(reports_config_file):
@@ -463,10 +470,10 @@ class GalaxyReportsService(Service):
 
 
 class GalaxyStandaloneService(Service):
-    _service_type = "standalone"
-    service_name = "standalone"
+    _service_type: str = "standalone"
+    service_name: str = "standalone"
     # TODO: add these to Galaxy docs
-    _default_settings = {
+    _default_settings: Dict[str, str] = {
         "start_timeout": 20,
         "stop_timeout": 65,
     }
