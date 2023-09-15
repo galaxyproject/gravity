@@ -269,7 +269,9 @@ class SupervisorProcessManager(BaseProcessManager):
         template = SUPERVISORD_SERVICE_TEMPLATE
         contents = template.format(**format_vars)
         name = service.service_name if not self._use_instance_name else f"{instance_name}:{service.service_name}"
-        self._update_file(conf, contents, name, "service", force)
+        if self._update_file(conf, contents, name, "service", force):
+            self.supervisorctl('reread')
+            self.supervisorctl('update')
         return conf
 
     def __process_config(self, config, force):
@@ -289,7 +291,9 @@ class SupervisorProcessManager(BaseProcessManager):
         if self._use_instance_name:
             format_vars = {"instance_name": instance_name, "programs": ",".join(programs)}
             contents = SUPERVISORD_GROUP_TEMPLATE.format(**format_vars)
-            self._update_file(group_conf, contents, instance_name, "supervisor group", force)
+            if self._update_file(group_conf, contents, instance_name, "supervisor group", force):
+                self.supervisorctl('reread')
+                self.supervisorctl('update')
         elif os.path.exists(group_conf):
             os.unlink(group_conf)
 
