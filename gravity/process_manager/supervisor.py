@@ -97,7 +97,7 @@ class SupervisorProgram:
             if self._use_instance_name:
                 self.config_process_name = f"{service.service_name}%(process_num)d"
             else:
-                self.config_process_name = "%(process_num)d"
+                self.config_process_name = "%(program_name)s_%(process_num)d"
             self.config_instance_program_name += "_%(process_num)d"
             self.log_file_name_template += "_{instance_number}"
         self.log_file_name_template += ".log"
@@ -436,7 +436,7 @@ def supervisor_program_names(service_name, instance_count, instance_number_start
         return [f"{instance_name}:{service_name}{i + instance_number_start}" for i in range(0, instance_count)]
 
     if instance_count > 1:
-        program_names = [f"{service_name}:{i + instance_number_start}" for i in range(0, instance_count)]
+        program_names = [f"{service_name}:{service_name}_{i + instance_number_start}" for i in range(0, instance_count)]
     else:
         program_names = [service_name]
 
