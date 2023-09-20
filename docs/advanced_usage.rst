@@ -60,16 +60,16 @@ e.g.:
     $ galaxyctl status
     celery                           RUNNING   pid 121363, uptime 0:02:33
     celery-beat                      RUNNING   pid 121364, uptime 0:02:33
-    gunicorn:0                       RUNNING   pid 121365, uptime 0:02:33
-    gunicorn:1                       RUNNING   pid 121366, uptime 0:02:33
+    gunicorn:gunicorn_0              RUNNING   pid 121365, uptime 0:02:33
+    gunicorn:gunicorn_1              RUNNING   pid 121366, uptime 0:02:33
 
 However, ``galaxyctl`` commands that take a service name still use the base service name, e.g.:
 
 .. code:: console
 
     $ galaxyctl stop gunicorn
-    gunicorn:0: stopped
-    gunicorn:1: stopped
+    gunicorn:gunicorn_0: stopped
+    gunicorn:gunicorn_1: stopped
     Not all processes stopped, supervisord not shut down (hint: see `galaxyctl status`)
 
 In systemd, the service names as presented by systemd are appended with ``@INSTANCE_NUMBER``,

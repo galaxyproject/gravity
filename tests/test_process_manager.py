@@ -489,8 +489,8 @@ def test_override_umask(galaxy_yml, default_config_manager):
 
 def test_supervisor_program_names():
     assert supervisor_program_names("gunicorn", 1, 0) == ["gunicorn"]
-    assert supervisor_program_names("gunicorn", 2, 0) == ["gunicorn:0", "gunicorn:1"]
-    assert supervisor_program_names("gunicorn", 2, 8080) == ["gunicorn:8080", "gunicorn:8081"]
+    assert supervisor_program_names("gunicorn", 2, 0) == ["gunicorn:gunicorn_0", "gunicorn:gunicorn_1"]
+    assert supervisor_program_names("gunicorn", 2, 8080) == ["gunicorn:gunicorn_8080", "gunicorn:gunicorn_8081"]
     assert supervisor_program_names("gunicorn", 1, 0, instance_name="main") == ["main:gunicorn"]
     assert supervisor_program_names("gunicorn", 2, 0, instance_name="main") == ["main:gunicorn0", "main:gunicorn1"]
     assert supervisor_program_names("gunicorn", 2, 8080, instance_name="main") == ["main:gunicorn8080", "main:gunicorn8081"]

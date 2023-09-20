@@ -97,7 +97,7 @@ class SupervisorProgram:
             if self._use_instance_name:
                 self.config_process_name = f"{service.service_name}%(process_num)d"
             else:
-                self.config_process_name = "%(process_num)d"
+                self.config_process_name = "%(program_name)s_%(process_num)d"
             self.config_instance_program_name += "_%(process_num)d"
             self.log_file_name_template += "_{instance_number}"
         self.log_file_name_template += ".log"
@@ -269,7 +269,9 @@ class SupervisorProcessManager(BaseProcessManager):
         template = SUPERVISORD_SERVICE_TEMPLATE
         contents = template.format(**format_vars)
         name = service.service_name if not self._use_instance_name else f"{instance_name}:{service.service_name}"
-        self._update_file(conf, contents, name, "service", force)
+        if self._update_file(conf, contents, name, "service", force):
+            self.supervisorctl('reread')
+            self.supervisorctl('update')
         return conf
 
     def __process_config(self, config, force):
@@ -289,7 +291,9 @@ class SupervisorProcessManager(BaseProcessManager):
         if self._use_instance_name:
             format_vars = {"instance_name": instance_name, "programs": ",".join(programs)}
             contents = SUPERVISORD_GROUP_TEMPLATE.format(**format_vars)
-            self._update_file(group_conf, contents, instance_name, "supervisor group", force)
+            if self._update_file(group_conf, contents, instance_name, "supervisor group", force):
+                self.supervisorctl('reread')
+                self.supervisorctl('update')
         elif os.path.exists(group_conf):
             os.unlink(group_conf)
 
@@ -436,7 +440,7 @@ def supervisor_program_names(service_name, instance_count, instance_number_start
         return [f"{instance_name}:{service_name}{i + instance_number_start}" for i in range(0, instance_count)]
 
     if instance_count > 1:
-        program_names = [f"{service_name}:{i + instance_number_start}" for i in range(0, instance_count)]
+        program_names = [f"{service_name}:{service_name}_{i + instance_number_start}" for i in range(0, instance_count)]
     else:
         program_names = [service_name]
 

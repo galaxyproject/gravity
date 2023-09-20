@@ -42,7 +42,7 @@ setup(
         "supervisor",
         "pyyaml",
         "packaging",
-        "pydantic",
+        "pydantic<2",
         "jsonref",
         "requests",
         "requests-unixsocket",
