@@ -404,7 +404,7 @@ class GalaxyGxItProxyService(Service):
         it_base_path = self.config.app_config.get("interactivetools_base_path", "/")
         it_base_path = "/" + f"/{it_base_path.strip('/')}/".lstrip("/")
         it_prefix = self.config.app_config.get("interactivetools_prefix", "interactivetool")
-        self.settings["proxy_path_prefix"] = f"{it_base_path}{it_prefix}/access/interactivetoolentrypoint"
+        self.settings["proxy_path_prefix"] = f"{it_base_path}{it_prefix}/ep"
 
     @validator("settings")
     def _validate_settings(cls, v, values):
