@@ -10,7 +10,7 @@ from typing import (
 from pydantic import BaseModel, BaseSettings, Extra, Field, validator
 
 DEFAULT_INSTANCE_NAME = "_default_"
-GX_IT_PROXY_MIN_VERSION = "0.0.5"
+GX_IT_PROXY_MIN_VERSION = "0.0.6"
 
 
 def none_to_default(cls, v, field):
