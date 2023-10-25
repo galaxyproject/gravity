@@ -271,7 +271,6 @@ class SupervisorProcessManager(BaseProcessManager):
         name = service.service_name if not self._use_instance_name else f"{instance_name}:{service.service_name}"
         if self._update_file(conf, contents, name, "service", force):
             self.supervisorctl('reread')
-            self.supervisorctl('update')
         return conf
 
     def __process_config(self, config, force):
@@ -293,7 +292,6 @@ class SupervisorProcessManager(BaseProcessManager):
             contents = SUPERVISORD_GROUP_TEMPLATE.format(**format_vars)
             if self._update_file(group_conf, contents, instance_name, "supervisor group", force):
                 self.supervisorctl('reread')
-                self.supervisorctl('update')
         elif os.path.exists(group_conf):
             os.unlink(group_conf)
 
