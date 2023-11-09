@@ -2,6 +2,13 @@
  History
 =========
 
+1.0.4
+=====
+
+- Supervisor: more readable program name + reread config on each change by @abretaud in https://github.com/galaxyproject/gravity/pull/110
+- Remove unneeded supervisorctl update call by @abretaud in https://github.com/galaxyproject/gravity/pull/112
+- Minimal path change needed for galaxy PR 16795 by @sveinugu in https://github.com/galaxyproject/gravity/pull/114
+
 1.0.3
 =====
 
