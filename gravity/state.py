@@ -40,7 +40,6 @@ class GracefulMethod(str, enum.Enum):
 
 
 class ConfigFile(BaseModel):
-    config_type: str
     app_config: Dict[str, Any]
     gravity_config_file: str
     galaxy_config_file: str
@@ -116,8 +115,6 @@ class Service(BaseModel):
 
     settings: Dict[str, Any]
 
-    config_type: str = None
-
     _default_environment: Dict[str, str] = {}
 
     _settings_from: Optional[str] = None
@@ -151,9 +148,11 @@ class Service(BaseModel):
         return services
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.config_type = self.config.config_type
-
+        try:
+            super().__init__(*args, **kwargs)
+         except Exception as ex:
+            gravity.io.exception("{0} init failurre: {1}".format(type(self),ex))
+             
     @property
     def service_type(self):
         return self._service_type
@@ -191,7 +190,7 @@ class Service(BaseModel):
         return self._command_template
 
     def __eq__(self, other):
-        return self.config_type == other.config_type and self.service_type == other.service_type and self.service_name == other.service_name
+        return self.service_type == other.service_type and self.service_name == other.service_name
 
     def get_command_arguments(self, format_vars):
         """Convert settings into their command line arguments."""
