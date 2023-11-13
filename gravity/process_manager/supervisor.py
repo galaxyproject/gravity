@@ -105,7 +105,7 @@ class SupervisorProgram:
     @property
     def config_file_name(self):
         service = self.service
-        return f"{service.config_type}_{service.service_type}_{service.service_name}.conf"
+        return f"{service.service_type}_{service.service_name}.conf"
 
     @property
     def config_program_name(self):
@@ -113,7 +113,7 @@ class SupervisorProgram:
         service = self.service
         if self._use_instance_name:
             instance_name = self.config.instance_name
-            return f"{instance_name}_{service.config_type}_{service.service_type}_{service.service_name}"
+            return f"{instance_name}_{service.service_type}_{service.service_name}"
         else:
             return service.service_name
 
@@ -284,7 +284,7 @@ class SupervisorProcessManager(BaseProcessManager):
         programs = []
         for service in config.services:
             self.__update_service(config, service, instance_conf_dir, instance_name, force)
-            programs.append(f"{instance_name}_{service.config_type}_{service.service_type}_{service.service_name}")
+            programs.append(f"{instance_name}_{service.service_type}_{service.service_name}")
 
         group_conf = os.path.join(self.supervisord_conf_dir, f"group_{instance_name}.conf")
         if self._use_instance_name:
