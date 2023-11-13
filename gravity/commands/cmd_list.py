@@ -23,7 +23,6 @@ def cli(ctx, version):
             click.echo(cols_str.format(*head))
             for config in configs:
                 row = [
-                    config.config_type,
                     config.instance_name,
                     config.gravity_config_file,
                 ]
