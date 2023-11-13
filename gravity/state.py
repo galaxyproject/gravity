@@ -151,7 +151,7 @@ class Service(BaseModel):
         try:
             super().__init__(*args, **kwargs)
          except Exception as ex:
-            gravity.io.exception("{0} init failurre: {1}".format(type(self),ex))
+            gravity.io.exception("{0} init failed: {1}".format(type(self),ex))
              
     @property
     def service_type(self):
