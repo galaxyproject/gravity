@@ -4,8 +4,7 @@ import ast
 import os
 import re
 
-from setuptools import setup, find_packages
-
+from setuptools import find_packages, setup
 
 with open("README.rst") as file:
     long_description = file.read()
@@ -42,7 +41,7 @@ setup(
         "supervisor",
         "pyyaml",
         "packaging",
-        "pydantic<2",
+        "pydantic>=2",
         "jsonref",
         "requests",
         "requests-unixsocket",
