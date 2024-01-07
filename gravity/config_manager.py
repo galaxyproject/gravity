@@ -7,15 +7,15 @@ import os
 import xml.etree.ElementTree as elementtree
 from typing import Union
 
-from pydantic import ValidationError
+try:
+    from pydantic.v1 import ValidationError
+except ImportError:
+    from pydantic import ValidationError
 from yaml import safe_load
 
 import gravity.io
 from gravity.settings import Settings
-from gravity.state import (
-    ConfigFile,
-    service_for_service_type,
-)
+from gravity.state import ConfigFile, service_for_service_type
 from gravity.util import recursive_update
 
 log = logging.getLogger(__name__)

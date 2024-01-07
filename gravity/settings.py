@@ -1,13 +1,11 @@
 import os
 from enum import Enum
-from typing import (
-    Any,
-    Dict,
-    List,
-    Optional,
-    Union,
-)
-from pydantic import BaseModel, BaseSettings, Extra, Field, validator
+from typing import Any, Dict, List, Optional, Union
+
+try:
+    from pydantic.v1 import BaseModel, BaseSettings, Extra, Field, validator
+except ImportError:
+    from pydantic import BaseModel, BaseSettings, Extra, Field, validator
 
 DEFAULT_INSTANCE_NAME = "_default_"
 GX_IT_PROXY_MIN_VERSION = "0.0.6"

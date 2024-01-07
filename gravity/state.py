@@ -2,6 +2,7 @@
 state data.
 """
 from __future__ import annotations
+
 import enum
 import hashlib
 import os
@@ -9,16 +10,14 @@ import sys
 import time
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, validator
+try:
+    from pydantic.v1 import BaseModel, validator
+except ImportError:
+    from pydantic import BaseModel, validator
 
 import gravity.io
-from gravity.settings import (
-    AppServer,
-    ProcessManager,
-    ServiceCommandStyle,
-)
+from gravity.settings import AppServer, ProcessManager, ServiceCommandStyle
 from gravity.util import http_check
-
 
 DEFAULT_GALAXY_ENVIRONMENT = {
     "PYTHONPATH": "lib",
