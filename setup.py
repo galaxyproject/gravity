@@ -41,7 +41,7 @@ setup(
         "supervisor",
         "pyyaml",
         "packaging",
-        "pydantic>=2",
+        "pydantic<3",  # pydantic.v1 import will be removed in v3
         "jsonref",
         "requests",
         "requests-unixsocket",

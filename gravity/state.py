@@ -10,7 +10,10 @@ import sys
 import time
 from typing import Any, Dict, List, Optional
 
-from pydantic.v1 import BaseModel, validator
+try:
+    from pydantic.v1 import BaseModel, validator
+except ImportError:
+    from pydantic import BaseModel, validator
 
 import gravity.io
 from gravity.settings import AppServer, ProcessManager, ServiceCommandStyle

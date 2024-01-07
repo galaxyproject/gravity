@@ -7,7 +7,10 @@ import os
 import xml.etree.ElementTree as elementtree
 from typing import Union
 
-from pydantic.v1 import ValidationError
+try:
+    from pydantic.v1 import ValidationError
+except ImportError:
+    from pydantic import ValidationError
 from yaml import safe_load
 
 import gravity.io
