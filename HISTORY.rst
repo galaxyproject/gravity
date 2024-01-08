@@ -2,6 +2,11 @@
  History
 =========
 
+1.0.5
+=====
+
+- Support pydantic v1 and v2 by @heisner-tillman in https://github.com/galaxyproject/gravity/pull/118
+
 1.0.4
 =====
 
