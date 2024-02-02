@@ -82,8 +82,8 @@ class SystemdService:
         else:
             description_process = ""
 
-        self.unit_prefix = f"{prefix_instance_name}-{service.service_name}"
-        self.description = f"{description_instance_name}{service.service_name}{description_process}"
+        self.unit_prefix = f"galaxy{prefix_instance_name}-{service.service_name}"
+        self.description = f"Galaxy{description_instance_name}{service.service_name}{description_process}"
 
     @property
     def unit_file_name(self):
@@ -161,7 +161,7 @@ class SystemdProcessManager(BaseProcessManager):
 
     def __target_unit_name(self, config):
         instance_name = f"-{config.instance_name}" if self._use_instance_name else ""
-        return f"{instance_name}.target"
+        return f"galaxy{instance_name}.target"
 
     def __unit_files_to_active_unit_names(self, unit_files):
         unit_names = []
@@ -205,7 +205,7 @@ class SystemdProcessManager(BaseProcessManager):
     def _present_pm_files_for_config(self, config):
         unit_files = set()
         instance_name = f"-{config.instance_name}" if self._use_instance_name else ""
-        target = os.path.join(self.__systemd_unit_dir, f"{instance_name}.target")
+        target = os.path.join(self.__systemd_unit_dir, f"galaxy{instance_name}.target")
         if os.path.exists(target):
             target_hash = self.__read_gravity_config_hash_from_target(target)
             if target_hash == config.path_hash:
@@ -283,11 +283,11 @@ class SystemdProcessManager(BaseProcessManager):
         target_conf = os.path.join(self.__systemd_unit_dir, target_unit_name)
         format_vars = {
             "gravity_config_hash": config.path_hash,
-            "systemd_description": "Galaxy processes",
+            "systemd_description": "Galaxy",
             "systemd_target_wants": " ".join(service_units),
         }
         if self._use_instance_name:
-            format_vars["systemd_description"] = f"{config.instance_name}"
+            format_vars["systemd_description"] += f" {config.instance_name}"
         contents = SYSTEMD_TARGET_TEMPLATE.format(**format_vars)
         if self._update_file(target_conf, contents, target_unit_name, "systemd unit", force):
             self.__systemctl("enable", target_conf)
@@ -378,7 +378,7 @@ class SystemdProcessManager(BaseProcessManager):
         """ """
         if self._use_instance_name:
             configs = self.config_manager.get_configs(process_manager=self.name)
-            self.__systemctl("stop", *[f"{c.instance_name}.target" for c in configs])
+            self.__systemctl("stop", *[f"galaxy-{c.instance_name}.target" for c in configs])
         else:
             self.__systemctl("stop", "galaxy.target")
 
