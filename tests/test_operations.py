@@ -217,7 +217,8 @@ def test_cmd_show(state_dir, galaxy_yml):
     result = runner.invoke(galaxyctl, ['--config-file', str(galaxy_yml), 'show'])
     assert result.exit_code == 0, result.output
     details = safe_load(result.output)
-    assert details['config_type'] == 'galaxy'
+    assert details['galaxy_config_file'] == str(galaxy_yml)
+    assert details['instance_name'] == '_default_'
 
 
 def test_cmd_list(state_dir, galaxy_yml):
