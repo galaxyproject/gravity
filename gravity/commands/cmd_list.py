@@ -11,11 +11,11 @@ def cli(ctx, version):
 
     aliases: configs
     """
-    cols = ["{:<8}", "{:<18}", "{}"]
-    head = ["TYPE", "INSTANCE NAME", "CONFIG PATH"]
+    cols = ["{:<18}", "{}"]
+    head = ["INSTANCE NAME", "CONFIG PATH"]
     if version:
-        cols.insert(2, "{:<12}")
-        head.insert(2, "VERSION")
+        cols.insert(1, "{:<12}")
+        head.insert(1, "VERSION")
     cols_str = "  ".join(cols)
     with config_manager.config_manager(**ctx.parent.cm_kwargs) as cm:
         configs = cm.get_configs()
@@ -27,7 +27,7 @@ def cli(ctx, version):
                     config.gravity_config_file,
                 ]
                 if version:
-                    row.insert(2, config.galaxy_version)
+                    row.insert(1, config.galaxy_version)
                 click.echo(cols_str.format(*row))
         else:
             click.echo("No configured instances")
