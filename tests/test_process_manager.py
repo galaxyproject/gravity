@@ -108,7 +108,7 @@ def service_conf_dir(state_dir, process_manager_name):
 def service_conf_file(instance_name, process_manager_name, service_name, service_type=None):
     service_type = service_type or service_name
     if process_manager_name == 'supervisor':
-        return f'galaxy_{service_type}_{service_name}.conf'
+        return f'{service_type}_{service_name}.conf'
     elif process_manager_name == 'systemd':
         return f'galaxy-{instance_name}-{service_name}.service'
     raise Exception(f"Invalid process manager name: {process_manager_name}")

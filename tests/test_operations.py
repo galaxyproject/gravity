@@ -225,5 +225,5 @@ def test_cmd_list(state_dir, galaxy_yml):
     runner = CliRunner()
     result = runner.invoke(galaxyctl, ['--config-file', str(galaxy_yml), 'list'])
     assert result.exit_code == 0, result.output
-    assert result.output.startswith("TYPE")
+    assert result.output.startswith("INSTANCE NAME")
     assert str(galaxy_yml) in result.output
