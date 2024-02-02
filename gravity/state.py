@@ -150,9 +150,9 @@ class Service(BaseModel):
     def __init__(self, *args, **kwargs):
         try:
             super().__init__(*args, **kwargs)
-        except Exception as ex:
-            gravity.io.exception("{0} init failed: {1}".format(type(self),ex))
-             
+        except Exception as exc:
+            gravity.io.exception(f"{type(self)} init failed: {exc}")
+
     @property
     def service_type(self):
         return self._service_type
@@ -448,20 +448,21 @@ class GalaxyReportsService(Service):
                         " --config python:galaxy.web_stack.gunicorn_config" \
                         " {command_arguments[url_prefix]}" \
                         " {settings[extra_args]}"
-    
-    def  _ensure_config_absolute_path(cls,v,values):
+
+    def _ensure_config_absolute_path(cls, v, values):
         if "config_file" not in v:
             gravity.io.exception("No reports config files specified.")
         if not os.path.isabs(v["config_file"]):
-            v["config_file"] = os.path.join(os.path.dirname(values["config"].galaxy_config_file),v["config_file"])
+            v["config_file"] = os.path.join(os.path.dirname(values["config"].galaxy_config_file), v["config_file"])
         return None
 
     @validator("settings")
     def _validate_settings(cls, v, values):
-        GalaxyReportsService._ensure_config_absolute_path(cls,v,values)
+        GalaxyReportsService._ensure_config_absolute_path(cls, v, values)
         if not os.path.exists(v["config_file"]):
-            gravity.io.exception("Reports enabled but reports config file does not exist: {0}".format(v["config_file"]))
+            gravity.io.exception(f"Reports enabled but reports config file does not exist: {v['config_file']}")
         return v
+
 
 class GalaxyStandaloneService(Service):
     _service_type = "standalone"
