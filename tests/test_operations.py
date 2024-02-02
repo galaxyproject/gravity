@@ -27,7 +27,7 @@ def log_for_service(state_dir, process_manager_name, start_time, service_name, i
     else:
         # could probably just glob here
         if instance_name is not None:
-            log_name = f"{instance_name}_galaxy_{service_name}_{service_name}.log"
+            log_name = f"{instance_name}_{service_name}_{service_name}.log"
         else:
             log_name = f"{service_name}.log"
         path = state_dir / "log" / log_name
