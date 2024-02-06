@@ -12,7 +12,6 @@ def test_load_defaults(galaxy_yml, galaxy_root_dir, state_dir, default_config_ma
     default_config_manager.load_config_file(str(galaxy_yml))
     config = default_config_manager.get_config()
     default_settings = Settings()
-    assert config.config_type == 'galaxy'
     assert config.process_manager == 'supervisor'
     assert config.instance_name == default_settings.instance_name
     assert config.services != []

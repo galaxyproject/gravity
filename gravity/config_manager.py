@@ -170,7 +170,6 @@ class ConfigManager(object):
                 app_config_dict[app_key] = app_config[app_key]
 
         config = ConfigFile(
-            config_type=self.galaxy_server_config_section,
             app_config=app_config_dict,
             gravity_config_file=gravity_config_file,
             galaxy_config_file=galaxy_config_file,

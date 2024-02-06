@@ -27,7 +27,7 @@ def log_for_service(state_dir, process_manager_name, start_time, service_name, i
     else:
         # could probably just glob here
         if instance_name is not None:
-            log_name = f"{instance_name}_galaxy_{service_name}_{service_name}.log"
+            log_name = f"{instance_name}_{service_name}_{service_name}.log"
         else:
             log_name = f"{service_name}.log"
         path = state_dir / "log" / log_name
@@ -203,7 +203,7 @@ def test_cmd_restart_with_update(state_dir, galaxy_yml, startup_config, free_por
     assert result.exit_code == 0, result.output
     start_instance(state_dir, galaxy_yml, free_port)
     # change prefix
-    prefix = '/galaxypf/'
+    prefix = '/galaxypf'
     startup_config['galaxy']['galaxy_url_prefix'] = prefix
     galaxy_yml.write(json.dumps(startup_config))
     result = runner.invoke(galaxyctl, ['--config-file', str(galaxy_yml), 'restart'])
@@ -217,12 +217,13 @@ def test_cmd_show(state_dir, galaxy_yml):
     result = runner.invoke(galaxyctl, ['--config-file', str(galaxy_yml), 'show'])
     assert result.exit_code == 0, result.output
     details = safe_load(result.output)
-    assert details['config_type'] == 'galaxy'
+    assert details['galaxy_config_file'] == str(galaxy_yml)
+    assert details['instance_name'] == '_default_'
 
 
 def test_cmd_list(state_dir, galaxy_yml):
     runner = CliRunner()
     result = runner.invoke(galaxyctl, ['--config-file', str(galaxy_yml), 'list'])
     assert result.exit_code == 0, result.output
-    assert result.output.startswith("TYPE")
+    assert result.output.startswith("INSTANCE NAME")
     assert str(galaxy_yml) in result.output
