@@ -203,7 +203,7 @@ def test_cmd_restart_with_update(state_dir, galaxy_yml, startup_config, free_por
     assert result.exit_code == 0, result.output
     start_instance(state_dir, galaxy_yml, free_port)
     # change prefix
-    prefix = '/galaxypf/'
+    prefix = '/galaxypf'
     startup_config['galaxy']['galaxy_url_prefix'] = prefix
     galaxy_yml.write(json.dumps(startup_config))
     result = runner.invoke(galaxyctl, ['--config-file', str(galaxy_yml), 'restart'])
