@@ -414,17 +414,20 @@ class GalaxyGxItProxyService(Service):
 class GalaxyTUSDService(Service):
     _service_type = "tusd"
     service_name = "tusd"
+    _service_list_allowed = True
     _graceful_method = GracefulMethod.NONE
     _command_template = "{settings[tusd_path]} -host={settings[host]} -port={settings[port]}" \
                         " -upload-dir={settings[upload_dir]}" \
-                        " -hooks-http={app_config[galaxy_infrastructure_url]}/api/upload/hooks" \
+                        " -hooks-http={settings[hooks_http]}" \
                         " -hooks-http-forward-headers=X-Api-Key,Cookie {settings[extra_args]}" \
                         " -hooks-enabled-events {settings[hooks_enabled_events]}"
 
     @validator("settings")
     def _validate_settings(cls, v, values):
-        if not values["config"].app_config["galaxy_infrastructure_url"]:
-            gravity.io.exception("To run tusd syou need to set galaxy_infrastructure_url in the galaxy section of galaxy.yml")
+        if v["hooks_http"].startswith("/"):
+            if not values["config"].app_config["galaxy_infrastructure_url"]:
+                gravity.io.exception("To run tusd you need to set galaxy_infrastructure_url in the galaxy section of galaxy.yml")
+            v["hooks_http"] = f'{values["config"].app_config["galaxy_infrastructure_url"]}{v["hooks_http"]}'
         return v
 
 
