@@ -2,6 +2,13 @@
  History
 =========
 
+1.0.6
+=====
+
+- Support pydantic v1 and v2 by @mvdbeek in https://github.com/galaxyproject/gravity/pull/118
+- Fix GalaxyReportsService crash and remove config_type by @jvanbraekel in https://github.com/galaxyproject/gravity/pull/116
+- Support running multiple tusds and controlling the value of hooks-http by @natefoo in https://github.com/galaxyproject/gravity/pull/119
+
 1.0.5
 =====
 
