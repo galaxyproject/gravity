@@ -245,8 +245,8 @@ class GxItProxySettings(BaseModel):
         default="database/interactivetools_map.sqlite",
         description="""
 Database to monitor.
-Should be set to the same value as ``interactivetools_map`` (or ``interactivetools_map_sqlalchemy``) in the ``galaxy:`` section. This is
-ignored if either ``interactivetools_map`` or ``interactivetools_map_sqlalchemy`` are set.
+Should be set to the same value as ``interactivetools_map`` (or ``interactivetoolsproxy_map``) in the ``galaxy:`` section. This is
+ignored if either ``interactivetools_map`` or ``interactivetoolsproxy_map`` are set.
 """)
     verbose: bool = Field(default=True, description="Include verbose messages in gx-it-proxy")
     forward_ip: Optional[str] = Field(

@@ -286,8 +286,8 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
       # port: 4002
 
       # Database to monitor.
-      # Should be set to the same value as ``interactivetools_map`` (or ``interactivetools_map_sqlalchemy``) in the ``galaxy:`` section. This is
-      # ignored if either ``interactivetools_map`` or ``interactivetools_map_sqlalchemy`` are set.
+      # Should be set to the same value as ``interactivetools_map`` (or ``interactivetoolsproxy_map``) in the ``galaxy:`` section. This is
+      # ignored if either ``interactivetools_map`` or ``interactivetoolsproxy_map`` are set.
       # sessions: database/interactivetools_map.sqlite
 
       # Include verbose messages in gx-it-proxy
