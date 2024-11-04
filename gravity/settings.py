@@ -252,7 +252,7 @@ class GxItProxySettings(BaseModel):
         description="""
 Routes file to monitor.
 Should be set to the same path as ``interactivetools_map`` in the ``galaxy:`` section. This is ignored if
-``interactivetools_map is set``.
+``interactivetools_map`` is set.
 """)
     verbose: bool = Field(default=True, description="Include verbose messages in gx-it-proxy")
     forward_ip: Optional[str] = Field(
