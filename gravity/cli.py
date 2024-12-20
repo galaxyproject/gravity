@@ -83,11 +83,13 @@ def galaxy(ctx, debug, config_file, state_dir, quiet):
 @options.debug_option()
 @options.config_file_option()
 @options.state_dir_option()
+@options.user_mode_option()
 @click.pass_context
-def galaxyctl(ctx, debug, config_file, state_dir):
+def galaxyctl(ctx, debug, config_file, state_dir, user):
     """Manage Galaxy server configurations and processes."""
     set_debug(debug)
     ctx.cm_kwargs = {
         "config_file": config_file,
         "state_dir": state_dir,
+        "user_mode": user,
     }

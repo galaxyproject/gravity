@@ -65,8 +65,8 @@ route_to_all = partial(_route, all_process_managers=True)
 
 
 class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
-    def __init__(self, state_dir=None, config_file=None, config_manager=None, **kwargs):
-        self.config_manager = config_manager or ConfigManager(state_dir=state_dir, config_file=config_file)
+    def __init__(self, state_dir=None, config_file=None, config_manager=None, user_mode=None):
+        self.config_manager = config_manager or ConfigManager(state_dir=state_dir, config_file=config_file, user_mode=user_mode)
         self.tail = which("tail")
 
     @abstractmethod
@@ -291,8 +291,8 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
 
 
 class ProcessManagerRouter:
-    def __init__(self, state_dir=None, config_file=None, config_manager=None, **kwargs):
-        self.config_manager = config_manager or ConfigManager(state_dir=state_dir, config_file=config_file)
+    def __init__(self, state_dir=None, config_file=None, config_manager=None, user_mode=None, **kwargs):
+        self.config_manager = config_manager or ConfigManager(state_dir=state_dir, config_file=config_file, user_mode=user_mode)
         self._load_pm_modules(**kwargs)
         self._process_executor = ProcessExecutor(config_manager=self.config_manager)
 

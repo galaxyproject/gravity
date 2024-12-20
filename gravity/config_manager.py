@@ -35,8 +35,8 @@ OPTIONAL_APP_KEYS = (
 
 
 @contextlib.contextmanager
-def config_manager(config_file=None, state_dir=None):
-    yield ConfigManager(config_file=config_file, state_dir=state_dir)
+def config_manager(config_file=None, state_dir=None, user_mode=None):
+    yield ConfigManager(config_file=config_file, state_dir=state_dir, user_mode=user_mode)
 
 
 class ConfigManager(object):
@@ -44,12 +44,13 @@ class ConfigManager(object):
     gravity_config_section = "gravity"
     app_config_file_option = "galaxy_config_file"
 
-    def __init__(self, config_file=None, state_dir=None):
+    def __init__(self, config_file=None, state_dir=None, user_mode=None):
         self.__configs = {}
         self.state_dir = None
         if state_dir is not None:
             # convert from pathlib.Path
             self.state_dir = str(state_dir)
+        self.user_mode = user_mode
 
         gravity.io.debug(f"Gravity state dir: {state_dir}")
 
