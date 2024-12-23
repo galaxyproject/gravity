@@ -10,7 +10,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.9', '3.11']
+        python-version: ['3.9', '3.13']
         galaxy-branch: ['release_23.0', 'dev']
         exclude:
           # this results in lengthy and expensive numpy wheel builds
