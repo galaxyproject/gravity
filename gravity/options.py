@@ -23,6 +23,14 @@ def config_file_option():
     )
 
 
+def user_mode_option():
+    return click.option(
+        "--user/--no-user",
+        default=None,
+        help="Use `systemctl/journalctl --user` (default: automatic depending on whether run as root)",
+    )
+
+
 def no_log_option():
     return click.option(
         '--quiet', is_flag=True, default=False, help="Only output supervisor logs, do not include process logs"

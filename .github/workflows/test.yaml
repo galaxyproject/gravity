@@ -10,15 +10,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.8', '3.11']
+        python-version: ['3.9', '3.13']
         galaxy-branch: ['release_23.0', 'dev']
         exclude:
-          # this results in lengthy and expensive numpy wheel builds
-          - python-version: '3.10'
-            galaxy-branch: 'release_22.01'
+          # either the release existed before the python release or some expensive-to-build wheels (e.g. numpy) don't
+          # exist for the pinned package version / python version combo
+          - python-version: '3.13'
+            galaxy-branch: 'release_23.0'
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v2
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Precreate virtualenv
