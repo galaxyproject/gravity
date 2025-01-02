@@ -2,6 +2,12 @@
  History
 =========
 
+1.0.7
+=====
+
+- Support new Galaxy configuration setting `interactivetoolsproxy_map` by @kysrpex in https://github.com/galaxyproject/gravity/pull/120
+- Add a command line flag for controlling systemd user mode by @natefoo in https://github.com/galaxyproject/gravity/pull/122
+
 1.0.6
 =====
 
