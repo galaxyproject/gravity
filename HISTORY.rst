@@ -2,6 +2,30 @@
  History
 =========
 
+1.0.6
+=====
+
+- Support pydantic v1 and v2 by @mvdbeek in https://github.com/galaxyproject/gravity/pull/118
+- Fix GalaxyReportsService crash and remove config_type by @jvanbraekel in https://github.com/galaxyproject/gravity/pull/116
+- Support running multiple tusds and controlling the value of hooks-http by @natefoo in https://github.com/galaxyproject/gravity/pull/119
+
+1.0.5
+=====
+
+- Support pydantic v1 and v2 by @heisner-tillman in https://github.com/galaxyproject/gravity/pull/118
+
+1.0.4
+=====
+
+- Supervisor: more readable program name + reread config on each change by @abretaud in https://github.com/galaxyproject/gravity/pull/110
+- Remove unneeded supervisorctl update call by @abretaud in https://github.com/galaxyproject/gravity/pull/112
+- Minimal path change needed for galaxy PR 16795 by @sveinugu in https://github.com/galaxyproject/gravity/pull/114
+
+1.0.3
+=====
+
+- Don't create supervisor conf dir unless necessary, create the gravity data dir as the correct user by @natefoo in https://github.com/galaxyproject/gravity/pull/105
+
 1.0.2
 =====
 

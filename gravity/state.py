@@ -2,6 +2,7 @@
 state data.
 """
 from __future__ import annotations
+
 import enum
 import hashlib
 import os
@@ -9,16 +10,14 @@ import sys
 import time
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, validator
+try:
+    from pydantic.v1 import BaseModel, validator
+except ImportError:
+    from pydantic import BaseModel, validator
 
 import gravity.io
-from gravity.settings import (
-    AppServer,
-    ProcessManager,
-    ServiceCommandStyle,
-)
+from gravity.settings import AppServer, ProcessManager, ServiceCommandStyle
 from gravity.util import http_check
-
 
 DEFAULT_GALAXY_ENVIRONMENT = {
     "PYTHONPATH": "lib",
@@ -41,7 +40,6 @@ class GracefulMethod(str, enum.Enum):
 
 
 class ConfigFile(BaseModel):
-    config_type: str
     app_config: Dict[str, Any]
     gravity_config_file: str
     galaxy_config_file: str
@@ -117,8 +115,6 @@ class Service(BaseModel):
 
     settings: Dict[str, Any]
 
-    config_type: str = None
-
     _default_environment: Dict[str, str] = {}
 
     _settings_from: Optional[str] = None
@@ -152,8 +148,10 @@ class Service(BaseModel):
         return services
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.config_type = self.config.config_type
+        try:
+            super().__init__(*args, **kwargs)
+        except Exception as exc:
+            gravity.io.exception(f"{type(self)} init failed: {exc}")
 
     @property
     def service_type(self):
@@ -192,7 +190,7 @@ class Service(BaseModel):
         return self._command_template
 
     def __eq__(self, other):
-        return self.config_type == other.config_type and self.service_type == other.service_type and self.service_name == other.service_name
+        return self.service_type == other.service_type and self.service_name == other.service_name
 
     def get_command_arguments(self, format_vars):
         """Convert settings into their command line arguments."""
@@ -407,7 +405,7 @@ class GalaxyGxItProxyService(Service):
         it_base_path = self.config.app_config.get("interactivetools_base_path", "/")
         it_base_path = "/" + f"/{it_base_path.strip('/')}/".lstrip("/")
         it_prefix = self.config.app_config.get("interactivetools_prefix", "interactivetool")
-        self.settings["proxy_path_prefix"] = f"{it_base_path}{it_prefix}/access/interactivetoolentrypoint"
+        self.settings["proxy_path_prefix"] = f"{it_base_path}{it_prefix}/ep"
 
     @validator("settings")
     def _validate_settings(cls, v, values):
@@ -419,17 +417,20 @@ class GalaxyGxItProxyService(Service):
 class GalaxyTUSDService(Service):
     _service_type = "tusd"
     service_name = "tusd"
+    _service_list_allowed = True
     _graceful_method = GracefulMethod.NONE
     _command_template = "{settings[tusd_path]} -host={settings[host]} -port={settings[port]}" \
                         " -upload-dir={settings[upload_dir]}" \
-                        " -hooks-http={app_config[galaxy_infrastructure_url]}/api/upload/hooks" \
+                        " -hooks-http={settings[hooks_http]}" \
                         " -hooks-http-forward-headers=X-Api-Key,Cookie {settings[extra_args]}" \
                         " -hooks-enabled-events {settings[hooks_enabled_events]}"
 
     @validator("settings")
     def _validate_settings(cls, v, values):
-        if not values["config"].app_config["galaxy_infrastructure_url"]:
-            gravity.io.exception("To run tusd syou need to set galaxy_infrastructure_url in the galaxy section of galaxy.yml")
+        if v["hooks_http"].startswith("/"):
+            if not values["config"].app_config["galaxy_infrastructure_url"]:
+                gravity.io.exception("To run tusd you need to set galaxy_infrastructure_url in the galaxy section of galaxy.yml")
+            v["hooks_http"] = f'{values["config"].app_config["galaxy_infrastructure_url"]}{v["hooks_http"]}'
         return v
 
 
@@ -454,14 +455,18 @@ class GalaxyReportsService(Service):
                         " {command_arguments[url_prefix]}" \
                         " {settings[extra_args]}"
 
+    def _ensure_config_absolute_path(cls, v, values):
+        if "config_file" not in v:
+            gravity.io.exception("No reports config files specified.")
+        if not os.path.isabs(v["config_file"]):
+            v["config_file"] = os.path.join(os.path.dirname(values["config"].galaxy_config_file), v["config_file"])
+        return None
+
     @validator("settings")
     def _validate_settings(cls, v, values):
-        reports_config_file = v["config_file"]
-        if not os.path.isabs(reports_config_file):
-            reports_config_file = os.path.join(os.path.dirname(values["config"]["galaxy_config_file"]), reports_config_file)
-        if not os.path.exists(reports_config_file):
-            gravity.io.exception(f"Reports enabled but reports config file does not exist: {reports_config_file}")
-        v["config_file"] = reports_config_file
+        GalaxyReportsService._ensure_config_absolute_path(cls, v, values)
+        if not os.path.exists(v["config_file"]):
+            gravity.io.exception(f"Reports enabled but reports config file does not exist: {v['config_file']}")
         return v
 
 

@@ -97,7 +97,7 @@ class SupervisorProgram:
             if self._use_instance_name:
                 self.config_process_name = f"{service.service_name}%(process_num)d"
             else:
-                self.config_process_name = "%(process_num)d"
+                self.config_process_name = "%(program_name)s_%(process_num)d"
             self.config_instance_program_name += "_%(process_num)d"
             self.log_file_name_template += "_{instance_number}"
         self.log_file_name_template += ".log"
@@ -105,7 +105,7 @@ class SupervisorProgram:
     @property
     def config_file_name(self):
         service = self.service
-        return f"{service.config_type}_{service.service_type}_{service.service_name}.conf"
+        return f"{service.service_type}_{service.service_name}.conf"
 
     @property
     def config_program_name(self):
@@ -113,7 +113,7 @@ class SupervisorProgram:
         service = self.service
         if self._use_instance_name:
             instance_name = self.config.instance_name
-            return f"{instance_name}_{service.config_type}_{service.service_type}_{service.service_name}"
+            return f"{instance_name}_{service.service_type}_{service.service_name}"
         else:
             return service.service_name
 
@@ -161,9 +161,6 @@ class SupervisorProcessManager(BaseProcessManager):
         self.__supervisord_popen = None
         self.foreground = foreground
 
-        if not os.path.exists(self.supervisord_conf_dir):
-            os.makedirs(self.supervisord_conf_dir)
-
     @property
     def log_file(self):
         return os.path.join(self.supervisor_state_dir, "supervisord.log")
@@ -184,6 +181,8 @@ class SupervisorProcessManager(BaseProcessManager):
             supervisord_cmd.append('--nodaemon')
         if not self.__supervisord_is_running():
             # any time that supervisord is not running, let's rewrite supervisord.conf
+            if not os.path.exists(self.supervisord_conf_dir):
+                os.makedirs(self.supervisord_conf_dir)
             open(self.supervisord_conf_path, "w").write(SUPERVISORD_CONF_TEMPLATE.format(**format_vars))
             self.__supervisord_popen = subprocess.Popen(supervisord_cmd, env=os.environ)
             rc = self.__supervisord_popen.poll()
@@ -270,7 +269,8 @@ class SupervisorProcessManager(BaseProcessManager):
         template = SUPERVISORD_SERVICE_TEMPLATE
         contents = template.format(**format_vars)
         name = service.service_name if not self._use_instance_name else f"{instance_name}:{service.service_name}"
-        self._update_file(conf, contents, name, "service", force)
+        if self._update_file(conf, contents, name, "service", force):
+            self.supervisorctl('reread')
         return conf
 
     def __process_config(self, config, force):
@@ -284,13 +284,14 @@ class SupervisorProcessManager(BaseProcessManager):
         programs = []
         for service in config.services:
             self.__update_service(config, service, instance_conf_dir, instance_name, force)
-            programs.append(f"{instance_name}_{service.config_type}_{service.service_type}_{service.service_name}")
+            programs.append(f"{instance_name}_{service.service_type}_{service.service_name}")
 
         group_conf = os.path.join(self.supervisord_conf_dir, f"group_{instance_name}.conf")
         if self._use_instance_name:
             format_vars = {"instance_name": instance_name, "programs": ",".join(programs)}
             contents = SUPERVISORD_GROUP_TEMPLATE.format(**format_vars)
-            self._update_file(group_conf, contents, instance_name, "supervisor group", force)
+            if self._update_file(group_conf, contents, instance_name, "supervisor group", force):
+                self.supervisorctl('reread')
         elif os.path.exists(group_conf):
             os.unlink(group_conf)
 
@@ -437,7 +438,7 @@ def supervisor_program_names(service_name, instance_count, instance_number_start
         return [f"{instance_name}:{service_name}{i + instance_number_start}" for i in range(0, instance_count)]
 
     if instance_count > 1:
-        program_names = [f"{service_name}:{i + instance_number_start}" for i in range(0, instance_count)]
+        program_names = [f"{service_name}:{service_name}_{i + instance_number_start}" for i in range(0, instance_count)]
     else:
         program_names = [service_name]
 

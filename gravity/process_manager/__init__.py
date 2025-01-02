@@ -77,7 +77,7 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
         return os.environ["PATH"]
 
     def _service_program_name(self, instance_name, service):
-        return f"{instance_name}_{service.config_type}_{service.service_type}_{service.service_name}"
+        return f"{instance_name}_{service.service_type}_{service.service_name}"
 
     def _service_format_vars(self, config, service, pm_format_vars=None):
         pm_format_vars = pm_format_vars or {}
@@ -85,7 +85,6 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
         virtualenv_bin = shlex.quote(f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}') if virtualenv_dir else ""
 
         format_vars = {
-            "config_type": service.config_type,
             "server_name": service.service_name,
             "galaxy_umask": service.settings.get("umask") or config.umask,
             "galaxy_conf": config.galaxy_config_file,
@@ -275,6 +274,13 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
         cmd = shlex.split(format_vars["command"])
         env = {**dict(os.environ), **format_vars["environment"]}
         cwd = format_vars["galaxy_root"]
+
+        # ensure the data dir exists
+        try:
+            os.makedirs(config.gravity_data_dir)
+        except OSError as exc:
+            if exc.errno != errno.EEXIST:
+                raise
 
         gravity.io.info(f"Working directory: {cwd}")
         gravity.io.info(f"Executing: {print_env} {format_vars['command']}")

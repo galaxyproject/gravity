@@ -1,16 +1,14 @@
 import os
 from enum import Enum
-from typing import (
-    Any,
-    Dict,
-    List,
-    Optional,
-    Union,
-)
-from pydantic import BaseModel, BaseSettings, Extra, Field, validator
+from typing import Any, Dict, List, Optional, Union
+
+try:
+    from pydantic.v1 import BaseModel, BaseSettings, Extra, Field, validator
+except ImportError:
+    from pydantic import BaseModel, BaseSettings, Extra, Field, validator
 
 DEFAULT_INSTANCE_NAME = "_default_"
-GX_IT_PROXY_MIN_VERSION = "0.0.5"
+GX_IT_PROXY_MIN_VERSION = "0.0.6"
 
 
 def none_to_default(cls, v, field):
@@ -69,6 +67,14 @@ If enabled, you also need to set up your proxy as outlined in https://docs.galax
     upload_dir: str = Field(description="""
 Directory to store uploads in.
 Must match ``tus_upload_store`` setting in ``galaxy:`` section.
+""")
+    hooks_http: str = Field(default="/api/upload/hooks", description="""
+Value of tusd -hooks-httpd option
+
+the default of is suitable for using tusd for Galaxy uploads and should not be changed unless you are using tusd for
+other purposes such as Pulsar staging.
+
+The value of galaxy_infrastructure_url is automatically prepended if the option starts with a `/`
 """)
     hooks_enabled_events: str = Field(default="pre-create", description="""
 Comma-separated string of enabled tusd hooks.
@@ -379,7 +385,7 @@ Configuration for Gunicorn. Can be a list to run multiple gunicorns for rolling 
     gx_it_proxy: GxItProxySettings = Field(default={}, description="Configuration for gx-it-proxy.")
     # The default value for tusd is a little awkward, but is a convenient way to ensure that if
     # a user enables tusd that they most also set upload_dir, and yet have the default be valid.
-    tusd: TusdSettings = Field(default={'upload_dir': ''}, description="""
+    tusd: Union[List[TusdSettings], TusdSettings] = Field(default={'upload_dir': ''}, description="""
 Configuration for tusd server (https://github.com/tus/tusd).
 The ``tusd`` binary must be installed manually and made available on PATH (e.g in galaxy's .venv/bin directory).
 """)

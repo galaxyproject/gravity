@@ -108,7 +108,7 @@ def service_conf_dir(state_dir, process_manager_name):
 def service_conf_file(instance_name, process_manager_name, service_name, service_type=None):
     service_type = service_type or service_name
     if process_manager_name == 'supervisor':
-        return f'galaxy_{service_type}_{service_name}.conf'
+        return f'{service_type}_{service_name}.conf'
     elif process_manager_name == 'systemd':
         return f'galaxy-{instance_name}-{service_name}.service'
     raise Exception(f"Invalid process manager name: {process_manager_name}")
@@ -330,7 +330,7 @@ def test_gxit_handler(default_config_manager, galaxy_yml, gxit_config, process_m
         sessions = "database/interactivetools_map.sqlite"
         gxit_config_contents = gxit_config_path.read_text()
         assert f'npx gx-it-proxy@>={GX_IT_PROXY_MIN_VERSION} --ip localhost --port {gxit_port} --sessions {sessions}' in gxit_config_contents
-        assert '--proxyPathPrefix /interactivetool/access/interactivetoolentrypoint' in gxit_config_contents
+        assert '--proxyPathPrefix /interactivetool/ep' in gxit_config_contents
 
 
 @pytest.mark.parametrize('process_manager_name', ['supervisor', 'systemd'])
@@ -344,7 +344,7 @@ def test_gxit_handler_path_prefix(default_config_manager, galaxy_yml, gxit_confi
         pm.update()
         gxit_config_path = service_conf_path(state_dir, process_manager_name, 'gx-it-proxy')
         assert gxit_config_path.exists()
-        proxy_path_prefix = f'{gxit_base_path}{gxit_prefix}/access/interactivetoolentrypoint'
+        proxy_path_prefix = f'{gxit_base_path}{gxit_prefix}/ep'
         assert f'--proxyPathPrefix {proxy_path_prefix}' in gxit_config_path.read_text()
 
 
@@ -489,8 +489,8 @@ def test_override_umask(galaxy_yml, default_config_manager):
 
 def test_supervisor_program_names():
     assert supervisor_program_names("gunicorn", 1, 0) == ["gunicorn"]
-    assert supervisor_program_names("gunicorn", 2, 0) == ["gunicorn:0", "gunicorn:1"]
-    assert supervisor_program_names("gunicorn", 2, 8080) == ["gunicorn:8080", "gunicorn:8081"]
+    assert supervisor_program_names("gunicorn", 2, 0) == ["gunicorn:gunicorn_0", "gunicorn:gunicorn_1"]
+    assert supervisor_program_names("gunicorn", 2, 8080) == ["gunicorn:gunicorn_8080", "gunicorn:gunicorn_8081"]
     assert supervisor_program_names("gunicorn", 1, 0, instance_name="main") == ["main:gunicorn"]
     assert supervisor_program_names("gunicorn", 2, 0, instance_name="main") == ["main:gunicorn0", "main:gunicorn1"]
     assert supervisor_program_names("gunicorn", 2, 8080, instance_name="main") == ["main:gunicorn8080", "main:gunicorn8081"]

@@ -4,8 +4,7 @@ import ast
 import os
 import re
 
-from setuptools import setup, find_packages
-
+from setuptools import find_packages, setup
 
 with open("README.rst") as file:
     long_description = file.read()
@@ -36,13 +35,13 @@ setup(
     author_email="team@galaxyproject.org",
     license="MIT",
     keywords="gravity galaxy",
-    python_requires=">=3.6",
+    python_requires=">=3.7",
     install_requires=[
         "Click",
         "supervisor",
         "pyyaml",
         "packaging",
-        "pydantic",
+        "pydantic<3",  # pydantic.v1 import will be removed in v3
         "jsonref",
         "requests",
         "requests-unixsocket",
@@ -57,10 +56,10 @@ setup(
         "Natural Language :: English",
         "Operating System :: POSIX",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.6",
-        "Programming Language :: Python :: 3.7",
         "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
     ],
     zip_safe=False,
 )

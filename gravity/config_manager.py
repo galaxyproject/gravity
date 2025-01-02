@@ -7,15 +7,15 @@ import os
 import xml.etree.ElementTree as elementtree
 from typing import Union
 
-from pydantic import ValidationError
+try:
+    from pydantic.v1 import ValidationError
+except ImportError:
+    from pydantic import ValidationError
 from yaml import safe_load
 
 import gravity.io
 from gravity.settings import Settings
-from gravity.state import (
-    ConfigFile,
-    service_for_service_type,
-)
+from gravity.state import ConfigFile, service_for_service_type
 from gravity.util import recursive_update
 
 log = logging.getLogger(__name__)
@@ -170,7 +170,6 @@ class ConfigManager(object):
                 app_config_dict[app_key] = app_config[app_key]
 
         config = ConfigFile(
-            config_type=self.galaxy_server_config_section,
             app_config=app_config_dict,
             gravity_config_file=gravity_config_file,
             galaxy_config_file=galaxy_config_file,

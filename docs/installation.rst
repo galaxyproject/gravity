@@ -277,7 +277,7 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
       # enable: false
 
       # gx-it-proxy version
-      # version: '>=0.0.5'
+      # version: '>=0.0.6'
 
       # Public-facing IP of the proxy
       # ip: localhost
