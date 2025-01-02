@@ -27,7 +27,7 @@ def user_mode_option():
     return click.option(
         "--user/--no-user",
         default=None,
-        help="Use `systemctl/journalctl --user` (default: automatic depeending on whether run as root)",
+        help="Use `systemctl/journalctl --user` (default: automatic depending on whether run as root)",
     )
 
 
