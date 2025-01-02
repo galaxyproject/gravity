@@ -397,7 +397,10 @@ class GalaxyGxItProxyService(Service):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # override from Galaxy config if set
-        self.settings["sessions"] = self.config.app_config.get("interactivetools_map", self.settings["sessions"])
+        self.settings["sessions"] = (
+            self.config.app_config.get("interactivetoolsproxy_map") or
+            self.config.app_config.get("interactivetools_map", self.settings["sessions"])
+        )
         # this can only be set in Galaxy config
         it_base_path = self.config.app_config.get("interactivetools_base_path", "/")
         it_base_path = "/" + f"/{it_base_path.strip('/')}/".lstrip("/")

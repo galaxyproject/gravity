@@ -250,9 +250,9 @@ class GxItProxySettings(BaseModel):
     sessions: str = Field(
         default="database/interactivetools_map.sqlite",
         description="""
-Routes file to monitor.
-Should be set to the same path as ``interactivetools_map`` in the ``galaxy:`` section. This is ignored if
-``interactivetools_map`` is set.
+Database to monitor.
+Should be set to the same value as ``interactivetools_map`` (or ``interactivetoolsproxy_map``) in the ``galaxy:`` section. This is
+ignored if either ``interactivetools_map`` or ``interactivetoolsproxy_map`` are set.
 """)
     verbose: bool = Field(default=True, description="Include verbose messages in gx-it-proxy")
     forward_ip: Optional[str] = Field(

@@ -285,9 +285,9 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
       # Public-facing port of the proxy
       # port: 4002
 
-      # Routes file to monitor.
-      # Should be set to the same path as ``interactivetools_map`` in the ``galaxy:`` section. This is ignored if
-      # ``interactivetools_map is set``.
+      # Database to monitor.
+      # Should be set to the same value as ``interactivetools_map`` (or ``interactivetoolsproxy_map``) in the ``galaxy:`` section. This is
+      # ignored if either ``interactivetools_map`` or ``interactivetoolsproxy_map`` are set.
       # sessions: database/interactivetools_map.sqlite
 
       # Include verbose messages in gx-it-proxy
