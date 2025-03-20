@@ -28,7 +28,7 @@ PartOf={systemd_target}
 UMask={galaxy_umask}
 Type=simple
 {systemd_user_group}
-WorkingDirectory={galaxy_root}
+{working_directory}
 TimeoutStartSec={settings[start_timeout]}
 TimeoutStopSec={settings[stop_timeout]}
 ExecStart={command}
@@ -250,6 +250,8 @@ class SystemdProcessManager(BaseProcessManager):
         if service.graceful_method == GracefulMethod.SIGHUP:
             exec_reload = "ExecReload=/bin/kill -HUP $MAINPID"
 
+        # Check if working directory needs to be set
+
         # systemd-specific format vars
         systemd_format_vars = {
             "virtualenv_bin": shlex.quote(f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}'),
@@ -259,6 +261,7 @@ class SystemdProcessManager(BaseProcessManager):
             "systemd_memory_limit": memory_limit or "",
             "systemd_description": systemd_service.description,
             "systemd_target": self.__target_unit_name(config),
+            "working_directory": f"WorkingDirectory={config.galaxy_root}" if service.needs_working_directory() else "",
         }
         if not self.user_mode:
             systemd_format_vars["systemd_user_group"] = f"User={config.galaxy_user}"

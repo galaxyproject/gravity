@@ -297,7 +297,6 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
         gravity.io.info(f"Executing: {print_env} {format_vars['command']}")
 
         if not no_exec:
-            os.chdir(cwd)
             os.execvpe(cmd[0], cmd, env)
 
 

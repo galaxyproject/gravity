@@ -21,7 +21,6 @@ from gravity.settings import AppServer, ProcessManager, ServiceCommandStyle
 from gravity.util import http_check
 
 DEFAULT_GALAXY_ENVIRONMENT = {
-    "PYTHONPATH": "lib",
     "GALAXY_CONFIG_FILE": "{galaxy_conf}",
 }
 CELERY_BEAT_DB_FILENAME = "celery-beat-schedule"
@@ -176,6 +175,11 @@ class Service(BaseModel):
     @property
     def environment(self):
         environment = self.default_environment
+
+        # Add PYTHONPATH=lib only if galaxy_root has a lib/galaxy directory
+        if self._needs_pythonpath_lib():
+            environment["PYTHONPATH"] = "lib"
+
         if self.config.virtualenv:
             environment["VIRTUAL_ENV"] = self.config.virtualenv
         environment.update(self.settings.get("environment") or {})
@@ -200,6 +204,23 @@ class Service(BaseModel):
     def __eq__(self, other):
         return self.service_type == other.service_type and self.service_name == other.service_name
 
+    def _needs_pythonpath_lib(self):
+        """Check if we need to add PYTHONPATH=lib based on galaxy_root structure.
+
+        Returns True if the galaxy_root contains a lib/galaxy directory,
+        indicating it's a Python package location.
+        """
+        galaxy_package_path = os.path.join(self.config.galaxy_root, "lib", "galaxy")
+        return os.path.exists(galaxy_package_path) and os.path.isdir(galaxy_package_path)
+
+    def needs_working_directory(self):
+        """Check if we need to set working directory to galaxy_root.
+
+        Working directory should be set to galaxy_root only if it contains
+        a lib/galaxy directory, indicating it's a Python package location.
+        """
+        return self._needs_pythonpath_lib()
+
     def get_command_arguments(self, format_vars):
         """Convert settings into their command line arguments."""
         rval = {}
@@ -211,6 +232,14 @@ class Service(BaseModel):
                     rval[setting] = ""
             else:
                 rval[setting] = value
+
+        # Add pythonpath to format_vars
+        if "pythonpath" not in format_vars:
+            if self._needs_pythonpath_lib():
+                format_vars['pythonpath'] = " --pythonpath lib"
+            else:
+                format_vars['pythonpath'] = ""
+
         return rval
 
     def dict(self, *args, **kwargs):
@@ -276,7 +305,7 @@ class GalaxyGunicornService(Service):
     }
     _command_template = "{virtualenv_bin}gunicorn 'galaxy.webapps.galaxy.fast_factory:factory()'" \
                         " --timeout {settings[timeout]}" \
-                        " --pythonpath lib" \
+                        "{pythonpath}" \
                         " -k galaxy.webapps.galaxy.workers.Worker" \
                         " -b {settings[bind]}" \
                         " --workers={settings[workers]}" \
@@ -302,6 +331,11 @@ class GalaxyGunicornService(Service):
     def environment(self):
         # Works around https://github.com/galaxyproject/galaxy/issues/11821
         environment = self.default_environment
+
+        # Add PYTHONPATH=lib only if galaxy_root has a lib/galaxy directory
+        if self._needs_pythonpath_lib():
+            environment["PYTHONPATH"] = "lib"
+
         if sys.platform == 'darwin':
             environment["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
         if self.config.virtualenv:
@@ -336,7 +370,7 @@ class GalaxyUnicornHerderService(Service):
     _command_template = "{virtualenv_bin}unicornherder --" \
                         " 'galaxy.webapps.galaxy.fast_factory:factory()'" \
                         " --timeout {settings[timeout]}" \
-                        " --pythonpath lib" \
+                        "{pythonpath}" \
                         " -k galaxy.webapps.galaxy.workers.Worker" \
                         " -b {settings[bind]}" \
                         " --workers={settings[workers]}" \
@@ -466,7 +500,6 @@ class GalaxyReportsService(Service):
     service_name = "reports"
     _graceful_method = GracefulMethod.SIGHUP
     _default_environment = {
-        "PYTHONPATH": "lib",
         "GALAXY_REPORTS_CONFIG": "{settings[config_file]}",
     }
     _command_arguments = {
@@ -474,7 +507,7 @@ class GalaxyReportsService(Service):
     }
     _command_template = "{virtualenv_bin}gunicorn 'galaxy.webapps.reports.fast_factory:factory()'" \
                         " --timeout {settings[timeout]}" \
-                        " --pythonpath lib" \
+                        "{pythonpath}" \
                         " -k uvicorn.workers.UvicornWorker" \
                         " -b {settings[bind]}" \
                         " --workers={settings[workers]}" \

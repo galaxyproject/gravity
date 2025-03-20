@@ -47,7 +47,7 @@ SUPERVISORD_SERVICE_TEMPLATE = """;
 
 [program:{supervisor_program_name}]
 command         = {command}
-directory       = {galaxy_root}
+{directory_line}
 umask           = {galaxy_umask}
 autostart       = true
 autorestart     = true
@@ -262,6 +262,12 @@ class SupervisorProcessManager(BaseProcessManager):
             "supervisor_process_name": program.config_process_name,
             "supervisor_numprocs_start": program.config_numprocs_start,
         }
+
+        # Add directory line only if needed
+        if service.needs_working_directory():
+            supervisor_format_vars["directory_line"] = f"directory       = {config.galaxy_root}"
+        else:
+            supervisor_format_vars["directory_line"] = ""
 
         format_vars = self._service_format_vars(config, service, supervisor_format_vars)
 
