@@ -35,8 +35,16 @@ OPTIONAL_APP_KEYS = (
 
 
 @contextlib.contextmanager
-def config_manager(config_file=None, state_dir=None, user_mode=None):
-    yield ConfigManager(config_file=config_file, state_dir=state_dir, user_mode=user_mode)
+def config_manager(config_file=None, state_dir=None, data_dir=None, user_mode=None):
+    """Context manager for config manager.
+
+    Args:
+        config_file: Configuration file path
+        state_dir: Directory where process manager state files are stored
+        data_dir: Directory where application data is stored
+        user_mode: Whether to run in user mode (for systemd)
+    """
+    yield ConfigManager(config_file=config_file, state_dir=state_dir, data_dir=data_dir, user_mode=user_mode)
 
 
 class ConfigManager(object):
@@ -44,15 +52,20 @@ class ConfigManager(object):
     gravity_config_section = "gravity"
     app_config_file_option = "galaxy_config_file"
 
-    def __init__(self, config_file=None, state_dir=None, user_mode=None):
+    def __init__(self, config_file=None, state_dir=None, data_dir=None, user_mode=None):
         self.__configs = {}
         self.state_dir = None
+        self.data_dir = None
         if state_dir is not None:
             # convert from pathlib.Path
             self.state_dir = str(state_dir)
+        if data_dir is not None:
+            # convert from pathlib.Path
+            self.data_dir = str(data_dir)
         self.user_mode = user_mode
 
         gravity.io.debug(f"Gravity state dir: {state_dir}")
+        gravity.io.debug(f"Gravity data dir: {data_dir}")
 
         if config_file:
             for cf in config_file:
@@ -156,6 +169,7 @@ class ConfigManager(object):
         galaxy_root = gravity_settings.galaxy_root or app_config.get("root")
 
         # TODO: document that the default state_dir is data_dir/gravity and that setting state_dir overrides this
+        app_data_dir = self.data_dir or app_config.get("data_dir")
         gravity_data_dir = self.state_dir or os.path.join(app_config.get("data_dir", "database"), "gravity")
         log_dir = gravity_settings.log_dir or os.path.join(gravity_data_dir, "log")
 
@@ -164,6 +178,8 @@ class ConfigManager(object):
             "galaxy_infrastructure_url": app_config.get("galaxy_infrastructure_url", "").rstrip("/"),
             "interactivetools_enable": app_config.get("interactivetools_enable"),
         }
+        if app_data_dir:
+            app_config_dict["data_dir"] = app_data_dir
 
         # some things should only be included if set
         for app_key in OPTIONAL_APP_KEYS:

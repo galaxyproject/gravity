@@ -65,14 +65,16 @@ class GravityCLI(click.MultiCommand):
 @options.debug_option()
 @options.config_file_option()
 @options.state_dir_option()
+@options.data_dir_option()
 @options.no_log_option()
 @click.pass_context
-def galaxy(ctx, debug, config_file, state_dir, quiet):
+def galaxy(ctx, debug, config_file, state_dir, data_dir, quiet):
     """Run Galaxy server in the foreground"""
     set_debug(debug)
     ctx.cm_kwargs = {
         "config_file": config_file,
         "state_dir": state_dir,
+        "data_dir": data_dir,
     }
     mod = __import__("gravity.commands.cmd_start", None, None, ["cli"])
     return ctx.invoke(mod.cli, foreground=True, quiet=quiet)
@@ -83,13 +85,15 @@ def galaxy(ctx, debug, config_file, state_dir, quiet):
 @options.debug_option()
 @options.config_file_option()
 @options.state_dir_option()
+@options.data_dir_option()
 @options.user_mode_option()
 @click.pass_context
-def galaxyctl(ctx, debug, config_file, state_dir, user):
+def galaxyctl(ctx, debug, config_file, state_dir, data_dir, user):
     """Manage Galaxy server configurations and processes."""
     set_debug(debug)
     ctx.cm_kwargs = {
         "config_file": config_file,
         "state_dir": state_dir,
+        "data_dir": data_dir,
         "user_mode": user,
     }

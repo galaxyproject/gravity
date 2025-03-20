@@ -18,8 +18,18 @@ from gravity.util import which
 
 
 @contextlib.contextmanager
-def process_manager(*args, **kwargs):
-    pm = ProcessManagerRouter(*args, **kwargs)
+def process_manager(state_dir=None, config_file=None, data_dir=None, config_manager=None, user_mode=None, **kwargs):
+    """Context manager for process managers.
+
+    Args:
+        state_dir: Directory where process manager state files are stored
+        config_file: Configuration file path
+        data_dir: Directory where application data is stored
+        config_manager: Optional pre-initialized config manager
+        user_mode: Whether to run in user mode (for systemd)
+    """
+    pm = ProcessManagerRouter(state_dir=state_dir, config_file=config_file, data_dir=data_dir,
+                              config_manager=config_manager, user_mode=user_mode, **kwargs)
     try:
         yield pm
     finally:
@@ -65,8 +75,8 @@ route_to_all = partial(_route, all_process_managers=True)
 
 
 class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
-    def __init__(self, state_dir=None, config_file=None, config_manager=None, user_mode=None):
-        self.config_manager = config_manager or ConfigManager(state_dir=state_dir, config_file=config_file, user_mode=user_mode)
+    def __init__(self, state_dir=None, config_file=None, data_dir=None, config_manager=None, user_mode=None):
+        self.config_manager = config_manager or ConfigManager(state_dir=state_dir, config_file=config_file, data_dir=data_dir, user_mode=user_mode)
         self.tail = which("tail")
 
     @abstractmethod
@@ -91,6 +101,7 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
             "galaxy_root": config.galaxy_root,
             "virtualenv_bin": virtualenv_bin,
             "gravity_data_dir": shlex.quote(config.gravity_data_dir),
+            "data_dir": shlex.quote(config.app_config.get("data_dir", "")),
             "app_config": config.app_config,
         }
 
@@ -291,8 +302,8 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
 
 
 class ProcessManagerRouter:
-    def __init__(self, state_dir=None, config_file=None, config_manager=None, user_mode=None, **kwargs):
-        self.config_manager = config_manager or ConfigManager(state_dir=state_dir, config_file=config_file, user_mode=user_mode)
+    def __init__(self, state_dir=None, config_file=None, data_dir=None, config_manager=None, user_mode=None, **kwargs):
+        self.config_manager = config_manager or ConfigManager(state_dir=state_dir, config_file=config_file, data_dir=data_dir, user_mode=user_mode)
         self._load_pm_modules(**kwargs)
         self._process_executor = ProcessExecutor(config_manager=self.config_manager)
 

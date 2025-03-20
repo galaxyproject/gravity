@@ -13,6 +13,12 @@ def state_dir_option():
     )
 
 
+def data_dir_option():
+    return click.option(
+        "--data-dir", type=click.Path(file_okay=False, writable=True, resolve_path=True), help="Directory where application data will be stored."
+    )
+
+
 def config_file_option():
     return click.option(
         "-c",

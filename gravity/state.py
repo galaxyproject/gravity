@@ -8,6 +8,7 @@ import hashlib
 import os
 import sys
 import time
+import importlib.util
 from typing import Any, Dict, List, Optional
 
 try:
@@ -29,6 +30,12 @@ CELERY_BEAT_DB_FILENAME = "celery-beat-schedule"
 def relative_to_galaxy_root(cls, v, values):
     if not os.path.isabs(v):
         v = os.path.abspath(os.path.join(values["galaxy_root"], v))
+    return v
+
+
+def relative_to_data_dir(cls, v, values):
+    if not os.path.isabs(v):
+        v = os.path.abspath(os.path.join(values["app_config"]["data_dir"], v))
     return v
 
 
@@ -77,15 +84,16 @@ class ConfigFile(BaseModel):
         if v is None:
             galaxy_config_file = values["galaxy_config_file"]
             if os.environ.get("GALAXY_ROOT_DIR"):
-                v = os.path.abspath(os.environ["GALAXY_ROOT_DIR"])
-            elif os.path.exists(os.path.join(os.path.dirname(galaxy_config_file), os.pardir, "lib", "galaxy")):
-                v = os.path.abspath(os.path.join(os.path.dirname(galaxy_config_file), os.pardir))
-            elif galaxy_config_file.endswith(os.path.join("galaxy", "config", "sample", "galaxy.yml.sample")):
-                v = os.path.abspath(os.path.join(os.path.dirname(galaxy_config_file), os.pardir, os.pardir, os.pardir, os.pardir))
-            else:
-                gravity.io.exception(
-                    "Cannot locate Galaxy root directory: set $GALAXY_ROOT_DIR, the Gravity `galaxy_root` option, or "
-                    "`root' in the Galaxy config")
+                return os.path.abspath(os.environ["GALAXY_ROOT_DIR"])
+            if os.path.exists(os.path.join(os.path.dirname(galaxy_config_file), os.pardir, "lib", "galaxy")):
+                return os.path.abspath(os.path.join(os.path.dirname(galaxy_config_file), os.pardir))
+            if galaxy_config_file.endswith(os.path.join("galaxy", "config", "sample", "galaxy.yml.sample")):
+                return os.path.abspath(os.path.join(os.path.dirname(galaxy_config_file), os.pardir, os.pardir, os.pardir, os.pardir))
+            if galaxy_spec := importlib.util.find_spec("galaxy"):
+                return galaxy_spec.origin
+            gravity.io.exception(
+                "Cannot locate Galaxy root directory: set $GALAXY_ROOT_DIR, the Gravity `galaxy_root` option, or "
+                "`root' in the Galaxy config")
         return v
 
     _validate_gravity_data_dir = validator("gravity_data_dir", allow_reuse=True)(relative_to_galaxy_root)
@@ -372,6 +380,15 @@ class GalaxyCeleryBeatService(Service):
                         " --loglevel {settings[loglevel]}" \
                         " --schedule {gravity_data_dir}/" + CELERY_BEAT_DB_FILENAME
 
+    def get_command_arguments(self, format_vars):
+        # Override to use data_dir if provided
+        args = super().get_command_arguments(format_vars)
+        # If we have a data_dir, we can use it for schedule file location
+        data_dir = self.config.app_config.get("data_dir")
+        if data_dir:
+            format_vars["data_dir"] = data_dir
+        return args
+
 
 class GalaxyGxItProxyService(Service):
     _service_type = "gx-it-proxy"
@@ -401,6 +418,11 @@ class GalaxyGxItProxyService(Service):
             self.config.app_config.get("interactivetoolsproxy_map") or
             self.config.app_config.get("interactivetools_map", self.settings["sessions"])
         )
+
+        # If sessions path is not absolute and data_dir is set, make it relative to data_dir
+        if not os.path.isabs(self.settings["sessions"]) and "data_dir" in self.config.app_config:
+            self.settings["sessions"] = os.path.join(self.config.app_config["data_dir"], self.settings["sessions"])
+
         # this can only be set in Galaxy config
         it_base_path = self.config.app_config.get("interactivetools_base_path", "/")
         it_base_path = "/" + f"/{it_base_path.strip('/')}/".lstrip("/")
@@ -431,6 +453,11 @@ class GalaxyTUSDService(Service):
             if not values["config"].app_config["galaxy_infrastructure_url"]:
                 gravity.io.exception("To run tusd you need to set galaxy_infrastructure_url in the galaxy section of galaxy.yml")
             v["hooks_http"] = f'{values["config"].app_config["galaxy_infrastructure_url"]}{v["hooks_http"]}'
+
+        # If upload_dir is not an absolute path and data_dir is set, make it relative to data_dir
+        if not os.path.isabs(v["upload_dir"]) and "data_dir" in values["config"].app_config:
+            v["upload_dir"] = os.path.join(values["config"].app_config["data_dir"], v["upload_dir"])
+
         return v
 
 
