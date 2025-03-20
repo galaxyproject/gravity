@@ -89,8 +89,8 @@ class ConfigFile(BaseModel):
                 return os.path.abspath(os.path.join(os.path.dirname(galaxy_config_file), os.pardir))
             if galaxy_config_file.endswith(os.path.join("galaxy", "config", "sample", "galaxy.yml.sample")):
                 return os.path.abspath(os.path.join(os.path.dirname(galaxy_config_file), os.pardir, os.pardir, os.pardir, os.pardir))
-            if galaxy_spec := importlib.util.find_spec("galaxy"):
-                return galaxy_spec.origin
+            if (galaxy_spec := importlib.util.find_spec("galaxy")) and galaxy_spec.origin:
+                return os.path.dirname(galaxy_spec.origin)
             gravity.io.exception(
                 "Cannot locate Galaxy root directory: set $GALAXY_ROOT_DIR, the Gravity `galaxy_root` option, or "
                 "`root' in the Galaxy config")
