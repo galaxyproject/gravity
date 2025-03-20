@@ -226,6 +226,13 @@ class Service(BaseModel):
         rval = {}
         for setting, value in self.settings.items():
             if setting in self.command_arguments:
+                # For gunicorn, skip preload if there's only one worker
+                if setting == "preload" and hasattr(self, "_service_type") and self._service_type in ("gunicorn", "unicornherder"):
+                    workers = self.settings.get("workers", 1)
+                    if workers <= 1:
+                        rval[setting] = ""
+                        continue
+
                 if value:
                     rval[setting] = self.command_arguments[setting].format(**format_vars)
                 else:
@@ -317,7 +324,8 @@ class GalaxyGunicornService(Service):
     def _normalize_settings(cls, v, values):
         # TODO: should be copy?
         if v["preload"] is None:
-            v["preload"] = True
+            # Only use preload if we have more than 1 worker
+            v["preload"] = v["workers"] > 1
         return v
 
     @property

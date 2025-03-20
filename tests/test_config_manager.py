@@ -23,7 +23,7 @@ def test_load_defaults(galaxy_yml, galaxy_root_dir, state_dir, default_config_ma
     assert gunicorn_settings['workers'] == default_settings.gunicorn.workers
     assert gunicorn_settings['timeout'] == default_settings.gunicorn.timeout
     assert gunicorn_settings['extra_args'] == default_settings.gunicorn.extra_args
-    assert gunicorn_settings['preload'] is True
+    assert gunicorn_settings['preload'] is False
     celery_settings = config.get_service('celery').settings
     assert celery_settings == default_settings.celery.dict()
     with pytest.raises(IndexError):
@@ -92,6 +92,11 @@ def test_auto_load_root_dir(galaxy_root_dir, monkeypatch):
 
 
 def test_gunicorn_graceful_method_preload(galaxy_yml, default_config_manager):
+    # Using preload by default if we have more than 1 worker
+    galaxy_yml.write(json.dumps(
+        {'galaxy': None, 'gravity': {
+            'gunicorn': {'workers': 2}}}
+    ))
     default_config_manager.load_config_file(str(galaxy_yml))
     config = default_config_manager.get_config()
     graceful_method = config.get_service('gunicorn').graceful_method
