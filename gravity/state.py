@@ -11,6 +11,12 @@ import time
 from typing import Any, Dict, List, Optional
 
 try:
+    import galaxy.config
+    import galaxy.version
+    galaxy_installed = True
+except ImportError:
+    galaxy_installed = False
+try:
     from pydantic.v1 import BaseModel, validator
 except ImportError:
     from pydantic import BaseModel, validator
@@ -66,11 +72,14 @@ class ConfigFile(BaseModel):
 
     @property
     def galaxy_version(self):
-        galaxy_version_file = os.path.join(self.galaxy_root, "lib", "galaxy", "version.py")
-        with open(galaxy_version_file) as fh:
-            locs = {}
-            exec(fh.read(), {}, locs)
-            return locs["VERSION"]
+        if galaxy_installed:
+            return galaxy.version.VERSION
+        else:
+            galaxy_version_file = os.path.join(self.galaxy_root, "lib", "galaxy", "version.py")
+            with open(galaxy_version_file) as fh:
+                locs = {}
+                exec(fh.read(), {}, locs)
+                return locs["VERSION"]
 
     @validator("galaxy_root")
     def _galaxy_root_required(cls, v, values):
@@ -78,6 +87,9 @@ class ConfigFile(BaseModel):
             galaxy_config_file = values["galaxy_config_file"]
             if os.environ.get("GALAXY_ROOT_DIR"):
                 v = os.path.abspath(os.environ["GALAXY_ROOT_DIR"])
+            elif galaxy_installed:
+                # FIXME: probably should be data_dir in config
+                v = os.getcwd()
             elif os.path.exists(os.path.join(os.path.dirname(galaxy_config_file), os.pardir, "lib", "galaxy")):
                 v = os.path.abspath(os.path.join(os.path.dirname(galaxy_config_file), os.pardir))
             elif galaxy_config_file.endswith(os.path.join("galaxy", "config", "sample", "galaxy.yml.sample")):
