@@ -2,7 +2,6 @@
 """
 import multiprocessing
 
-import gravity.io
 from gravity.process_manager import BaseProcessManager, ProcessExecutor
 from gravity.settings import ProcessManager
 

@@ -423,8 +423,6 @@ See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defi
         if v is None:
             if os.geteuid() == 0:
                 v = ProcessManager.systemd.value
-            #else:
-            #    v = ProcessManager.supervisor.value
         return v
 
     # disable service instances unless command style is gravity
