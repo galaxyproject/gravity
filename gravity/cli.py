@@ -67,8 +67,9 @@ class GravityCLI(click.MultiCommand):
 @options.config_file_option()
 @options.state_dir_option()
 @options.no_log_option()
+@options.single_user_option()
 @click.pass_context
-def galaxy(ctx, debug, config_file, state_dir, quiet):
+def galaxy(ctx, debug, config_file, state_dir, quiet, single_user):
     """Run Galaxy server in the foreground"""
     set_debug(debug)
     ctx.cm_kwargs = {
@@ -76,6 +77,9 @@ def galaxy(ctx, debug, config_file, state_dir, quiet):
         "state_dir": state_dir,
         "process_manager": ProcessManager.multiprocessing.value,
     }
+    if single_user:
+        os.environ["GALAXY_CONFIG_SINGLE_USER"] = single_user
+        os.environ["GALAXY_CONFIG_ADMIN_USERS"] = single_user
     mod = __import__("gravity.commands.cmd_start", None, None, ["cli"])
     return ctx.invoke(mod.cli, foreground=True, quiet=quiet)
 

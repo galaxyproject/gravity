@@ -31,6 +31,15 @@ def user_mode_option():
     )
 
 
+def single_user_option():
+    return click.option(
+        "-s",
+        "--single-user",
+        default=None,
+        help="Run Galaxy in single user mode with the specified account email"
+    )
+
+
 def no_log_option():
     return click.option(
         '--quiet', is_flag=True, default=False, help="Only output supervisor logs, do not include process logs"
