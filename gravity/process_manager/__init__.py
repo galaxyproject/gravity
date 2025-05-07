@@ -112,7 +112,9 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
                 path = environment.get("PATH", self._service_default_path())
                 environment["PATH"] = ":".join([virtualenv_bin, path])
         else:
-            config_file = shlex.quote(config.gravity_config_file)
+            config_file_option = ""
+            if config.gravity_config_file:
+                config_file_option = f" --config-file {shlex.quote(config.gravity_config_file)}"
             # is there a click way to do this?
             galaxyctl = sys.argv[0]
             if galaxyctl.endswith(f"{os.path.sep}galaxy"):
@@ -124,7 +126,7 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
             instance_number_opt = ""
             if service.count > 1:
                 instance_number_opt = f" --service-instance {pm_format_vars['instance_number']}"
-            format_vars["command"] = f"{galaxyctl} --config-file {config_file} exec{instance_number_opt} {config.instance_name} {service.service_name}"
+            format_vars["command"] = f"{galaxyctl}{config_file_option} exec{instance_number_opt} {config.instance_name} {service.service_name}"
             environment = {}
         format_vars["environment"] = self._service_environment_formatter(environment, format_vars)
 

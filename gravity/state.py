@@ -47,8 +47,8 @@ class GracefulMethod(str, enum.Enum):
 
 class ConfigFile(BaseModel):
     app_config: Dict[str, Any]
-    gravity_config_file: str
-    galaxy_config_file: str
+    gravity_config_file: Optional[str]
+    galaxy_config_file: Optional[str]
     instance_name: str
     process_manager: ProcessManager
     service_command_style: ServiceCommandStyle
@@ -84,7 +84,7 @@ class ConfigFile(BaseModel):
     @validator("galaxy_root")
     def _galaxy_root_required(cls, v, values):
         if v is None:
-            galaxy_config_file = values["galaxy_config_file"]
+            galaxy_config_file = values.get("galaxy_config_file")
             if os.environ.get("GALAXY_ROOT_DIR"):
                 v = os.path.abspath(os.environ["GALAXY_ROOT_DIR"])
             elif galaxy_installed:

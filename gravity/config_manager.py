@@ -15,7 +15,11 @@ from yaml import safe_load
 
 import gravity.io
 from gravity.settings import Settings
-from gravity.state import ConfigFile, service_for_service_type
+from gravity.state import (
+    ConfigFile,
+    service_for_service_type,
+    galaxy_installed,
+)
 from gravity.util import recursive_update
 
 log = logging.getLogger(__name__)
@@ -151,7 +155,7 @@ class ConfigManager(object):
                 f"{self.__configs[gravity_settings.instance_name].gravity_config_file}")
             gravity.io.exception(f"Duplicate instance name {gravity_settings.instance_name}, instance names must be unique")
 
-        gravity_config_file = gravity_config_dict["__file__"]
+        gravity_config_file = gravity_config_dict.get("__file__")
         galaxy_config_file = app_config.get("__file__", gravity_config_file)
         galaxy_root = gravity_settings.galaxy_root or app_config.get("root")
 
@@ -212,7 +216,7 @@ class ConfigManager(object):
             job_config = app_config["job_config"]
         else:
             # config in an external file
-            config_dir = os.path.dirname(config.galaxy_config_file)
+            config_dir = os.path.dirname(config.galaxy_config_file or os.getcwd())
             job_config = app_config.get("job_config_file")
             if not job_config:
                 for job_config in [os.path.abspath(os.path.join(config_dir, c)) for c in DEFAULT_JOB_CONFIG_FILES]:
@@ -383,9 +387,15 @@ class ConfigManager(object):
                 *glob.glob("/etc/galaxy/gravity.d/*.yaml"),
             )
         else:
-            configs = (os.path.join("config", "galaxy.yml"), os.path.join("config", "galaxy.yml.sample"))
+            configs = (os.path.join("config", "galaxy.yml"), "galaxy.yml", os.path.join("config", "galaxy.yml.sample"))
+            configs = tuple(config for config in configs if os.path.exists(config))
+        if not configs and galaxy_installed:
+            gravity.io.warn(
+                "Warning: No configuration file found but Galaxy is installed in this Python environment, running with "
+                "default config. Use -c / --config-file or set $GALAXY_CONFIG_FILE to specify a config file."
+            )
+            self.__load_config({}, {})
         for config in configs:
-            if os.path.exists(config):
-                self.load_config_file(os.path.abspath(config))
-                if not load_all:
-                    return
+            self.load_config_file(os.path.abspath(config))
+            if not load_all:
+                return
