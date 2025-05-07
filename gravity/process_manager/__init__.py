@@ -88,7 +88,8 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
             "server_name": service.service_name,
             "galaxy_umask": service.settings.get("umask") or config.umask,
             "galaxy_conf": config.galaxy_config_file,
-            "galaxy_root": config.galaxy_root,
+            # TODO: this is used as the runtime directory, but it should probably be something else
+            "galaxy_root": config.galaxy_root or os.getcwd(),
             "virtualenv_bin": virtualenv_bin,
             "gravity_data_dir": shlex.quote(config.gravity_data_dir),
             "app_config": config.app_config,
