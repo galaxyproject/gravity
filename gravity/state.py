@@ -34,7 +34,8 @@ CELERY_BEAT_DB_FILENAME = "celery-beat-schedule"
 
 def relative_to_galaxy_root(cls, v, values):
     if not os.path.isabs(v):
-        v = os.path.abspath(os.path.join(values["galaxy_root"], v))
+        galaxy_root = values.get("galaxy_root") or os.getcwd()
+        v = os.path.abspath(os.path.join(galaxy_root, v))
     return v
 
 
@@ -88,8 +89,7 @@ class ConfigFile(BaseModel):
             if os.environ.get("GALAXY_ROOT_DIR"):
                 v = os.path.abspath(os.environ["GALAXY_ROOT_DIR"])
             elif galaxy_installed:
-                # FIXME: probably should be data_dir in config
-                v = os.getcwd()
+                v = None
             elif os.path.exists(os.path.join(os.path.dirname(galaxy_config_file), os.pardir, "lib", "galaxy")):
                 v = os.path.abspath(os.path.join(os.path.dirname(galaxy_config_file), os.pardir))
             elif galaxy_config_file.endswith(os.path.join("galaxy", "config", "sample", "galaxy.yml.sample")):

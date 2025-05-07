@@ -169,7 +169,8 @@ class ConfigManager(object):
         galaxy_root = gravity_settings.galaxy_root or app_config.get("root")
 
         # TODO: document that the default state_dir is data_dir/gravity and that setting state_dir overrides this
-        gravity_data_dir = self.state_dir or os.path.join(app_config.get("data_dir", "database"), "gravity")
+        default_data_dir = "data" if galaxy_installed else "database"
+        gravity_data_dir = self.state_dir or os.path.join(app_config.get("data_dir", default_data_dir), "gravity")
         log_dir = gravity_settings.log_dir or os.path.join(gravity_data_dir, "log")
 
         # TODO: this should use galaxy.util.properties.load_app_properties() so that env vars work

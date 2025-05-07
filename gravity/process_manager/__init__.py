@@ -275,7 +275,7 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
 
         cmd = shlex.split(format_vars["command"])
         env = {**dict(os.environ), **format_vars["environment"]}
-        cwd = format_vars["galaxy_root"]
+        cwd = format_vars["galaxy_root"] or os.getcwd()
 
         # ensure the data dir exists
         try:
