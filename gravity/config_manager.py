@@ -14,7 +14,10 @@ except ImportError:
 from yaml import safe_load
 
 import gravity.io
-from gravity.settings import Settings
+from gravity.settings import (
+    ProcessManager,
+    Settings,
+)
 from gravity.state import (
     ConfigFile,
     service_for_service_type,
@@ -39,8 +42,13 @@ OPTIONAL_APP_KEYS = (
 
 
 @contextlib.contextmanager
-def config_manager(config_file=None, state_dir=None, user_mode=None):
-    yield ConfigManager(config_file=config_file, state_dir=state_dir, user_mode=user_mode)
+def config_manager(config_file=None, state_dir=None, user_mode=None, process_manager=None):
+    yield ConfigManager(
+        config_file=config_file,
+        state_dir=state_dir,
+        user_mode=user_mode,
+        process_manager=process_manager
+    )
 
 
 class ConfigManager(object):
@@ -48,13 +56,14 @@ class ConfigManager(object):
     gravity_config_section = "gravity"
     app_config_file_option = "galaxy_config_file"
 
-    def __init__(self, config_file=None, state_dir=None, user_mode=None):
+    def __init__(self, config_file=None, state_dir=None, user_mode=None, process_manager=None):
         self.__configs = {}
         self.state_dir = None
         if state_dir is not None:
             # convert from pathlib.Path
             self.state_dir = str(state_dir)
         self.user_mode = user_mode
+        self.process_manager = process_manager or ProcessManager.supervisor.value
 
         gravity.io.debug(f"Gravity state dir: {state_dir}")
 
@@ -179,7 +188,7 @@ class ConfigManager(object):
             gravity_config_file=gravity_config_file,
             galaxy_config_file=galaxy_config_file,
             instance_name=gravity_settings.instance_name,
-            process_manager=gravity_settings.process_manager,
+            process_manager=gravity_settings.process_manager or self.process_manager,
             service_command_style=gravity_settings.service_command_style,
             app_server=gravity_settings.app_server,
             virtualenv=gravity_settings.virtualenv,

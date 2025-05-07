@@ -7,6 +7,7 @@ import click
 
 from gravity import io
 from gravity import options
+from gravity.settings import ProcessManager
 
 
 CONTEXT_SETTINGS = {
@@ -73,6 +74,7 @@ def galaxy(ctx, debug, config_file, state_dir, quiet):
     ctx.cm_kwargs = {
         "config_file": config_file,
         "state_dir": state_dir,
+        "process_manager": ProcessManager.multiprocessing.value,
     }
     mod = __import__("gravity.commands.cmd_start", None, None, ["cli"])
     return ctx.invoke(mod.cli, foreground=True, quiet=quiet)

@@ -65,7 +65,7 @@ route_to_all = partial(_route, all_process_managers=True)
 
 
 class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
-    def __init__(self, state_dir=None, config_file=None, config_manager=None, user_mode=None):
+    def __init__(self, state_dir=None, config_file=None, config_manager=None, user_mode=None, process_executor=None):
         self.config_manager = config_manager or ConfigManager(state_dir=state_dir, config_file=config_file, user_mode=user_mode)
         self.tail = which("tail")
 
@@ -293,10 +293,13 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
 
 
 class ProcessManagerRouter:
-    def __init__(self, state_dir=None, config_file=None, config_manager=None, user_mode=None, **kwargs):
-        self.config_manager = config_manager or ConfigManager(state_dir=state_dir, config_file=config_file, user_mode=user_mode)
-        self._load_pm_modules(**kwargs)
+    def __init__(self, state_dir=None, config_file=None, config_manager=None, user_mode=None, process_manager=None, **kwargs):
+        self.config_manager = config_manager or ConfigManager(state_dir=state_dir,
+                                                              config_file=config_file,
+                                                              user_mode=user_mode,
+                                                              process_manager=process_manager)
         self._process_executor = ProcessExecutor(config_manager=self.config_manager)
+        self._load_pm_modules(**kwargs)
 
     def _load_pm_modules(self, *args, **kwargs):
         self.process_managers = {}
@@ -306,7 +309,7 @@ class ProcessManagerRouter:
                 for name in dir(mod):
                     obj = getattr(mod, name)
                     if not name.startswith("_") and inspect.isclass(obj) and issubclass(obj, BaseProcessManager) and obj != BaseProcessManager:
-                        pm = obj(*args, config_manager=self.config_manager, **kwargs)
+                        pm = obj(*args, config_manager=self.config_manager, process_executor=self._process_executor, **kwargs)
                         self.process_managers[pm.name] = pm
 
     def _instance_service_names(self, names):

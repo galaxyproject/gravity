@@ -34,6 +34,7 @@ class LogLevel(str, Enum):
 class ProcessManager(str, Enum):
     supervisor = "supervisor"
     systemd = "systemd"
+    multiprocessing = "multiprocessing"
 
 
 class ServiceCommandStyle(str, Enum):
@@ -296,12 +297,13 @@ class Settings(BaseSettings):
     ``uwsgi:`` section will be ignored if Galaxy is started via Gravity commands (e.g ``./run.sh``, ``galaxy`` or ``galaxyctl``).
     """
 
-    process_manager: ProcessManager = Field(
+    process_manager: Optional[ProcessManager] = Field(
         None,
         description="""
 Process manager to use.
 ``supervisor`` is the default process manager when Gravity is invoked as a non-root user.
 ``systemd`` is the default when Gravity is invoked as root.
+``multiprocessing`` is the default when Gravity is invoked as the foreground shortcut ``galaxy`` instead of ``galaxyctl``
 """)
 
     service_command_style: ServiceCommandStyle = Field(
@@ -421,8 +423,8 @@ See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defi
         if v is None:
             if os.geteuid() == 0:
                 v = ProcessManager.systemd.value
-            else:
-                v = ProcessManager.supervisor.value
+            #else:
+            #    v = ProcessManager.supervisor.value
         return v
 
     # disable service instances unless command style is gravity
