@@ -65,7 +65,7 @@ route_to_all = partial(_route, all_process_managers=True)
 
 
 class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
-    def __init__(self, state_dir=None, config_file=None, config_manager=None, user_mode=None):
+    def __init__(self, state_dir=None, config_file=None, config_manager=None, user_mode=None, process_executor=None):
         self.config_manager = config_manager or ConfigManager(state_dir=state_dir, config_file=config_file, user_mode=user_mode)
         self.tail = which("tail")
 
@@ -88,7 +88,8 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
             "server_name": service.service_name,
             "galaxy_umask": service.settings.get("umask") or config.umask,
             "galaxy_conf": config.galaxy_config_file,
-            "galaxy_root": config.galaxy_root,
+            # TODO: this is used as the runtime directory, but it should probably be something else
+            "galaxy_root": config.galaxy_root or os.getcwd(),
             "virtualenv_bin": virtualenv_bin,
             "gravity_data_dir": shlex.quote(config.gravity_data_dir),
             "app_config": config.app_config,
@@ -112,7 +113,9 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
                 path = environment.get("PATH", self._service_default_path())
                 environment["PATH"] = ":".join([virtualenv_bin, path])
         else:
-            config_file = shlex.quote(config.gravity_config_file)
+            config_file_option = ""
+            if config.gravity_config_file:
+                config_file_option = f" --config-file {shlex.quote(config.gravity_config_file)}"
             # is there a click way to do this?
             galaxyctl = sys.argv[0]
             if galaxyctl.endswith(f"{os.path.sep}galaxy"):
@@ -124,7 +127,7 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
             instance_number_opt = ""
             if service.count > 1:
                 instance_number_opt = f" --service-instance {pm_format_vars['instance_number']}"
-            format_vars["command"] = f"{galaxyctl} --config-file {config_file} exec{instance_number_opt} {config.instance_name} {service.service_name}"
+            format_vars["command"] = f"{galaxyctl}{config_file_option} exec{instance_number_opt} {config.instance_name} {service.service_name}"
             environment = {}
         format_vars["environment"] = self._service_environment_formatter(environment, format_vars)
 
@@ -273,7 +276,7 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
 
         cmd = shlex.split(format_vars["command"])
         env = {**dict(os.environ), **format_vars["environment"]}
-        cwd = format_vars["galaxy_root"]
+        cwd = format_vars["galaxy_root"] or os.getcwd()
 
         # ensure the data dir exists
         try:
@@ -291,10 +294,13 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
 
 
 class ProcessManagerRouter:
-    def __init__(self, state_dir=None, config_file=None, config_manager=None, user_mode=None, **kwargs):
-        self.config_manager = config_manager or ConfigManager(state_dir=state_dir, config_file=config_file, user_mode=user_mode)
-        self._load_pm_modules(**kwargs)
+    def __init__(self, state_dir=None, config_file=None, config_manager=None, user_mode=None, process_manager=None, **kwargs):
+        self.config_manager = config_manager or ConfigManager(state_dir=state_dir,
+                                                              config_file=config_file,
+                                                              user_mode=user_mode,
+                                                              process_manager=process_manager)
         self._process_executor = ProcessExecutor(config_manager=self.config_manager)
+        self._load_pm_modules(**kwargs)
 
     def _load_pm_modules(self, *args, **kwargs):
         self.process_managers = {}
@@ -304,7 +310,7 @@ class ProcessManagerRouter:
                 for name in dir(mod):
                     obj = getattr(mod, name)
                     if not name.startswith("_") and inspect.isclass(obj) and issubclass(obj, BaseProcessManager) and obj != BaseProcessManager:
-                        pm = obj(*args, config_manager=self.config_manager, **kwargs)
+                        pm = obj(*args, config_manager=self.config_manager, process_executor=self._process_executor, **kwargs)
                         self.process_managers[pm.name] = pm
 
     def _instance_service_names(self, names):

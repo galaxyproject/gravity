@@ -11,6 +11,12 @@ import time
 from typing import Any, Dict, List, Optional
 
 try:
+    import galaxy.config
+    import galaxy.version
+    galaxy_installed = True
+except ImportError:
+    galaxy_installed = False
+try:
     from pydantic.v1 import BaseModel, validator
 except ImportError:
     from pydantic import BaseModel, validator
@@ -28,7 +34,8 @@ CELERY_BEAT_DB_FILENAME = "celery-beat-schedule"
 
 def relative_to_galaxy_root(cls, v, values):
     if not os.path.isabs(v):
-        v = os.path.abspath(os.path.join(values["galaxy_root"], v))
+        galaxy_root = values.get("galaxy_root") or os.getcwd()
+        v = os.path.abspath(os.path.join(galaxy_root, v))
     return v
 
 
@@ -41,8 +48,8 @@ class GracefulMethod(str, enum.Enum):
 
 class ConfigFile(BaseModel):
     app_config: Dict[str, Any]
-    gravity_config_file: str
-    galaxy_config_file: str
+    gravity_config_file: Optional[str]
+    galaxy_config_file: Optional[str]
     instance_name: str
     process_manager: ProcessManager
     service_command_style: ServiceCommandStyle
@@ -66,18 +73,23 @@ class ConfigFile(BaseModel):
 
     @property
     def galaxy_version(self):
-        galaxy_version_file = os.path.join(self.galaxy_root, "lib", "galaxy", "version.py")
-        with open(galaxy_version_file) as fh:
-            locs = {}
-            exec(fh.read(), {}, locs)
-            return locs["VERSION"]
+        if galaxy_installed:
+            return galaxy.version.VERSION
+        else:
+            galaxy_version_file = os.path.join(self.galaxy_root, "lib", "galaxy", "version.py")
+            with open(galaxy_version_file) as fh:
+                locs = {}
+                exec(fh.read(), {}, locs)
+                return locs["VERSION"]
 
     @validator("galaxy_root")
     def _galaxy_root_required(cls, v, values):
         if v is None:
-            galaxy_config_file = values["galaxy_config_file"]
+            galaxy_config_file = values.get("galaxy_config_file")
             if os.environ.get("GALAXY_ROOT_DIR"):
                 v = os.path.abspath(os.environ["GALAXY_ROOT_DIR"])
+            elif galaxy_installed:
+                v = None
             elif os.path.exists(os.path.join(os.path.dirname(galaxy_config_file), os.pardir, "lib", "galaxy")):
                 v = os.path.abspath(os.path.join(os.path.dirname(galaxy_config_file), os.pardir))
             elif galaxy_config_file.endswith(os.path.join("galaxy", "config", "sample", "galaxy.yml.sample")):

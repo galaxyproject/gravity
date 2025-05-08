@@ -34,7 +34,7 @@ def error(message, *args):
 def warn(message, *args):
     if args:
         message = message % args
-    click.echo(click.style(message, fg="red"), err=True)
+    click.echo(click.style(message, fg="yellow"), err=True)
 
 
 def exception(message):
