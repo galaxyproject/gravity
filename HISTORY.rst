@@ -2,11 +2,18 @@
  History
 =========
 
+1.1.0
+=====
+
+- Support running Galaxy without a root (i.e. from an installed location) in https://github.com/galaxyproject/gravity/pull/126
+- Add a simple multiprocessing-based process manager for running a Galaxy in the foreground in https://github.com/galaxyproject/gravity/pull/126
+
 1.0.7
 =====
 
 - Support new Galaxy configuration setting `interactivetoolsproxy_map` by @kysrpex in https://github.com/galaxyproject/gravity/pull/120
 - Add a command line flag for controlling systemd user mode by @natefoo in https://github.com/galaxyproject/gravity/pull/122
+- Update interactive tool command to reflect new package namespace by @dometto in https://github.com/galaxyproject/gravity/pull/125
 
 1.0.6
 =====
