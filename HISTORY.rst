@@ -2,6 +2,11 @@
  History
 =========
 
+1.0.8
+=====
+
+- Update interactive tool command to reflect new package namespace by @dometto in https://github.com/galaxyproject/gravity/pull/125
+
 1.0.7
 =====
 
