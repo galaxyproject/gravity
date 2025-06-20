@@ -491,8 +491,17 @@ class GalaxyStandaloneService(Service):
         "stop_timeout": 65,
     }
     _service_list_allowed = True
-    _command_template = "{virtualenv_bin}python ./lib/galaxy/main.py -c {galaxy_conf}" \
-                        " --server-name={settings[server_name]}{command_arguments[attach_to_pool]}"
+    _source_command_template = "{virtualenv_bin}python ./lib/galaxy/main.py -c {galaxy_conf}" \
+                               " --server-name={settings[server_name]}{command_arguments[attach_to_pool]}"
+    _installed_command_template = "{virtualenv_bin}galaxy-main -c {galaxy_conf}" \
+                                  " --server-name={settings[server_name]}{command_arguments[attach_to_pool]}"
+
+    @property
+    def command_template(self):
+        if galaxy_installed:
+            return self._installed_command_template
+        else:
+            return self._source_command_template
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
