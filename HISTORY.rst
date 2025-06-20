@@ -2,6 +2,11 @@
  History
 =========
 
+1.1.1
+=====
+
+- Fix standalone server invocation in installed mode in https://github.com/galaxyproject/gravity/pull/129
+
 1.1.0
 =====
 
