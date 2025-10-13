@@ -30,20 +30,6 @@ def test_load_defaults(galaxy_yml, galaxy_root_dir, state_dir, default_config_ma
         config.get_service('tusd')
 
 
-def test_preload_default(galaxy_yml, default_config_manager):
-    app_server = 'unicornherder'
-    galaxy_yml.write(json.dumps({
-        'galaxy': None,
-        'gravity': {
-            'app_server': app_server
-        }
-    }))
-    default_config_manager.load_config_file(str(galaxy_yml))
-    config = default_config_manager.get_config()
-    unicornherder_settings = config.get_service('unicornherder').settings
-    assert unicornherder_settings['preload'] is False
-
-
 def test_load_non_default(galaxy_yml, default_config_manager, non_default_config):
     if default_config_manager.instance_count == 0:
         galaxy_yml.write(json.dumps(non_default_config))

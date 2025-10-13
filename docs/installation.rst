@@ -169,9 +169,7 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
 
     # Select the application server.
     # ``gunicorn`` is the default application server.
-    # ``unicornherder`` is a production-oriented manager for (G)unicorn servers that automates zero-downtime Galaxy server restarts,
-    # similar to uWSGI Zerg Mode used in the past.
-    # Valid options are: gunicorn, unicornherder
+    # Valid options are: gunicorn
     # app_server: gunicorn
 
     # Override the default instance name.
@@ -202,8 +200,8 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
       # extra_args:
 
       # Use Gunicorn's --preload option to fork workers after loading the Galaxy Application.
-      # Consumes less memory when multiple processes are configured. Default is ``false`` if using unicornherder, else ``true``.
-      # preload:
+      # Consumes less memory when multiple processes are configured.
+      # preload: true
 
       # umask under which service should be executed
       # umask:

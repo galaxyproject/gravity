@@ -34,10 +34,6 @@ If running with multiple gunicorns, a rolling restart is performed, where Gravit
 to respond to requests after restarting, and then moves to the next one. This process should be transparent to clients.
 See :ref:`Zero-Downtime Restarts` for configuration details.
 
-If running with `unicornherder`_, a new Galaxy application will be started and the old one shut down only once the new
-one is accepting connections. This should also be transparent to clients, but limitations in the unicornherder software
-may allow interruptions to occur.
-
 update
 ------
 
@@ -105,6 +101,5 @@ Thus, although ``exec`` is mostly an internal subcommand, developers and admins 
 order to quickly and easily start just a single service and view only that service's logs in the foreground.
 
 .. _gunicorn: https://gunicorn.org/
-.. _unicornherder: https://github.com/alphagov/unicornherder
 .. _supervisor: http://supervisord.org/
 .. _exec(3): https://pubs.opengroup.org/onlinepubs/9699919799/functions/exec.html

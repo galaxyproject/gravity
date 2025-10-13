@@ -4,9 +4,7 @@ Advanced Usage
 Zero-Downtime Restarts
 ----------------------
 
-Prior to Gravity 1.0, the preferred solution for performing zero-downtime restarts was `unicornherder`_. However, due to
-limitations in the unicornherder software, it does not always successfully perform zero-downtime restarts. Because of
-this, Gravity is now able to perform rolling restarts of gunicorn services if more than one gunicorn is configured.
+Gravity is able to perform rolling restarts of gunicorn services if more than one gunicorn is configured.
 
 To run multiple gunicorn processes, configure the ``gunicorn`` section of the Gravity configuration as a *list*. Each
 item in the list is a gunicorn configuration, and can have all of the same parameters as a single gunicorn
@@ -159,5 +157,3 @@ config to a unique name.
 Although it is strongly encouraged to use systemd for running multiple instances, it is possible to use supervisor.
 Please see the :ref:`Gravity State` section for important details on how and where Gravity stores the supervisor
 configuration and log files.
-
-.. _unicornherder: https://github.com/alphagov/unicornherder
