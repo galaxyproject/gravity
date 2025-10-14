@@ -288,13 +288,6 @@ class GalaxyGunicornService(Service):
                         " {command_arguments[preload]}" \
                         " {settings[extra_args]}"
 
-    @validator("settings")
-    def _normalize_settings(cls, v, values):
-        # TODO: should be copy?
-        if v["preload"] is None:
-            v["preload"] = True
-        return v
-
     @property
     def graceful_method(self):
         if self.settings.get("preload"):
@@ -329,34 +322,6 @@ class GalaxyGunicornService(Service):
         disk_version = self.config.galaxy_version
         gravity.io.info(f"Gunicorn on {bind} running, version: {live_version} (disk version: {disk_version})", bright=False)
         return True
-
-
-class GalaxyUnicornHerderService(Service):
-    _service_type = "unicornherder"
-    service_name = "unicornherder"
-    _settings_from = "gunicorn"
-    _graceful_method = GracefulMethod.SIGHUP
-    _default_environment = DEFAULT_GALAXY_ENVIRONMENT
-    _command_template = "{virtualenv_bin}unicornherder --" \
-                        " 'galaxy.webapps.galaxy.fast_factory:factory()'" \
-                        " --timeout {settings[timeout]}" \
-                        " --pythonpath lib" \
-                        " -k galaxy.webapps.galaxy.workers.Worker" \
-                        " -b {settings[bind]}" \
-                        " --workers={settings[workers]}" \
-                        " --config python:galaxy.web_stack.gunicorn_config" \
-                        " {command_arguments[preload]}" \
-                        " {settings[extra_args]}"
-
-    @validator("settings")
-    def _normalize_settings(cls, v, values):
-        # TODO: should be copy?
-        if v["preload"] is None:
-            v["preload"] = False
-        return v
-
-    environment = GalaxyGunicornService.environment
-    command_arguments = GalaxyGunicornService.command_arguments
 
 
 class GalaxyCeleryService(Service):
@@ -535,7 +500,6 @@ def service_for_service_type(service_type):
 # TODO: better to pull this from __class__.service_type
 SERVICE_CLASS_MAP = {
     "gunicorn": GalaxyGunicornService,
-    "unicornherder": GalaxyUnicornHerderService,
     "celery": GalaxyCeleryService,
     "celery-beat": GalaxyCeleryBeatService,
     "gx-it-proxy": GalaxyGxItProxyService,

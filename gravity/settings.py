@@ -45,7 +45,6 @@ class ServiceCommandStyle(str, Enum):
 
 class AppServer(str, Enum):
     gunicorn = "gunicorn"
-    unicornherder = "unicornherder"
 
 
 class Pool(str, Enum):
@@ -162,10 +161,10 @@ If you disable the ``preload`` option workers need to have finished booting with
 """)
     extra_args: str = Field(default="", description="Extra arguments to pass to Gunicorn command line.")
     preload: Optional[bool] = Field(
-        default=None,
+        default=True,
         description="""
 Use Gunicorn's --preload option to fork workers after loading the Galaxy Application.
-Consumes less memory when multiple processes are configured. Default is ``false`` if using unicornherder, else ``true``.
+Consumes less memory when multiple processes are configured.
 """)
     umask: Optional[str] = Field(None, description="umask under which service should be executed")
     start_timeout: int = Field(15, description="Value of supervisor startsecs, systemd TimeoutStartSec")
@@ -375,8 +374,6 @@ the ``systemd`` process manager.
         description="""
 Select the application server.
 ``gunicorn`` is the default application server.
-``unicornherder`` is a production-oriented manager for (G)unicorn servers that automates zero-downtime Galaxy server restarts,
-similar to uWSGI Zerg Mode used in the past.
 """)
     instance_name: str = Field(default=DEFAULT_INSTANCE_NAME, description="""Override the default instance name.
 this is hidden from you when running a single instance.""")
