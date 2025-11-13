@@ -198,6 +198,7 @@ class ConfigManager(object):
             galaxy_group=gravity_settings.galaxy_group,
             umask=gravity_settings.umask,
             memory_limit=gravity_settings.memory_limit,
+            memory_high=gravity_settings.memory_high,
             gravity_data_dir=gravity_data_dir,
             log_dir=log_dir,
         )

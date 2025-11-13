@@ -35,6 +35,7 @@ ExecStart={command}
 {systemd_exec_reload}
 {environment}
 {systemd_memory_limit}
+{systemd_memory_high}
 Restart=always
 
 MemoryAccounting=yes
@@ -244,7 +245,13 @@ class SystemdProcessManager(BaseProcessManager):
 
         memory_limit = service.settings.get("memory_limit") or config.memory_limit
         if memory_limit:
-            memory_limit = f"MemoryLimit={memory_limit}G"
+            memory_limit = int(memory_limit) if memory_limit.is_integer() else memory_limit
+            memory_limit = f"MemoryMax={memory_limit}G"
+
+        memory_high = service.settings.get("memory_high") or config.memory_high
+        if memory_high:
+            memory_high = int(memory_high) if memory_high.is_integer() else memory_high
+            memory_high = f"MemoryHigh={memory_high}G"
 
         exec_reload = None
         if service.graceful_method == GracefulMethod.SIGHUP:
@@ -257,6 +264,7 @@ class SystemdProcessManager(BaseProcessManager):
             "systemd_user_group": "",
             "systemd_exec_reload": exec_reload or "",
             "systemd_memory_limit": memory_limit or "",
+            "systemd_memory_high": memory_high or "",
             "systemd_description": systemd_service.description,
             "systemd_target": self.__target_unit_name(config),
         }

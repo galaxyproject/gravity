@@ -92,12 +92,19 @@ You can find a list of available hooks at https://github.com/tus/tusd/blob/maste
     umask: Optional[str] = Field(None, description="umask under which service should be executed")
     start_timeout: int = Field(10, description="Value of supervisor startsecs, systemd TimeoutStartSec")
     stop_timeout: int = Field(10, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
-    memory_limit: Optional[int] = Field(
+    memory_limit: Optional[float] = Field(
         None,
         description="""
 Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
 ``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
 ``supervisor``.
+""")
+    memory_high: Optional[float] = Field(
+        None,
+        description="""
+Memory usage throttle limit (in GB). If the service exceeds the limit, processes are throttled and put under heavy
+reclaim pressure. Default is no limit or the value of the ``memory_high`` setting at the top level of the Gravity
+configuration, if set. Ignored if ``process_manager`` is ``supervisor``.
 """)
     environment: Dict[str, str] = Field(
         default={},
@@ -118,12 +125,19 @@ class CelerySettings(BaseModel):
     umask: Optional[str] = Field(None, description="umask under which service should be executed")
     start_timeout: int = Field(10, description="Value of supervisor startsecs, systemd TimeoutStartSec")
     stop_timeout: int = Field(10, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
-    memory_limit: Optional[int] = Field(
+    memory_limit: Optional[float] = Field(
         None,
         description="""
 Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
 ``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
 ``supervisor``.
+""")
+    memory_high: Optional[float] = Field(
+        None,
+        description="""
+Memory usage throttle limit (in GB). If the service exceeds the limit, processes are throttled and put under heavy
+reclaim pressure. Default is no limit or the value of the ``memory_high`` setting at the top level of the Gravity
+configuration, if set. Ignored if ``process_manager`` is ``supervisor``.
 """)
     environment: Dict[str, str] = Field(
         default={},
@@ -174,12 +188,19 @@ Consumes less memory when multiple processes are configured.
         description="""
 Amount of time to wait for a server to become alive when performing rolling restarts.
 """)
-    memory_limit: Optional[int] = Field(
+    memory_limit: Optional[float] = Field(
         None,
         description="""
 Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
 ``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
 ``supervisor``.
+""")
+    memory_high: Optional[float] = Field(
+        None,
+        description="""
+Memory usage throttle limit (in GB). If the service exceeds the limit, processes are throttled and put under heavy
+reclaim pressure. Default is no limit or the value of the ``memory_high`` setting at the top level of the Gravity
+configuration, if set. Ignored if ``process_manager`` is ``supervisor``.
 """)
     environment: Dict[str, str] = Field(
         default={},
@@ -227,12 +248,19 @@ If <bind> is a unix socket, you will need a ``:`` after the socket path but befo
     umask: Optional[str] = Field(None, description="umask under which service should be executed")
     start_timeout: int = Field(10, description="Value of supervisor startsecs, systemd TimeoutStartSec")
     stop_timeout: int = Field(10, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
-    memory_limit: Optional[int] = Field(
+    memory_limit: Optional[float] = Field(
         None,
         description="""
 Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
 ``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
 ``supervisor``.
+""")
+    memory_high: Optional[float] = Field(
+        None,
+        description="""
+Memory usage throttle limit (in GB). If the service exceeds the limit, processes are throttled and put under heavy
+reclaim pressure. Default is no limit or the value of the ``memory_high`` setting at the top level of the Gravity
+configuration, if set. Ignored if ``process_manager`` is ``supervisor``.
 """)
     environment: Dict[str, str] = Field(
         default={},
@@ -275,12 +303,19 @@ This is an advanced option that is only needed when proxying to remote interacti
     umask: Optional[str] = Field(None, description="umask under which service should be executed")
     start_timeout: int = Field(10, description="Value of supervisor startsecs, systemd TimeoutStartSec")
     stop_timeout: int = Field(10, description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")
-    memory_limit: Optional[int] = Field(
+    memory_limit: Optional[float] = Field(
         None,
         description="""
 Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
 ``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
 ``supervisor``.
+""")
+    memory_high: Optional[float] = Field(
+        None,
+        description="""
+Memory usage throttle limit (in GB). If the service exceeds the limit, processes are throttled and put under heavy
+reclaim pressure. Default is no limit or the value of the ``memory_high`` setting at the top level of the Gravity
+configuration, if set. Ignored if ``process_manager`` is ``supervisor``.
 """)
     environment: Dict[str, str] = Field(
         default={},
@@ -326,12 +361,19 @@ Presently this includes services like gunicorn and Galaxy dynamic job handlers. 
 umask under which services should be executed. Setting ``umask`` on an individual service overrides this value.
 """)
 
-    memory_limit: Optional[int] = Field(
+    memory_limit: Optional[float] = Field(
         None,
         description="""
 Memory limit (in GB), processes exceeding the limit will be killed. Default is no limit. If set, this is default value
 for all services. Setting ``memory_limit`` on an individual service overrides this value. Ignored if ``process_manager``
 is ``supervisor``.
+""")
+    memory_high: Optional[float] = Field(
+        None,
+        description="""
+Memory usage throttle limit (in GB), processes exceeding the limit are throttled and put under heavy reclaim pressure.
+If set, this is the default value for all services. Setting ``memory_high`` on an individual service overrides this
+value. Ignored if ``process_manager`` is ``supervisor``.
 """)
 
     galaxy_config_file: Optional[str] = Field(

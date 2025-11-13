@@ -59,7 +59,8 @@ class ConfigFile(BaseModel):
     galaxy_user: Optional[str]
     galaxy_group: Optional[str]
     umask: Optional[str]
-    memory_limit: Optional[int]
+    memory_limit: Optional[float]
+    memory_high: Optional[float]
     gravity_data_dir: str
     log_dir: str
     services: List[Service] = []
