@@ -119,7 +119,8 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
     # Process manager to use.
     # ``supervisor`` is the default process manager when Gravity is invoked as a non-root user.
     # ``systemd`` is the default when Gravity is invoked as root.
-    # Valid options are: supervisor, systemd
+    # ``multiprocessing`` is the default when Gravity is invoked as the foreground shortcut ``galaxy`` instead of ``galaxyctl``
+    # Valid options are: supervisor, systemd, multiprocessing
     # process_manager:
 
     # What command to write to the process manager configs
@@ -141,6 +142,11 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
     # for all services. Setting ``memory_limit`` on an individual service overrides this value. Ignored if ``process_manager``
     # is ``supervisor``.
     # memory_limit:
+
+    # Memory usage throttle limit (in GB), processes exceeding the limit are throttled and put under heavy reclaim pressure.
+    # If set, this is the default value for all services. Setting ``memory_high`` on an individual service overrides this
+    # value. Ignored if ``process_manager`` is ``supervisor``.
+    # memory_high:
 
     # Specify Galaxy config file (galaxy.yml), if the Gravity config is separate from the Galaxy config. Assumed to be the
     # same file as the Gravity config if a ``galaxy`` key exists at the root level, otherwise, this option is required.
@@ -220,6 +226,11 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
       # ``supervisor``.
       # memory_limit:
 
+      # Memory usage throttle limit (in GB). If the service exceeds the limit, processes are throttled and put under heavy
+      # reclaim pressure. Default is no limit or the value of the ``memory_high`` setting at the top level of the Gravity
+      # configuration, if set. Ignored if ``process_manager`` is ``supervisor``.
+      # memory_high:
+
       # Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
       # names.
       # environment: {}
@@ -263,6 +274,11 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
       # ``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
       # ``supervisor``.
       # memory_limit:
+
+      # Memory usage throttle limit (in GB). If the service exceeds the limit, processes are throttled and put under heavy
+      # reclaim pressure. Default is no limit or the value of the ``memory_high`` setting at the top level of the Gravity
+      # configuration, if set. Ignored if ``process_manager`` is ``supervisor``.
+      # memory_high:
 
       # Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
       # names.
@@ -317,6 +333,11 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
       # ``supervisor``.
       # memory_limit:
 
+      # Memory usage throttle limit (in GB). If the service exceeds the limit, processes are throttled and put under heavy
+      # reclaim pressure. Default is no limit or the value of the ``memory_high`` setting at the top level of the Gravity
+      # configuration, if set. Ignored if ``process_manager`` is ``supervisor``.
+      # memory_high:
+
       # Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
       # names.
       # environment: {}
@@ -341,6 +362,14 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
       # Directory to store uploads in.
       # Must match ``tus_upload_store`` setting in ``galaxy:`` section.
       # upload_dir:
+
+      # Value of tusd -hooks-httpd option
+      #
+      # the default of is suitable for using tusd for Galaxy uploads and should not be changed unless you are using tusd for
+      # other purposes such as Pulsar staging.
+      #
+      # The value of galaxy_infrastructure_url is automatically prepended if the option starts with a `/`
+      # hooks_http: /api/upload/hooks
 
       # Comma-separated string of enabled tusd hooks.
       #
@@ -370,6 +399,11 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
       # ``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
       # ``supervisor``.
       # memory_limit:
+
+      # Memory usage throttle limit (in GB). If the service exceeds the limit, processes are throttled and put under heavy
+      # reclaim pressure. Default is no limit or the value of the ``memory_high`` setting at the top level of the Gravity
+      # configuration, if set. Ignored if ``process_manager`` is ``supervisor``.
+      # memory_high:
 
       # Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
       # names.
@@ -423,6 +457,11 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
       # ``supervisor``.
       # memory_limit:
 
+      # Memory usage throttle limit (in GB). If the service exceeds the limit, processes are throttled and put under heavy
+      # reclaim pressure. Default is no limit or the value of the ``memory_high`` setting at the top level of the Gravity
+      # configuration, if set. Ignored if ``process_manager`` is ``supervisor``.
+      # memory_high:
+
       # Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
       # names.
       # environment: {}
@@ -430,6 +469,7 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
     # Configure dynamic handlers in this section.
     # See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defined-handlers for details.
     # handlers: {}
+
 
 Galaxy Job Handlers
 -------------------
