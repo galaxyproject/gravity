@@ -39,9 +39,9 @@ def which(file):
 
 
 def settings_to_sample():
-    schema = Settings.schema_json()
+    schema = Settings.model_json_schema()
     # expand schema for easier processing
-    data = jsonref.loads(schema)
+    data = jsonref.replace_refs(schema, merge_props=True)
     strings = [process_property("gravity", data)]
     for key, value in data["properties"].items():
         strings.append(process_property(key, value, 1))

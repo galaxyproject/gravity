@@ -1,14 +1,13 @@
 from io import StringIO
-import json
 
 from gravity.settings import Settings
 from gravity.util import settings_to_sample
 from yaml import safe_load
 
 
-def test_schema_json():
-    schema = Settings.schema_json(indent=2)
-    assert "Configuration for Gravity process manager" in json.loads(schema)["description"]
+def test_json_schema():
+    schema = Settings.model_json_schema()
+    assert "Configuration for Gravity process manager" in schema["description"]
 
 
 def test_extra_fields_allowed():

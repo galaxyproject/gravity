@@ -5,12 +5,12 @@ import glob
 import logging
 import os
 import xml.etree.ElementTree as elementtree
-from typing import Union
+from typing import (
+    Dict,
+    Union,
+)
 
-try:
-    from pydantic.v1 import ValidationError
-except ImportError:
-    from pydantic import ValidationError
+from pydantic import ValidationError
 from yaml import safe_load
 
 import gravity.io
@@ -51,13 +51,13 @@ def config_manager(config_file=None, state_dir=None, user_mode=None, process_man
     )
 
 
-class ConfigManager(object):
+class ConfigManager:
     galaxy_server_config_section = "galaxy"
     gravity_config_section = "gravity"
     app_config_file_option = "galaxy_config_file"
 
     def __init__(self, config_file=None, state_dir=None, user_mode=None, process_manager=None):
-        self.__configs = {}
+        self.__configs: Dict[str, ConfigFile] = {}
         self.state_dir = None
         if state_dir is not None:
             # convert from pathlib.Path
@@ -357,7 +357,7 @@ class ConfigManager(object):
                 rval.append(config)
         return rval
 
-    def get_config(self, instance_name=None):
+    def get_config(self, instance_name: Union[str, None] = None) -> ConfigFile:
         if instance_name is None:
             if self.instance_count > 1:
                 gravity.io.exception("An instance name is required when more than one instance is configured")
@@ -380,7 +380,7 @@ class ConfigManager(object):
         return list(self.__configs.keys())
 
     def get_configured_files(self):
-        return list(c.gravity_config_file for c in self.__configs.values())
+        return [c.gravity_config_file for c in self.__configs.values()]
 
     def auto_load(self):
         """Attempt to automatically load a config file if none are loaded."""
