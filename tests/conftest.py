@@ -213,12 +213,14 @@ def tusd_startup_config(galaxy_virtualenv, tusd_config, free_port):
 def galaxy_virtualenv(galaxy_root_dir):
     virtual_env_dir = str(TEST_DIR / "galaxy_venv")
     os.environ['GALAXY_VIRTUAL_ENV'] = virtual_env_dir
+    path = os.getenv("PATH")
+    assert path is not None
     subprocess.run(
         str(galaxy_root_dir / "scripts/common_startup.sh"),
         env={
             "GALAXY_SKIP_CLIENT_BUILD": "1",
             "GALAXY_VIRTUAL_ENV": virtual_env_dir,
-            "PATH": os.getenv("PATH"),
+            "PATH": path,
         },
         cwd=str(galaxy_root_dir)
     )

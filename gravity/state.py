@@ -8,10 +8,18 @@ import hashlib
 import os
 import sys
 import time
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import (
+    Any,
+    ClassVar,
+    Dict,
+    List,
+    Optional,
+    overload,
+    Type,
+    Union,
+)
 
 try:
-    import galaxy.config
     import galaxy.version
     galaxy_installed = True
 except ImportError:
@@ -22,7 +30,10 @@ from pydantic import (
     field_validator,
     ValidationInfo,
 )
-from typing_extensions import Annotated
+from typing_extensions import (
+    Annotated,
+    Self,
+)
 
 import gravity.io
 from gravity.settings import AppServer, ProcessManager, ServiceCommandStyle
@@ -66,13 +77,14 @@ class ConfigFile(BaseModel):
     memory_high: Optional[float]
     gravity_data_dir: str
     log_dir: str
-    services: Annotated[List[Service], Field(exclude=True)] = []
+    services: Annotated[List[Union[Service, ServiceList]], Field(exclude=True)] = []
 
     def __hash__(self):
         return id(self)
 
     @property
     def path_hash(self):
+        assert self.gravity_config_file is not None
         return hashlib.sha1(self.gravity_config_file.encode("UTF-8")).hexdigest()
 
     @property
@@ -80,9 +92,10 @@ class ConfigFile(BaseModel):
         if galaxy_installed:
             return galaxy.version.VERSION
         else:
+            assert self.galaxy_root is not None
             galaxy_version_file = os.path.join(self.galaxy_root, "lib", "galaxy", "version.py")
             with open(galaxy_version_file) as fh:
-                locs = {}
+                locs: Dict[str, Any] = {}
                 exec(fh.read(), {}, locs)
                 return locs["VERSION"]
 
@@ -107,10 +120,10 @@ class ConfigFile(BaseModel):
     _validate_gravity_data_dir = field_validator("gravity_data_dir", mode="after")(relative_to_galaxy_root)
     _validate_log_dir = field_validator("log_dir", mode="after")(relative_to_galaxy_root)
 
-    def get_service(self, service_name):
+    def get_service(self, service_name: str) -> Union[Service, ServiceList]:
         return self.get_services([service_name])[0]
 
-    def get_services(self, service_names):
+    def get_services(self, service_names: Union[List[str], None]) -> List[Union[Service, ServiceList]]:
         if service_names:
             return [s for s in self.services if s.service_name in service_names]
         else:
@@ -136,20 +149,32 @@ class Service(BaseModel):
     _command_arguments: ClassVar[Dict[str, str]] = {}
     _command_template: ClassVar[str] = "_command_"
 
+    @overload
     @classmethod
-    def services_if_enabled(cls, config, gravity_settings=None, settings=None, service_name=None):
+    def services_if_enabled(cls, config: ConfigFile, gravity_settings: None = None, settings=None, service_name=None) -> List[Self]:
+        ...
+
+    @overload
+    @classmethod
+    def services_if_enabled(cls, config: ConfigFile, gravity_settings=None, settings=None, service_name=None) -> Union[List[Self], List[ServiceList]]:
+        ...
+
+    @classmethod
+    def services_if_enabled(cls, config: ConfigFile, gravity_settings=None, settings=None, service_name=None) -> Union[List[Self], List[ServiceList]]:
         settings_from = cls._settings_from or cls._service_type
         settings = settings or getattr(gravity_settings, settings_from)
         service_name = service_name or cls._service_type
-        services = []
+        services: Union[List[Self], List[ServiceList]] = []
         if isinstance(settings, list):
             if not cls._service_list_allowed:
                 gravity.io.exception(
                     f"Settings for {cls._service_type} is a list, but lists are not allowed for this service type")
-            for i, instance_settings in enumerate(settings):
-                services.extend(cls.services_if_enabled(config, settings=instance_settings, service_name=f"{service_name}{i}"))
+            services = [
+                s for i, instance_settings in enumerate(settings)
+                for s in cls.services_if_enabled(config, settings=instance_settings, service_name=f"{service_name}{i}")
+            ]
             if gravity_settings.use_service_instances:
-                services = [ServiceList(services=services, service_name=service_name)]
+                services = [ServiceList(services=services, service_name=service_name)]  # type: ignore[arg-type]
         elif isinstance(settings, dict) and settings[cls._enable_attribute]:
             # settings is already a dict e.g. in the case of handlers
             services = [cls(config=config, settings=settings, service_name=service_name)]
@@ -215,6 +240,9 @@ class Service(BaseModel):
                 rval[setting] = value
         return rval
 
+    def is_ready(self, quiet: bool = True) -> bool:
+        raise NotImplementedError("is_ready not implemented for base Service class")
+
 
 class ServiceList(BaseModel):
     _service_type: ClassVar[str] = "_list_"
@@ -235,7 +263,7 @@ class ServiceList(BaseModel):
     def count(self):
         return len(self.services)
 
-    def get_service_instance(self, instance_number):
+    def get_service_instance(self, instance_number: int) -> Service:
         return self.services[instance_number]
 
     def rolling_restart(self, restart_callbacks):
@@ -298,7 +326,7 @@ class GalaxyGunicornService(Service):
         environment.update(self.settings.get("environment", {}))
         return environment
 
-    def is_ready(self, quiet=True):
+    def is_ready(self, quiet: bool = True) -> bool:
         bind = self.settings["bind"]
         prefix = self.config.app_config.get("galaxy_url_prefix") or ""
         if prefix:
@@ -482,7 +510,7 @@ class GalaxyStandaloneService(Service):
         return command_arguments
 
 
-def service_for_service_type(service_type):
+def service_for_service_type(service_type: str) -> Type[Service]:
     try:
         return SERVICE_CLASS_MAP[service_type]
     except KeyError:
@@ -490,7 +518,7 @@ def service_for_service_type(service_type):
 
 
 # TODO: better to pull this from __class__.service_type
-SERVICE_CLASS_MAP = {
+SERVICE_CLASS_MAP: Dict[str, Type[Service]] = {
     "gunicorn": GalaxyGunicornService,
     "celery": GalaxyCeleryService,
     "celery-beat": GalaxyCeleryBeatService,

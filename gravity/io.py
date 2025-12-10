@@ -1,5 +1,9 @@
 import sys
 import traceback
+from typing import (
+    Any,
+    NoReturn,
+)
 
 import click
 
@@ -17,7 +21,7 @@ def debug(message, *args):
 def info(message, *args, bright=True):
     if args:
         message = message % args
-    style_kwargs = {}
+    style_kwargs: dict[str, Any] = {}
     if bright:
         style_kwargs = {"bold": True, "fg": "green"}
     click.echo(click.style(message, **style_kwargs))
@@ -37,5 +41,5 @@ def warn(message, *args):
     click.echo(click.style(message, fg="yellow"), err=True)
 
 
-def exception(message):
+def exception(message) -> NoReturn:
     raise click.ClickException(click.style(message, bold=True, fg="red"))

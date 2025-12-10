@@ -4,6 +4,7 @@ import collections.abc
 import copy
 import os
 import sys
+from urllib.parse import quote
 
 import jsonref
 import requests
@@ -93,7 +94,7 @@ def process_property(key, value, depth=0):
 
 def http_check(bind, path):
     if bind.startswith("unix:"):
-        socket = requests.utils.quote(bind.split(":", 1)[1], safe="")
+        socket = quote(bind.split(":", 1)[1], safe="")
         session = requests_unixsocket.Session()
         response = session.get(f"http+unix://{socket}{path}")
     else:

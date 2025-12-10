@@ -4,7 +4,10 @@ from pathlib import Path
 import pytest
 
 from gravity import config_manager
-from gravity.settings import Settings
+from gravity.settings import (
+    GunicornSettings,
+    Settings,
+)
 from gravity.state import GracefulMethod
 
 
@@ -12,6 +15,7 @@ def test_load_defaults(galaxy_yml, galaxy_root_dir, state_dir, default_config_ma
     default_config_manager.load_config_file(str(galaxy_yml))
     config = default_config_manager.get_config()
     default_settings = Settings()
+    assert isinstance(default_settings.gunicorn, GunicornSettings)
     assert config.process_manager == 'supervisor'
     assert config.instance_name == default_settings.instance_name
     assert config.services != []
@@ -39,6 +43,7 @@ def test_load_non_default(galaxy_yml, default_config_manager, non_default_config
     assert gunicorn_settings['bind'] == non_default_config['gravity']['gunicorn']['bind']
     assert gunicorn_settings['environment'] == non_default_config['gravity']['gunicorn']['environment']
     default_settings = Settings()
+    assert isinstance(default_settings.gunicorn, GunicornSettings)
     assert gunicorn_settings['workers'] == default_settings.gunicorn.workers
     celery_settings = config.get_service('celery').settings
     assert celery_settings['concurrency'] == non_default_config['gravity']['celery']['concurrency']

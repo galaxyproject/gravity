@@ -18,8 +18,9 @@ with open(os.path.join("gravity", "__init__.py")) as f:
 
     def get_var(var_name):
         pattern = re.compile(r"%s\s+=\s+(.*)" % var_name)
-        match = pattern.search(init_contents).group(1)
-        return str(ast.literal_eval(match))
+        match = pattern.search(init_contents)
+        assert match is not None
+        return str(ast.literal_eval(match.group(1)))
 
     version = get_var("__version__")
 

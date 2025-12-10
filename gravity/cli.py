@@ -50,7 +50,7 @@ def name_to_command(name):
     return mod.cli
 
 
-class GravityCLI(click.MultiCommand):
+class GravityCLI(click.Group):
     def list_commands(self, ctx):
         return list_cmds()
 

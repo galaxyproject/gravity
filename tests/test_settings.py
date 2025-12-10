@@ -1,6 +1,10 @@
 from io import StringIO
 
-from gravity.settings import Settings
+from gravity.settings import (
+    GunicornSettings,
+    Settings,
+    TusdSettings,
+)
 from gravity.util import settings_to_sample
 from yaml import safe_load
 
@@ -11,23 +15,33 @@ def test_json_schema():
 
 
 def test_extra_fields_allowed():
-    s = Settings(extra=1)
+    s = Settings(extra=1)  # type: ignore[call-arg]
     assert not hasattr(s, "extra")
 
 
 def test_defaults_loaded():
     settings = Settings()
+    assert isinstance(settings.gunicorn, GunicornSettings)
     assert settings.gunicorn.bind == "localhost:8080"
+    assert isinstance(settings.tusd, TusdSettings)
+    assert settings.tusd.tusd_path == "tusd"
+    assert settings.tusd.upload_dir == ""
 
 
 def test_defaults_override_constructor():
-    settings = Settings(**{"gunicorn": {"bind": "localhost:8081"}})
+    settings = Settings(gunicorn=GunicornSettings(bind="localhost:8081"))
+    assert isinstance(settings.gunicorn, GunicornSettings)
+    assert settings.gunicorn.bind == "localhost:8081"
+    # Try Pydantic's ability to accept dicts for nested models
+    settings = Settings(gunicorn={"bind": "localhost:8081"})  # type: ignore[arg-type]
+    assert isinstance(settings.gunicorn, GunicornSettings)
     assert settings.gunicorn.bind == "localhost:8081"
 
 
 def test_defaults_override_env_var(monkeypatch):
     monkeypatch.setenv("GRAVITY_GUNICORN.BIND", "localhost:8081")
     settings = Settings()
+    assert isinstance(settings.gunicorn, GunicornSettings)
     assert settings.gunicorn.bind == "localhost:8081"
 
 
