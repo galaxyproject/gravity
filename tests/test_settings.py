@@ -1,12 +1,13 @@
 from io import StringIO
 
+import yaml
+
 from gravity.settings import (
     GunicornSettings,
     Settings,
+    settings_to_sample,
     TusdSettings,
 )
-from gravity.util import settings_to_sample
-from yaml import safe_load
 
 
 def test_json_schema():
@@ -47,6 +48,6 @@ def test_defaults_override_env_var(monkeypatch):
 
 def test_schema_to_sample():
     sample = settings_to_sample()
-    settings = Settings(**safe_load(StringIO(sample))["gravity"])
+    settings = Settings(**yaml.safe_load(StringIO(sample))["gravity"])
     default_settings = Settings()
     assert settings.dict() == default_settings.dict()

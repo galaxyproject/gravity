@@ -3,7 +3,6 @@ state data.
 """
 from __future__ import annotations
 
-import enum
 import hashlib
 import os
 import sys
@@ -37,7 +36,10 @@ from typing_extensions import (
 
 import gravity.io
 from gravity.settings import AppServer, ProcessManager, ServiceCommandStyle
-from gravity.util import http_check
+from gravity.util import (
+    http_check,
+    StrEnum,
+)
 
 DEFAULT_GALAXY_ENVIRONMENT = {
     "PYTHONPATH": "lib",
@@ -53,7 +55,7 @@ def relative_to_galaxy_root(cls, value: str, info: ValidationInfo) -> str:
     return value
 
 
-class GracefulMethod(str, enum.Enum):
+class GracefulMethod(StrEnum):
     DEFAULT = "default"
     SIGHUP = "sighup"
     ROLLING = "rolling"

@@ -1,5 +1,4 @@
 import os
-from enum import Enum
 from typing import (
     Any,
     Dict,
@@ -7,6 +6,8 @@ from typing import (
     Union,
 )
 
+import jsonref
+import yaml
 from pydantic import (
     BaseModel,
     Field,
@@ -20,6 +21,8 @@ from pydantic_settings import (
 )
 from typing_extensions import Annotated
 
+from gravity.util import StrEnum
+
 DEFAULT_INSTANCE_NAME = "_default_"
 GX_IT_PROXY_MIN_VERSION = "0.0.6"
 
@@ -30,30 +33,30 @@ def none_to_default(cls, value: Any) -> Any:
     return value
 
 
-class LogLevel(str, Enum):
+class LogLevel(StrEnum):
     debug = "DEBUG"
     info = "INFO"
     warning = "WARNING"
     error = "ERROR"
 
 
-class ProcessManager(str, Enum):
+class ProcessManager(StrEnum):
     supervisor = "supervisor"
     systemd = "systemd"
     multiprocessing = "multiprocessing"
 
 
-class ServiceCommandStyle(str, Enum):
+class ServiceCommandStyle(StrEnum):
     gravity = "gravity"
     direct = "direct"
     exec = "_exec"
 
 
-class AppServer(str, Enum):
+class AppServer(StrEnum):
     gunicorn = "gunicorn"
 
 
-class Pool(str, Enum):
+class Pool(StrEnum):
     prefork = "prefork"
     eventlet = "eventlet"
     gevent = "gevent"
@@ -448,3 +451,56 @@ See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defi
         if info.data["service_command_style"] != ServiceCommandStyle.gravity:
             value = False
         return value
+
+
+def process_property(key, value, depth=0):
+    extra_white_space = "  " * depth
+    default = value.get("default", "")
+    if isinstance(default, dict):
+        # Little hack that prevents listing the default value for tusd in the sample config
+        default = {}
+    if default != "":
+        # make values more yaml-like.
+        default = yaml.dump(default)
+        if default.endswith("\n...\n"):
+            default = default[: -(len("\n...\n"))]
+        default = default.strip()
+    description = "\n".join(f"{extra_white_space}# {desc}".rstrip() for desc in value["description"].strip().split("\n"))
+    combined = value.get("allOf", [])
+    if not combined and value.get("anyOf"):
+        # we've got a union
+        combined = [c for c in value["anyOf"] if c["type"] == "object"]
+    if combined and combined[0].get("properties"):
+        # we've got a nested map, add key once
+        description = f"{description}\n{extra_white_space}{key}:\n"
+    has_child = False
+    for item in combined:
+        if "enum" in item:
+            enum_items = [i for i in item["enum"] if not i.startswith("_")]
+            description = f'{description}\n{extra_white_space}# Valid options are: {", ".join(enum_items)}'
+        if "properties" in item:
+            has_child = True
+            for _key, _value in item["properties"].items():
+                description = f"{description}\n{process_property(_key, _value, depth=depth+1)}"
+    if not has_child or key == "handlers":
+        comment = "# "
+        if key == "gravity":
+            # gravity section should not be commented
+            comment = ""
+        if default == "":
+            value_sep = ""
+        else:
+            value_sep = " "
+        description = f"{description}\n{extra_white_space}{comment}{key}:{value_sep}{default}\n"
+    return description
+
+
+def settings_to_sample():
+    schema = Settings.model_json_schema()
+    # expand schema for easier processing
+    data = jsonref.replace_refs(schema, merge_props=True)
+    strings = [process_property("gravity", data)]
+    for key, value in data["properties"].items():
+        strings.append(process_property(key, value, 1))
+    concat = "\n".join(strings)
+    return concat
