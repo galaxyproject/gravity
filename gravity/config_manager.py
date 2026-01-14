@@ -204,6 +204,7 @@ class ConfigManager:
             memory_high=gravity_settings.memory_high,
             gravity_data_dir=gravity_data_dir,
             log_dir=log_dir,
+            log_namespace=gravity_settings.log_namespace,
         )
 
         # add standard services if enabled

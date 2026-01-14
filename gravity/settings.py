@@ -386,6 +386,12 @@ Ignored if ``process_manager`` is ``supervisor`` or user-mode (non-root) ``syste
 Set to a directory that should contain log files for the processes controlled by Gravity.
 If not specified defaults to ``<galaxy_data_dir>/gravity/log``.
 """)] = None
+    log_namespace: Annotated[Union[str, None], Field(
+        description="""
+Run Galaxy processes in the specified journal namespace (sets the value of ``LogNamespace=`` in the systemd service
+units). This allows you to keep Galaxy log messages separate in the system journal from other log messages. Ignored if
+``process_manager`` is not ``systemd``. See ``systemd.exec(5)`` for details.
+""")] = None
     virtualenv: Annotated[Union[str, None], Field(description="""
 Set to Galaxy's virtualenv directory.
 If not specified, Gravity assumes all processes are on PATH. This option is required in most circumstances when using

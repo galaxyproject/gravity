@@ -45,6 +45,7 @@ ExecStart={command}
 {environment}
 {systemd_memory_limit}
 {systemd_memory_high}
+{systemd_log_namespace}
 Restart=always
 
 MemoryAccounting=yes
@@ -262,6 +263,10 @@ class SystemdProcessManager(BaseProcessManager):
             memory_high = int(memory_high) if memory_high.is_integer() else memory_high
             memory_high = f"MemoryHigh={memory_high}G"
 
+        log_namespace = None
+        if config.log_namespace:
+            log_namespace = f"LogNamespace={config.log_namespace}"
+
         exec_reload = None
         if service.graceful_method == GracefulMethod.SIGHUP:
             exec_reload = "ExecReload=/bin/kill -HUP $MAINPID"
@@ -274,6 +279,7 @@ class SystemdProcessManager(BaseProcessManager):
             "systemd_exec_reload": exec_reload or "",
             "systemd_memory_limit": memory_limit or "",
             "systemd_memory_high": memory_high or "",
+            "systemd_log_namespace": log_namespace or "",
             "systemd_description": systemd_service.description,
             "systemd_target": self.__target_unit_name(config),
         }
