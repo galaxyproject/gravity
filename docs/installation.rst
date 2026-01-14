@@ -168,6 +168,11 @@ The following options in the ``gravity`` section of ``galaxy.yml`` can be used t
     # If not specified defaults to ``<galaxy_data_dir>/gravity/log``.
     # log_dir:
 
+    # Run Galaxy processes in the specified journal namespace (sets the value of ``LogNamespace=`` in the systemd service
+    # units). This allows you to keep Galaxy log messages separate in the system journal from other log messages. Ignored if
+    # ``process_manager`` is not ``systemd``. See ``systemd.exec(5)`` for details.
+    # log_namespace:
+
     # Set to Galaxy's virtualenv directory.
     # If not specified, Gravity assumes all processes are on PATH. This option is required in most circumstances when using
     # the ``systemd`` process manager.
