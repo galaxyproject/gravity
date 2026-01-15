@@ -1,9 +1,15 @@
 """
 """
 import multiprocessing
+from typing import (
+    Iterable,
+    List,
+    Set,
+)
 
 from gravity.process_manager import BaseProcessManager, ProcessExecutor
 from gravity.settings import ProcessManager
+from gravity.state import ConfigFile
 
 
 class MultiprocessingProcessManager(BaseProcessManager):
@@ -35,11 +41,17 @@ class MultiprocessingProcessManager(BaseProcessManager):
     def stop(self, configs=None, service_names=None):
         """ """
 
-    def _present_pm_files_for_config(self, config):
-        """ """
+    def _intended_pm_files_for_config(self, config: ConfigFile) -> Set[str]:
+        raise NotImplementedError()
 
-    def _disable_and_remove_pm_files(self, pm_files):
-        """ """
+    def _present_pm_files_for_config(self, config: ConfigFile) -> Set[str]:
+        raise NotImplementedError()
+
+    def _disable_and_remove_pm_files(self, pm_files: Iterable[str]) -> None:
+        raise NotImplementedError()
+
+    def _all_present_pm_files(self) -> List[str]:
+        raise NotImplementedError()
 
     def restart(self, configs=None, service_names=None):
         """ """
@@ -56,7 +68,7 @@ class MultiprocessingProcessManager(BaseProcessManager):
     def shutdown(self):
         """ """
 
-    def update(self, configs=None, force=False, clean=False):
+    def update(self, configs: List[ConfigFile], force: bool = False, clean: bool = False) -> None:
         """ """
 
     _service_environment_formatter = ProcessExecutor._service_environment_formatter

@@ -3,12 +3,19 @@ import os
 import time
 import string
 from pathlib import Path
+from typing import (
+    TYPE_CHECKING,
+    Union,
+)
 
 import pytest
 from gravity import process_manager
 from gravity.process_manager.supervisor import supervisor_program_names
 from gravity.settings import GX_IT_PROXY_MIN_VERSION
 from yaml import safe_load
+
+if TYPE_CHECKING:
+    from gravity.config_manager import ConfigManager
 
 
 JOB_CONF_XML_STATIC_HANDLERS = """
@@ -95,17 +102,19 @@ for name in [n for n in dir() if all([(c in string.ascii_uppercase + '_') for c 
     params[name] = pytest.param(globals()[name], id=name.lower())
 
 
-def service_conf_dir(state_dir, process_manager_name):
+def service_conf_dir(state_dir: str, process_manager_name: str) -> Path:
     instance_name = os.path.basename(state_dir)
-    state_dir = Path(state_dir)
+    state_dir_path = Path(state_dir)
     if process_manager_name == 'supervisor':
-        return state_dir / 'supervisor' / 'supervisord.conf.d' / f'{instance_name}.d'
+        return state_dir_path / 'supervisor' / 'supervisord.conf.d' / f'{instance_name}.d'
     elif process_manager_name == 'systemd':
-        return Path(os.environ.get('GRAVITY_SYSTEMD_UNIT_PATH'))
+        gravity_systemd_unit_path = os.environ.get('GRAVITY_SYSTEMD_UNIT_PATH')
+        assert gravity_systemd_unit_path
+        return Path(gravity_systemd_unit_path)
     raise Exception(f"Invalid process manager name: {process_manager_name}")
 
 
-def service_conf_file(instance_name, process_manager_name, service_name, service_type=None):
+def service_conf_file(instance_name: str, process_manager_name: str, service_name: str, service_type: Union[str, None] = None) -> str:
     service_type = service_type or service_name
     if process_manager_name == 'supervisor':
         return f'{service_type}_{service_name}.conf'
@@ -114,7 +123,7 @@ def service_conf_file(instance_name, process_manager_name, service_name, service
     raise Exception(f"Invalid process manager name: {process_manager_name}")
 
 
-def service_conf_path(state_dir, process_manager_name, service_name, service_type=None):
+def service_conf_path(state_dir: str, process_manager_name: str, service_name: str, service_type: Union[str, None] = None) -> Path:
     instance_name = os.path.basename(state_dir)
     conf_dir = service_conf_dir(state_dir, process_manager_name)
     conf_file = service_conf_file(instance_name, process_manager_name, service_name, service_type)
@@ -122,8 +131,9 @@ def service_conf_path(state_dir, process_manager_name, service_name, service_typ
 
 
 @pytest.mark.parametrize('process_manager_name', ['supervisor', 'systemd'])
-def test_update(galaxy_yml, default_config_manager, process_manager_name):
+def test_update(galaxy_yml, default_config_manager: "ConfigManager", process_manager_name: str) -> None:
     new_bind = 'localhost:8081'
+    assert default_config_manager.state_dir is not None
     instance_name = os.path.basename(default_config_manager.state_dir)
     galaxy_yml.write(json.dumps(
         {'galaxy': None, 'gravity': {'process_manager': process_manager_name,
@@ -136,8 +146,9 @@ def test_update(galaxy_yml, default_config_manager, process_manager_name):
 
 
 @pytest.mark.parametrize('process_manager_name', ['supervisor', 'systemd'])
-def test_update_default_services(galaxy_yml, default_config_manager, process_manager_name):
+def test_update_default_services(galaxy_yml, default_config_manager: "ConfigManager", process_manager_name: str) -> None:
     test_update(galaxy_yml, default_config_manager, process_manager_name)
+    assert default_config_manager.state_dir is not None
     gunicorn_conf_path = service_conf_path(default_config_manager.state_dir, process_manager_name, 'gunicorn')
     assert gunicorn_conf_path.exists()
     celery_conf_path = service_conf_path(default_config_manager.state_dir, process_manager_name, 'celery')
@@ -147,8 +158,9 @@ def test_update_default_services(galaxy_yml, default_config_manager, process_man
 
 
 @pytest.mark.parametrize('process_manager_name', ['supervisor', 'systemd'])
-def test_update_force(galaxy_yml, default_config_manager, process_manager_name):
+def test_update_force(galaxy_yml, default_config_manager: "ConfigManager", process_manager_name: str) -> None:
     test_update(galaxy_yml, default_config_manager, process_manager_name)
+    assert default_config_manager.state_dir is not None
     gunicorn_conf_path = service_conf_path(default_config_manager.state_dir, process_manager_name, 'gunicorn')
     assert gunicorn_conf_path.exists()
     update_time = gunicorn_conf_path.stat().st_mtime
@@ -164,8 +176,9 @@ def test_update_force(galaxy_yml, default_config_manager, process_manager_name):
 
 
 @pytest.mark.parametrize('process_manager_name', ['supervisor', 'systemd'])
-def test_cleanup(galaxy_yml, default_config_manager, process_manager_name):
+def test_cleanup(galaxy_yml, default_config_manager: "ConfigManager", process_manager_name: str) -> None:
     test_update(galaxy_yml, default_config_manager, process_manager_name)
+    assert default_config_manager.state_dir is not None
     gunicorn_conf_path = service_conf_path(default_config_manager.state_dir, process_manager_name, 'gunicorn')
     celery_conf_path = service_conf_path(default_config_manager.state_dir, process_manager_name, 'celery')
     celery_beat_conf_path = service_conf_path(default_config_manager.state_dir, process_manager_name, 'celery-beat')
@@ -180,8 +193,9 @@ def test_cleanup(galaxy_yml, default_config_manager, process_manager_name):
 
 
 @pytest.mark.parametrize('process_manager_name', ['supervisor', 'systemd'])
-def test_disable_services(galaxy_yml, default_config_manager, process_manager_name):
+def test_disable_services(galaxy_yml, default_config_manager: "ConfigManager", process_manager_name: str) -> None:
     state_dir = default_config_manager.state_dir
+    assert state_dir is not None
     instance_name = os.path.basename(state_dir)
     galaxy_yml.write(json.dumps(
         {'galaxy': None, 'gravity': {
@@ -203,8 +217,9 @@ def test_disable_services(galaxy_yml, default_config_manager, process_manager_na
 
 @pytest.mark.parametrize('job_conf', [params["JOB_CONF_XML_DYNAMIC_HANDLERS"]], indirect=True)
 @pytest.mark.parametrize('process_manager_name', ['supervisor', 'systemd'])
-def test_dynamic_handlers(default_config_manager, galaxy_yml, job_conf, process_manager_name):
+def test_dynamic_handlers(default_config_manager: "ConfigManager", galaxy_yml, job_conf, process_manager_name: str) -> None:
     state_dir = default_config_manager.state_dir
+    assert state_dir is not None
     instance_name = os.path.basename(state_dir)
     galaxy_yml.write(DYNAMIC_HANDLER_CONFIG % {"process_manager_name": process_manager_name,
                                                "instance_name": instance_name})
@@ -232,8 +247,9 @@ def test_dynamic_handlers(default_config_manager, galaxy_yml, job_conf, process_
 @pytest.mark.parametrize(
     'job_conf', [params["JOB_CONF_YAML_NO_HANDLERS"], params["JOB_CONF_XML_NO_HANDLERS"]], indirect=True)
 @pytest.mark.parametrize('process_manager_name', ['supervisor', 'systemd'])
-def test_no_static_handlers(default_config_manager, galaxy_yml, job_conf, process_manager_name):
+def test_no_static_handlers(default_config_manager: "ConfigManager", galaxy_yml, job_conf, process_manager_name: str) -> None:
     state_dir = default_config_manager.state_dir
+    assert state_dir is not None
     instance_name = os.path.basename(state_dir)
     with open(galaxy_yml, 'w') as config_fh:
         config_fh.write(json.dumps({
@@ -249,8 +265,9 @@ def test_no_static_handlers(default_config_manager, galaxy_yml, job_conf, proces
 @pytest.mark.parametrize(
     'job_conf', [params["JOB_CONF_YAML_STATIC_HANDLERS"], params["JOB_CONF_XML_STATIC_HANDLERS"]], indirect=True)
 @pytest.mark.parametrize('process_manager_name', ['supervisor', 'systemd'])
-def test_static_handlers(default_config_manager, galaxy_yml, job_conf, process_manager_name):
+def test_static_handlers(default_config_manager: "ConfigManager", galaxy_yml, job_conf, process_manager_name: str) -> None:
     state_dir = default_config_manager.state_dir
+    assert state_dir is not None
     instance_name = os.path.basename(state_dir)
     with open(galaxy_yml, 'w') as config_fh:
         config_fh.write(json.dumps({
@@ -272,8 +289,9 @@ def test_static_handlers(default_config_manager, galaxy_yml, job_conf, process_m
 
 @pytest.mark.parametrize('job_conf', [params["JOB_CONF_YAML_STATIC_HANDLERS"]], indirect=True)
 @pytest.mark.parametrize('process_manager_name', ['supervisor', 'systemd'])
-def test_static_handlers_direct(default_config_manager, galaxy_yml, job_conf, process_manager_name):
+def test_static_handlers_direct(default_config_manager: "ConfigManager", galaxy_yml, job_conf, process_manager_name: str) -> None:
     state_dir = default_config_manager.state_dir
+    assert state_dir is not None
     instance_name = os.path.basename(state_dir)
     with open(galaxy_yml, 'w') as config_fh:
         config_fh.write(json.dumps({
@@ -297,8 +315,9 @@ def test_static_handlers_direct(default_config_manager, galaxy_yml, job_conf, pr
 
 
 @pytest.mark.parametrize('process_manager_name', ['supervisor', 'systemd'])
-def test_static_handlers_embedded_in_galaxy_yml(default_config_manager, galaxy_yml, process_manager_name):
+def test_static_handlers_embedded_in_galaxy_yml(default_config_manager: "ConfigManager", galaxy_yml, process_manager_name: str) -> None:
     state_dir = default_config_manager.state_dir
+    assert state_dir is not None
     instance_name = os.path.basename(state_dir)
     with open(galaxy_yml, 'w') as config_fh:
         config_fh.write(json.dumps({
@@ -318,8 +337,9 @@ def test_static_handlers_embedded_in_galaxy_yml(default_config_manager, galaxy_y
 
 
 @pytest.mark.parametrize('process_manager_name', ['supervisor', 'systemd'])
-def test_gxit_handler(default_config_manager, galaxy_yml, gxit_config, process_manager_name):
+def test_gxit_handler(default_config_manager: "ConfigManager", galaxy_yml, gxit_config, process_manager_name: str) -> None:
     state_dir = default_config_manager.state_dir
+    assert state_dir is not None
     galaxy_yml.write(json.dumps(gxit_config))
     default_config_manager.load_config_file(str(galaxy_yml))
     with process_manager.process_manager(config_manager=default_config_manager) as pm:
@@ -334,8 +354,9 @@ def test_gxit_handler(default_config_manager, galaxy_yml, gxit_config, process_m
 
 
 @pytest.mark.parametrize('process_manager_name', ['supervisor', 'systemd'])
-def test_gxit_handler_path_prefix(default_config_manager, galaxy_yml, gxit_config, process_manager_name):
+def test_gxit_handler_path_prefix(default_config_manager: "ConfigManager", galaxy_yml, gxit_config, process_manager_name: str) -> None:
     state_dir = default_config_manager.state_dir
+    assert state_dir is not None
     gxit_base_path = gxit_config["galaxy"]["interactivetools_base_path"] = "/foo/"
     gxit_prefix = gxit_config["galaxy"]["interactivetools_prefix"] = "bar"
     galaxy_yml.write(json.dumps(gxit_config))
@@ -349,8 +370,9 @@ def test_gxit_handler_path_prefix(default_config_manager, galaxy_yml, gxit_confi
 
 
 @pytest.mark.parametrize('process_manager_name', ['supervisor', 'systemd'])
-def test_tusd_process(default_config_manager, galaxy_yml, tusd_config, process_manager_name):
+def test_tusd_process(default_config_manager: "ConfigManager", galaxy_yml, tusd_config, process_manager_name: str) -> None:
     state_dir = default_config_manager.state_dir
+    assert state_dir is not None
     galaxy_yml.write(json.dumps(tusd_config))
     default_config_manager.load_config_file(str(galaxy_yml))
     with process_manager.process_manager(config_manager=default_config_manager) as pm:
@@ -360,8 +382,9 @@ def test_tusd_process(default_config_manager, galaxy_yml, tusd_config, process_m
         assert "tusd -host" in tusd_config_path.read_text()
 
 
-def test_default_memory_limit(galaxy_yml, default_config_manager):
+def test_default_memory_limit(galaxy_yml, default_config_manager: "ConfigManager") -> None:
     state_dir = default_config_manager.state_dir
+    assert state_dir is not None
     instance_name = os.path.basename(state_dir)
     process_manager_name = 'systemd'
     galaxy_yml.write(json.dumps(
@@ -383,8 +406,9 @@ def test_default_memory_limit(galaxy_yml, default_config_manager):
     assert 'MemoryHigh' not in handler0_config_path.open().read()
 
 
-def test_default_memory_high(galaxy_yml, default_config_manager):
+def test_default_memory_high(galaxy_yml, default_config_manager: "ConfigManager") -> None:
     state_dir = default_config_manager.state_dir
+    assert state_dir is not None
     instance_name = os.path.basename(state_dir)
     process_manager_name = 'systemd'
     galaxy_yml.write(json.dumps(
@@ -404,8 +428,9 @@ def test_default_memory_high(galaxy_yml, default_config_manager):
     assert 'MemoryHigh=1.5G' in handler0_config_path.open().read()
 
 
-def test_service_memory_limit(galaxy_yml, default_config_manager):
+def test_service_memory_limit(galaxy_yml, default_config_manager: "ConfigManager") -> None:
     state_dir = default_config_manager.state_dir
+    assert state_dir is not None
     instance_name = os.path.basename(state_dir)
     process_manager_name = 'systemd'
     galaxy_yml.write(json.dumps(
@@ -427,8 +452,9 @@ def test_service_memory_limit(galaxy_yml, default_config_manager):
     assert 'MemoryHigh=3.5G' in handler0_config_path.open().read()
 
 
-def test_override_memory_limit(galaxy_yml, default_config_manager):
+def test_override_memory_limit(galaxy_yml, default_config_manager: "ConfigManager") -> None:
     state_dir = default_config_manager.state_dir
+    assert state_dir is not None
     instance_name = os.path.basename(state_dir)
     process_manager_name = 'systemd'
     galaxy_yml.write(json.dumps(
@@ -452,8 +478,9 @@ def test_override_memory_limit(galaxy_yml, default_config_manager):
     assert 'MemoryHigh=1.5G' in handler0_config_path.open().read()
 
 
-def test_default_umask(galaxy_yml, default_config_manager):
+def test_default_umask(galaxy_yml, default_config_manager: "ConfigManager") -> None:
     state_dir = default_config_manager.state_dir
+    assert state_dir is not None
     instance_name = os.path.basename(state_dir)
     process_manager_name = 'systemd'
     galaxy_yml.write(json.dumps(
@@ -472,8 +499,9 @@ def test_default_umask(galaxy_yml, default_config_manager):
     assert 'UMask=022' in handler0_config_path.open().read()
 
 
-def test_service_umask(galaxy_yml, default_config_manager):
+def test_service_umask(galaxy_yml, default_config_manager: "ConfigManager") -> None:
     state_dir = default_config_manager.state_dir
+    assert state_dir is not None
     instance_name = os.path.basename(state_dir)
     process_manager_name = 'systemd'
     galaxy_yml.write(json.dumps(
@@ -493,8 +521,9 @@ def test_service_umask(galaxy_yml, default_config_manager):
     assert 'UMask=022' in handler0_config_path.open().read()
 
 
-def test_override_umask(galaxy_yml, default_config_manager):
+def test_override_umask(galaxy_yml, default_config_manager: "ConfigManager") -> None:
     state_dir = default_config_manager.state_dir
+    assert state_dir is not None
     instance_name = os.path.basename(state_dir)
     process_manager_name = 'systemd'
     galaxy_yml.write(json.dumps(
@@ -515,7 +544,7 @@ def test_override_umask(galaxy_yml, default_config_manager):
     assert 'UMask=027' in handler0_config_path.open().read()
 
 
-def test_supervisor_program_names():
+def test_supervisor_program_names() -> None:
     assert supervisor_program_names("gunicorn", 1, 0) == ["gunicorn"]
     assert supervisor_program_names("gunicorn", 2, 0) == ["gunicorn:gunicorn_0", "gunicorn:gunicorn_1"]
     assert supervisor_program_names("gunicorn", 2, 8080) == ["gunicorn:gunicorn_8080", "gunicorn:gunicorn_8081"]

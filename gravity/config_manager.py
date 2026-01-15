@@ -5,12 +5,15 @@ import glob
 import logging
 import os
 import xml.etree.ElementTree as elementtree
-from typing import Union
+from typing import (
+    Any,
+    Dict,
+    List,
+    Tuple,
+    Union,
+)
 
-try:
-    from pydantic.v1 import ValidationError
-except ImportError:
-    from pydantic import ValidationError
+from pydantic import ValidationError
 from yaml import safe_load
 
 import gravity.io
@@ -51,19 +54,19 @@ def config_manager(config_file=None, state_dir=None, user_mode=None, process_man
     )
 
 
-class ConfigManager(object):
+class ConfigManager:
     galaxy_server_config_section = "galaxy"
     gravity_config_section = "gravity"
     app_config_file_option = "galaxy_config_file"
 
-    def __init__(self, config_file=None, state_dir=None, user_mode=None, process_manager=None):
-        self.__configs = {}
+    def __init__(self, config_file=None, state_dir=None, user_mode=None, process_manager: Union[ProcessManager, None] = None):
+        self.__configs: Dict[str, ConfigFile] = {}
         self.state_dir = None
         if state_dir is not None:
             # convert from pathlib.Path
             self.state_dir = str(state_dir)
         self.user_mode = user_mode
-        self.process_manager = process_manager or ProcessManager.supervisor.value
+        self.process_manager = process_manager or ProcessManager.supervisor
 
         gravity.io.debug(f"Gravity state dir: {state_dir}")
 
@@ -151,7 +154,7 @@ class ConfigManager(object):
             gravity.io.exception(exc)
 
     def __load_config(self, gravity_config_dict, app_config):
-        defaults = {}
+        defaults: Dict = {}
         try:
             gravity_settings = Settings(**recursive_update(defaults, gravity_config_dict))
         except ValidationError as exc:
@@ -250,7 +253,7 @@ class ConfigManager(object):
                 ))
         return assign_with
 
-    def create_dynamic_handler_services(self, gravity_settings: Settings, config: ConfigFile, assign_with):
+    def create_dynamic_handler_services(self, gravity_settings: Settings, config: ConfigFile, assign_with) -> None:
         # we push environment from settings to services but the rest of the services pull their env options from
         # settings directly. this can be a bit confusing but is probably ok since there are 3 ways to configure
         # handlers, and gravity is only 1 of them.
@@ -271,10 +274,10 @@ class ConfigManager(object):
                 ))
 
     @staticmethod
-    def expand_handlers(gravity_settings: Settings, config: ConfigFile):
+    def expand_handlers(gravity_settings: Settings, config: ConfigFile) -> Dict[str, Union[Dict[str, Any], List[Dict[str, Any]]]]:
         use_list = gravity_settings.use_service_instances
         handlers = gravity_settings.handlers or {}
-        expanded_handlers = {}
+        expanded_handlers: Dict[str, Union[Dict[str, Any], List[Dict[str, Any]]]] = {}
         default_name_template = "{name}_{process}"
         for service_name, handler_config in handlers.items():
             handler_config["enable"] = True
@@ -288,7 +291,7 @@ class ConfigManager(object):
                     expanded_handlers[service_name] = handler_config
                     continue
             name_template = (name_template or default_name_template).strip()
-            instances = []
+            instances: List[Dict[str, Any]] = []
             for index in range(count):
                 expanded_service_name = name_template.format(name=service_name, process=index, instance_name=config.instance_name)
                 if use_list:
@@ -304,18 +307,18 @@ class ConfigManager(object):
         return expanded_handlers
 
     @staticmethod
-    def get_job_config(conf: Union[str, dict]):
+    def get_job_config(conf: Union[str, dict]) -> Tuple[Union[List[str], None], List[Dict[str, Any]]]:
         """Extract handler names from job_conf.xml"""
         # TODO: use galaxy job conf parsing
         assign_with = None
-        rval = []
+        rval: List[Dict[str, Any]] = []
         if isinstance(conf, str):
             if conf.endswith('.xml'):
                 root = elementtree.parse(conf).getroot()
                 handlers = root.find("handlers")
-                assign_with = (handlers or {}).get("assign_with")
-                if assign_with:
-                    assign_with = [a.strip() for a in assign_with.split(",")]
+                assign_with_attr = handlers.get("assign_with") if handlers is not None else None
+                if assign_with_attr:
+                    assign_with = [a.strip() for a in assign_with_attr.split(",")]
                 for handler in (handlers or []):
                     rval.append({"service_name": handler.attrib["id"]})
             elif conf.endswith(('.yml', '.yaml')):
@@ -340,16 +343,16 @@ class ConfigManager(object):
         return len(self.__configs)
 
     @property
-    def single_instance(self):
+    def single_instance(self) -> bool:
         """Indicate if there is only one configured instance"""
         return self.instance_count == 1
 
     def is_loaded(self, config_file):
         return config_file in self.get_configured_files()
 
-    def get_configs(self, instances=None, process_manager=None):
+    def get_configs(self, instances=None, process_manager: Union[ProcessManager, None] = None) -> List[ConfigFile]:
         """Return the persisted values of all config files registered with the config manager."""
-        rval = []
+        rval: List[ConfigFile] = []
         for instance_name, config in list(self.__configs.items()):
             if ((instances is not None and instance_name in instances) or instances is None) and (
                 (process_manager is not None and config.process_manager == process_manager) or process_manager is None
@@ -357,7 +360,7 @@ class ConfigManager(object):
                 rval.append(config)
         return rval
 
-    def get_config(self, instance_name=None):
+    def get_config(self, instance_name: Union[str, None] = None) -> ConfigFile:
         if instance_name is None:
             if self.instance_count > 1:
                 gravity.io.exception("An instance name is required when more than one instance is configured")
@@ -380,7 +383,7 @@ class ConfigManager(object):
         return list(self.__configs.keys())
 
     def get_configured_files(self):
-        return list(c.gravity_config_file for c in self.__configs.values())
+        return [c.gravity_config_file for c in self.__configs.values()]
 
     def auto_load(self):
         """Attempt to automatically load a config file if none are loaded."""
@@ -388,7 +391,7 @@ class ConfigManager(object):
         if self.instance_count != 0:
             return
         if os.environ.get("GALAXY_CONFIG_FILE"):
-            configs = [os.environ["GALAXY_CONFIG_FILE"]]
+            configs: Tuple[str, ...] = (os.environ["GALAXY_CONFIG_FILE"],)
         elif self.is_root:
             load_all = True
             configs = (

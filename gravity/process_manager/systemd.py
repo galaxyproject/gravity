@@ -6,11 +6,20 @@ import shlex
 import subprocess
 from glob import glob
 from functools import partial
+from typing import (
+    Callable,
+    Iterable,
+    List,
+    Set,
+)
 
 import gravity.io
 from gravity.process_manager import BaseProcessManager
 from gravity.settings import ProcessManager
-from gravity.state import GracefulMethod
+from gravity.state import (
+    ConfigFile,
+    GracefulMethod,
+)
 
 SYSTEMD_TARGET_HASH_RE = r";\s*GRAVITY=([0-9a-f]+)"
 
@@ -123,19 +132,19 @@ class SystemdProcessManager(BaseProcessManager):
         return unit_path
 
     def __systemctl(self, *args, ignore_rc=None, not_found_rc=None, capture=False, **kwargs):
-        args = list(args)
+        args_list = list(args)
         not_found_rc = not_found_rc or ()
-        call = subprocess.check_call
+        call: Callable = subprocess.check_call
         extra_args = os.environ.get("GRAVITY_SYSTEMCTL_EXTRA_ARGS")
         if extra_args:
-            args = shlex.split(extra_args) + args
+            args_list = shlex.split(extra_args) + args_list
         if self.user_mode:
-            args = ["--user"] + args
-        gravity.io.debug("Calling systemctl with args: %s", args)
+            args_list = ["--user"] + args_list
+        gravity.io.debug("Calling systemctl with args: %s", args_list)
         if capture:
             call = subprocess.check_output
         try:
-            return call(["systemctl"] + args, text=True)
+            return call(["systemctl"] + args_list, text=True)
         except subprocess.CalledProcessError as exc:
             if exc.returncode in not_found_rc:
                 gravity.io.exception("Some expected systemd units were not found, did you forget to run `galaxyctl update`?")
@@ -143,11 +152,11 @@ class SystemdProcessManager(BaseProcessManager):
                 raise
 
     def __journalctl(self, *args, **kwargs):
-        args = list(args)
+        args_list = list(args)
         if self.user_mode:
-            args = ["--user"] + args
-        gravity.io.debug("Calling journalctl with args: %s", args)
-        subprocess.check_call(["journalctl"] + args)
+            args_list = ["--user"] + args_list
+        gravity.io.debug("Calling journalctl with args: %s", args_list)
+        subprocess.check_call(["journalctl"] + args_list)
 
     def _service_default_path(self):
         environ = self.__systemctl("show-environment", capture=True)
@@ -166,8 +175,8 @@ class SystemdProcessManager(BaseProcessManager):
         instance_name = f"-{config.instance_name}" if self._use_instance_name else ""
         return f"galaxy{instance_name}.target"
 
-    def __unit_files_to_active_unit_names(self, unit_files):
-        unit_names = []
+    def __unit_files_to_active_unit_names(self, unit_files: Iterable[str]) -> List[str]:
+        unit_names: List[str] = []
         for unit_file in unit_files:
             unit_file = os.path.basename(unit_file)
             if "@" in unit_file:
@@ -179,7 +188,7 @@ class SystemdProcessManager(BaseProcessManager):
             unit_names.extend(line.split()[0] for line in list_output.splitlines())
         return unit_names
 
-    def _disable_and_remove_pm_files(self, unit_files):
+    def _disable_and_remove_pm_files(self, unit_files: Iterable[str]) -> None:
         for target in [u for u in unit_files if u.endswith(".target")]:
             self.__systemctl("disable", "--now", os.path.basename(target))
         # stopping all the targets should also stop all the services, but we'll check to be sure
@@ -205,8 +214,8 @@ class SystemdProcessManager(BaseProcessManager):
                 if match:
                     return match.group(1)
 
-    def _present_pm_files_for_config(self, config):
-        unit_files = set()
+    def _present_pm_files_for_config(self, config: ConfigFile) -> Set[str]:
+        unit_files: Set[str] = set()
         instance_name = f"-{config.instance_name}" if self._use_instance_name else ""
         target = os.path.join(self.__systemd_unit_dir, f"galaxy{instance_name}.target")
         if os.path.exists(target):
@@ -216,8 +225,8 @@ class SystemdProcessManager(BaseProcessManager):
                 unit_files.update(glob(f"{os.path.splitext(target)[0]}-*.service"))
         return unit_files
 
-    def _intended_pm_files_for_config(self, config):
-        unit_files = set()
+    def _intended_pm_files_for_config(self, config: ConfigFile) -> Set[str]:
+        unit_files: Set[str] = set()
         for service in config.services:
             systemd_service = SystemdService(config, service, self._use_instance_name)
             unit_files.add(os.path.join(self.__systemd_unit_dir, systemd_service.unit_file_name))
@@ -374,7 +383,7 @@ class SystemdProcessManager(BaseProcessManager):
         else:
             self.__systemctl("list-units", "--all", *unit_names)
 
-    def update(self, configs=None, force=False, clean=False):
+    def update(self, configs: List[ConfigFile], force: bool = False, clean: bool = False) -> None:
         """ """
         self._pre_update(configs, force, clean)
         if not clean:
@@ -384,7 +393,7 @@ class SystemdProcessManager(BaseProcessManager):
         else:
             gravity.io.debug("No service changes, daemon-reload not performed")
 
-    def shutdown(self):
+    def shutdown(self) -> None:
         """ """
         if self._use_instance_name:
             configs = self.config_manager.get_configs(process_manager=self.name)

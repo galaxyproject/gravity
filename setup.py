@@ -18,8 +18,9 @@ with open(os.path.join("gravity", "__init__.py")) as f:
 
     def get_var(var_name):
         pattern = re.compile(r"%s\s+=\s+(.*)" % var_name)
-        match = pattern.search(init_contents).group(1)
-        return str(ast.literal_eval(match))
+        match = pattern.search(init_contents)
+        assert match is not None
+        return str(ast.literal_eval(match.group(1)))
 
     version = get_var("__version__")
 
@@ -35,13 +36,14 @@ setup(
     author_email="team@galaxyproject.org",
     license="MIT",
     keywords="gravity galaxy",
-    python_requires=">=3.7",
+    python_requires=">=3.8",
     install_requires=[
         "Click",
         "supervisor",
         "pyyaml",
         "packaging",
-        "pydantic<3",  # pydantic.v1 import will be removed in v3
+        "pydantic>=2,<3",  # pydantic.v1 import will be removed in v3
+        "pydantic-settings",
         "jsonref",
         "requests",
         "requests-unixsocket",
@@ -60,6 +62,9 @@ setup(
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
+        "Programming Language :: Python :: 3.14",
     ],
     zip_safe=False,
 )

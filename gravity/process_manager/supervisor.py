@@ -6,11 +6,22 @@ import subprocess
 import time
 from functools import partial
 from glob import glob
+from typing import (
+    Iterable,
+    List,
+    Set,
+    Union,
+)
 
 import gravity.io
 from gravity.process_manager import BaseProcessManager
 from gravity.settings import ProcessManager
-from gravity.state import GracefulMethod
+from gravity.state import (
+    ConfigFile,
+    GracefulMethod,
+    Service,
+    ServiceList,
+)
 from gravity.util import which
 
 from supervisor import supervisorctl  # type: ignore
@@ -78,7 +89,7 @@ if "XDG_CONFIG_HOME" in os.environ:
 
 class SupervisorProgram:
     # converts between different formats
-    def __init__(self, config, service, use_instance_name):
+    def __init__(self, config: ConfigFile, service: Union[Service, ServiceList], use_instance_name: bool):
         self.config = config
         self.service = service
         self._use_instance_name = use_instance_name
@@ -215,7 +226,7 @@ class SupervisorProcessManager(BaseProcessManager):
             # if running in foreground, if terminate is called, then supervisord should've already received a SIGINT
             self.__supervisord_popen and self.__supervisord_popen.wait()
 
-    def _disable_and_remove_pm_files(self, pm_files):
+    def _disable_and_remove_pm_files(self, pm_files: Iterable[str]) -> None:
         # don't need to stop anything - `supervisorctl update` afterward will take care of it
         if pm_files:
             gravity.io.info(f"Removing supervisor configs: {', '.join(pm_files)}")
@@ -226,8 +237,8 @@ class SupervisorProcessManager(BaseProcessManager):
                 gravity.io.info(f"Removing empty instance dir: {instance_dir}")
                 os.rmdir(instance_dir)
 
-    def _present_pm_files_for_config(self, config):
-        pm_files = set()
+    def _present_pm_files_for_config(self, config: ConfigFile) -> Set[str]:
+        pm_files: Set[str] = set()
         instance_name = config.instance_name
         instance_conf_dir = os.path.join(self.supervisord_conf_dir, f"{instance_name}.d")
         group_file = os.path.join(self.supervisord_conf_dir, f"group_{instance_name}.conf")
@@ -236,8 +247,8 @@ class SupervisorProcessManager(BaseProcessManager):
         pm_files.update(glob(os.path.join(instance_conf_dir, "*")))
         return pm_files
 
-    def _intended_pm_files_for_config(self, config):
-        pm_files = set()
+    def _intended_pm_files_for_config(self, config: ConfigFile) -> Set[str]:
+        pm_files: Set[str] = set()
         instance_name = config.instance_name
         instance_conf_dir = os.path.join(self.supervisord_conf_dir, f"{instance_name}.d")
         for service in config.services:
@@ -251,7 +262,14 @@ class SupervisorProcessManager(BaseProcessManager):
         return (glob(os.path.join(self.supervisord_conf_dir, "*.d", "*")) +
                 glob(os.path.join(self.supervisord_conf_dir, "group_*.conf")))
 
-    def __update_service(self, config, service, instance_conf_dir, instance_name, force):
+    def __update_service(
+        self,
+        config: ConfigFile,
+        service: Union[Service, ServiceList],
+        instance_conf_dir: str,
+        instance_name: str,
+        force: bool
+    ) -> str:
         program = SupervisorProgram(config, service, self._use_instance_name)
         # supervisor-specific format vars
         supervisor_format_vars = {
@@ -273,7 +291,7 @@ class SupervisorProcessManager(BaseProcessManager):
             self.supervisorctl('reread')
         return conf
 
-    def __process_config(self, config, force):
+    def __process_config(self, config: ConfigFile, force: bool) -> None:
         """Perform necessary supervisor config updates as per current Galaxy/Gravity configuration.
 
         Does not call ``supervisorctl update``.
@@ -295,7 +313,7 @@ class SupervisorProcessManager(BaseProcessManager):
         elif os.path.exists(group_conf):
             os.unlink(group_conf)
 
-    def __process_configs(self, configs, force):
+    def __process_configs(self, configs: List[ConfigFile], force: bool) -> None:
         for config in configs:
             self.__process_config(config, force)
             if not os.path.exists(config.log_dir):
@@ -344,7 +362,7 @@ class SupervisorProcessManager(BaseProcessManager):
         # used if desired, though
         if not self.tail:
             gravity.io.exception("`tail` not found on $PATH, please install it")
-        log_files = []
+        log_files: List[str] = []
         if quiet:
             cmd = [self.tail, "-f", self.log_file]
             tail_popen = subprocess.Popen(cmd)
@@ -406,7 +424,7 @@ class SupervisorProcessManager(BaseProcessManager):
             time.sleep(0.5)
         gravity.io.info("supervisord has terminated")
 
-    def update(self, configs=None, force=False, clean=False):
+    def update(self, configs: List[ConfigFile], force: bool = False, clean: bool = False) -> None:
         """Add newly defined servers, remove any that are no longer present"""
         self._pre_update(configs, force, clean)
         if not clean:

@@ -9,11 +9,28 @@ import shlex
 import sys
 from abc import ABCMeta, abstractmethod
 from functools import partial, wraps
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    List,
+    Set,
+    Union,
+)
 
 import gravity.io
 from gravity.config_manager import ConfigManager
-from gravity.settings import DEFAULT_INSTANCE_NAME, ServiceCommandStyle
-from gravity.state import VALID_SERVICE_NAMES
+from gravity.settings import (
+    DEFAULT_INSTANCE_NAME,
+    ProcessManager,
+    ServiceCommandStyle,
+)
+from gravity.state import (
+    ConfigFile,
+    VALID_SERVICE_NAMES,
+    Service,
+    ServiceList,
+)
 from gravity.util import which
 
 
@@ -31,7 +48,7 @@ def _route(func, all_process_managers=False):
     """
     @wraps(func)
     def decorator(self, *args, instance_names=None, **kwargs):
-        configs_by_pm = {}
+        configs_by_pm: Dict[ProcessManager, List[ConfigFile]] = {}
         pm_names = self.process_managers.keys()
         instance_names, service_names = self._instance_service_names(instance_names)
         configs = self.config_manager.get_configs(instances=instance_names or None)
@@ -79,7 +96,12 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
     def _service_program_name(self, instance_name, service):
         return f"{instance_name}_{service.service_type}_{service.service_name}"
 
-    def _service_format_vars(self, config, service, pm_format_vars=None):
+    def _service_format_vars(
+        self,
+        config: ConfigFile,
+        service: Union[Service, ServiceList],
+        pm_format_vars: Union[Dict[str, Any], None] = None
+    ) -> Dict[str, Any]:
         pm_format_vars = pm_format_vars or {}
         virtualenv_dir = config.virtualenv
         virtualenv_bin = shlex.quote(f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}') if virtualenv_dir else ""
@@ -108,7 +130,9 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
 
             # template env vars
             environment = service.environment
-            virtualenv_bin = format_vars["virtualenv_bin"]  # could have been changed by pm_format_vars
+            updated_virtualenv_bin = format_vars["virtualenv_bin"]  # could have been changed by pm_format_vars
+            assert isinstance(updated_virtualenv_bin, str)
+            virtualenv_bin = updated_virtualenv_bin
             if virtualenv_bin and service.add_virtualenv_to_path:
                 path = environment.get("PATH", self._service_default_path())
                 environment["PATH"] = ":".join([virtualenv_bin, path])
@@ -135,34 +159,52 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
 
 
 class BaseProcessManager(BaseProcessExecutionEnvironment, metaclass=ABCMeta):
+    name: str
+
     def __init__(self, *args, foreground=False, **kwargs):
         super().__init__(*args, **kwargs)
         self._service_changes = None
 
     @property
-    def _use_instance_name(self):
+    def _use_instance_name(self) -> bool:
         return ((not self.config_manager.single_instance)
                 or self.config_manager.get_config().instance_name != DEFAULT_INSTANCE_NAME)
 
-    def _remove_unintended_pm_files_for_configs(self, configs):
-        unintended_pm_files = set()
+    @abstractmethod
+    def _intended_pm_files_for_config(self, config: ConfigFile) -> Set[str]:
+        """ """
+
+    @abstractmethod
+    def _present_pm_files_for_config(self, config: ConfigFile) -> Set[str]:
+        """ """
+
+    @abstractmethod
+    def _disable_and_remove_pm_files(self, pm_files: Iterable[str]) -> None:
+        """ """
+
+    def _remove_unintended_pm_files_for_configs(self, configs: List[ConfigFile]) -> None:
+        unintended_pm_files: Set[str] = set()
         for config in configs:
             intended_pm_files = self._intended_pm_files_for_config(config)
             present_pm_files = self._present_pm_files_for_config(config)
             unintended_pm_files.update(present_pm_files - intended_pm_files)
         self._disable_and_remove_pm_files(unintended_pm_files)
 
-    def _remove_all_pm_files_for_configs(self, configs):
+    def _remove_all_pm_files_for_configs(self, configs: Iterable[ConfigFile]) -> None:
         for config in configs:
             pm_files = self._present_pm_files_for_config(config)
             self._disable_and_remove_pm_files(pm_files)
 
-    def _remove_all_pm_files(self):
+    @abstractmethod
+    def _all_present_pm_files(self) -> List[str]:
+        """ """
+
+    def _remove_all_pm_files(self) -> None:
         # the kevin uxbridge method
         pm_files = self._all_present_pm_files()
         self._disable_and_remove_pm_files(pm_files)
 
-    def _pre_update(self, configs, force, clean):
+    def _pre_update(self, configs: List[ConfigFile], force: bool, clean: bool) -> None:
         all_configs = set(self.config_manager.get_configs())
         if not clean:
             # no --clean and either possibility of --force
@@ -234,7 +276,7 @@ class BaseProcessManager(BaseProcessExecutionEnvironment, metaclass=ABCMeta):
         """ """
 
     @abstractmethod
-    def update(self, configs=None, service_names=None, force=False, clean=False):
+    def update(self, configs: List[ConfigFile], force: bool = False, clean: bool = False) -> None:
         """ """
 
     @abstractmethod
@@ -254,18 +296,25 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
     def _service_environment_formatter(self, environment, format_vars):
         return {k: v.format(**format_vars) for k, v in environment.items()}
 
-    def exec(self, config, service, service_instance_number=None, no_exec=False):
+    def exec(
+        self,
+        config: ConfigFile,
+        service: Union[Service, ServiceList],
+        service_instance_number: Union[int, None] = None,
+        no_exec: bool = False
+    ) -> None:
         service_name = service.service_name
 
         # if this is an instance of a service, we need to ensure that instance_number is formatted in as needed
         instance_count = service.count
         if instance_count > 1:
+            assert isinstance(service, ServiceList)  # for mypy
             msg = f"Cannot exec '{service_name}': This service is configured to use multiple instances and "
             if service_instance_number is None:
                 gravity.io.exception(msg + "--service-instance was not set")
             if service_instance_number not in range(0, instance_count):
                 gravity.io.exception(msg + "--service-instance is out of range")
-            service_instance = service.get_service_instance(service_instance_number)
+            service_instance: Union[Service, ServiceList] = service.get_service_instance(service_instance_number)
         else:
             service_instance = service
 
@@ -294,7 +343,15 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
 
 
 class ProcessManagerRouter:
-    def __init__(self, state_dir=None, config_file=None, config_manager=None, user_mode=None, process_manager=None, **kwargs):
+    def __init__(
+        self,
+        state_dir=None,
+        config_file=None,
+        config_manager: Union[ConfigManager, None] = None,
+        user_mode=None,
+        process_manager: Union[ProcessManager, None] = None,
+        **kwargs
+    ):
         self.config_manager = config_manager or ConfigManager(state_dir=state_dir,
                                                               config_file=config_file,
                                                               user_mode=user_mode,
@@ -330,7 +387,7 @@ class ProcessManagerRouter:
                 gravity.io.exception("No provided names are known instance or service names")
         return (instance_names, service_names)
 
-    def exec(self, instance_names=None, service_instance_number=None, no_exec=False):
+    def exec(self, instance_names=None, service_instance_number: Union[int, None] = None, no_exec: bool = False) -> None:
         """ """
         instance_names, service_names = self._instance_service_names(instance_names)
 
@@ -378,7 +435,7 @@ class ProcessManagerRouter:
         """ """
 
     @route_to_all
-    def update(self, instance_names=None, force=False, clean=False):
+    def update(self, configs: List[ConfigFile], force: bool = False, clean: bool = False) -> None:
         """ """
 
     @route

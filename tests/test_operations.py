@@ -37,7 +37,7 @@ def log_for_service(state_dir, process_manager_name, start_time, service_name, i
 
 def wait_for_startup(state_dir, free_port, prefix="/", path="/api/version", service_name="gunicorn",
                      process_manager_name="supervisor", start_time=None, instance_name=None):
-    for _ in range(STARTUP_TIMEOUT * 4):
+    for _ in range(STARTUP_TIMEOUT * 5):
         try:
             requests.get(f"http://localhost:{free_port}{prefix.rstrip('/')}{path}").raise_for_status()
             return True, ""

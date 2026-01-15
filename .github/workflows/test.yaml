@@ -10,12 +10,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.9', '3.13']
+        python-version: ['3.9', '3.14']
         galaxy-branch: ['release_23.0', 'dev']
         exclude:
           # either the release existed before the python release or some expensive-to-build wheels (e.g. numpy) don't
           # exist for the pinned package version / python version combo
-          - python-version: '3.13'
+          - python-version: '3.14'
             galaxy-branch: 'release_23.0'
     steps:
       - uses: actions/checkout@v4

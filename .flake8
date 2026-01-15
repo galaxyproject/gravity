@@ -1,3 +1,5 @@
 [flake8]
+exclude = .venv,.git,tests/galaxy.git,.tox,tests/galaxy_venv
+max-line-length = 160
 per-file-ignores =
     settings.py: E501
