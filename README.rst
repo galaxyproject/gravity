@@ -37,7 +37,7 @@ Quick Start
 Installation
 ------------
 
-Python 3.7 or later is required. Gravity can be installed independently of Galaxy, but it is also a dependency of
+Python 3.8 or later is required. Gravity can be installed independently of Galaxy, but it is also a dependency of
 Galaxy since Galaxy 22.01. If you've installed Galaxy, then Gravity is already installed in Galaxy's virtualenv.
 
 To install independently:
