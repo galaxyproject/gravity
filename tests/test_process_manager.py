@@ -382,6 +382,26 @@ def test_tusd_process(default_config_manager: "ConfigManager", galaxy_yml, tusd_
         assert "tusd -host" in tusd_config_path.read_text()
 
 
+@pytest.mark.parametrize('process_manager_name', ['supervisor', 'systemd'])
+def test_systemd_optionals_not_present(galaxy_yml, default_config_manager: "ConfigManager", process_manager_name: str) -> None:
+    state_dir = default_config_manager.state_dir
+    assert state_dir is not None
+    instance_name = os.path.basename(state_dir)
+    galaxy_yml.write(json.dumps(
+        {'galaxy': None, 'gravity': {'process_manager': process_manager_name,
+                                     'instance_name': instance_name}}))
+    default_config_manager.load_config_file(str(galaxy_yml))
+    with process_manager.process_manager(config_manager=default_config_manager) as pm:
+        pm.update()
+    conf_dir = service_conf_dir(state_dir, process_manager_name)
+    gunicorn_conf_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'gunicorn')
+    gunicorn_conf_contents = gunicorn_conf_path.open().read()
+    assert 'MemoryLimit' not in gunicorn_conf_contents
+    assert 'MemoryMax' not in gunicorn_conf_contents
+    assert 'MemoryHigh' not in gunicorn_conf_contents
+    assert 'LogNamespace' not in gunicorn_conf_contents
+
+
 def test_default_memory_limit(galaxy_yml, default_config_manager: "ConfigManager") -> None:
     state_dir = default_config_manager.state_dir
     assert state_dir is not None
@@ -542,6 +562,24 @@ def test_override_umask(galaxy_yml, default_config_manager: "ConfigManager") -> 
     handler0_config_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'handler', service_type='standalone')
     assert handler0_config_path.exists(), os.listdir(conf_dir)
     assert 'UMask=027' in handler0_config_path.open().read()
+
+
+def test_log_namespace(galaxy_yml, default_config_manager: "ConfigManager") -> None:
+    state_dir = default_config_manager.state_dir
+    assert state_dir is not None
+    instance_name = os.path.basename(state_dir)
+    process_manager_name = 'systemd'
+    galaxy_yml.write(json.dumps(
+        {'galaxy': None, 'gravity': {
+            'process_manager': process_manager_name,
+            'instance_name': instance_name,
+            'log_namespace': "zaphod"}}))
+    default_config_manager.load_config_file(str(galaxy_yml))
+    with process_manager.process_manager(config_manager=default_config_manager) as pm:
+        pm.update()
+    conf_dir = service_conf_dir(state_dir, process_manager_name)
+    gunicorn_conf_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'gunicorn')
+    assert 'LogNamespace=zaphod' in gunicorn_conf_path.open().read()
 
 
 def test_supervisor_program_names() -> None:

@@ -79,6 +79,7 @@ class ConfigFile(BaseModel):
     memory_high: Optional[float]
     gravity_data_dir: str
     log_dir: str
+    log_namespace: Union[str, None]
     services: Annotated[List[Union[Service, ServiceList]], Field(exclude=True)] = []
 
     def __hash__(self):
