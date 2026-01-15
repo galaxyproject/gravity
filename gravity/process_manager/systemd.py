@@ -93,7 +93,7 @@ class SystemdService:
             description_process = ""
 
         self.unit_prefix = f"galaxy{prefix_instance_name}-{service.service_name}"
-        self.description = f"Galaxy{description_instance_name}{service.service_name}{description_process}"
+        self.description = f"Galaxy{description_instance_name} {service.service_name}{description_process}"
 
     @property
     def unit_file_name(self):
