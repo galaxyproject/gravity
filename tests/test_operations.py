@@ -140,6 +140,16 @@ def test_cmd_start(state_dir, galaxy_yml, startup_config, free_port, process_man
         assert "" == result.output
 
 
+def is_reports_supported() -> bool:
+    galaxy_branch = os.environ.get("GRAVITY_TEST_GALAXY_BRANCH", "dev")
+    if not galaxy_branch.startswith("release_"):
+        return False
+    version = galaxy_branch[len("release_"):]
+    major_version = version.split(".")[0]
+    return int(major_version) < 26
+
+
+@pytest.mark.skipif(not is_reports_supported(), reason="reports service only supported in Galaxy prior to release_26.0")
 def test_cmd_start_reports(state_dir, galaxy_yml, reports_config, free_port):
     galaxy_yml.write(json.dumps(reports_config))
     runner = CliRunner()
