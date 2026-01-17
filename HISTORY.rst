@@ -2,6 +2,31 @@
  History
 =========
 
+1.2.0
+=====
+
+Breaking Changes
+----------------
+
+- Dropped support for Python 3.7 by @nsoranzo
+- Removed support for deprecated unicornherder by @nsoranzo in https://github.com/galaxyproject/gravity/pull/130
+
+Major Changes
+-------------
+
+- Updates to systemd memory controls by @natefoo in https://github.com/galaxyproject/gravity/pull/131
+- Add support for Python 3.14 by @nsoranzo in https://github.com/galaxyproject/gravity/pull/133
+- Add option for setting journald log namespace under systemd by @natefoo in https://github.com/galaxyproject/gravity/pull/134
+
+Other Changes
+-------------
+
+- Bump actions/setup-python from 5 to 6 in https://github.com/galaxyproject/gravity/pull/136
+- Bump codecov/codecov-action from 2 to 5 in https://github.com/galaxyproject/gravity/pull/138
+- Bump actions/checkout from 4 to 6 in https://github.com/galaxyproject/gravity/pull/137
+- Add missing space to systemd description by @natefoo in https://github.com/galaxyproject/gravity/pull/135
+- Fix tests by @nsoranzo in https://github.com/galaxyproject/gravity/pull/139
+
 1.1.1
 =====
 
