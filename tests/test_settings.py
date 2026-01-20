@@ -50,4 +50,4 @@ def test_schema_to_sample():
     sample = settings_to_sample()
     settings = Settings(**yaml.safe_load(StringIO(sample))["gravity"])
     default_settings = Settings()
-    assert settings.dict() == default_settings.dict()
+    assert settings.model_dump() == default_settings.model_dump()

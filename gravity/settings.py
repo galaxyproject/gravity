@@ -461,8 +461,10 @@ See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defi
 
 def process_property(key, value, depth=0):
     extra_white_space = "  " * depth
-    default = value.get("default", "")
-    if isinstance(default, dict):
+    default = value.get("default")
+    if default is None:
+        default = ""
+    elif isinstance(default, dict):
         # Little hack that prevents listing the default value for tusd in the sample config
         default = {}
     if default != "":
@@ -472,11 +474,14 @@ def process_property(key, value, depth=0):
             default = default[: -(len("\n...\n"))]
         default = default.strip()
     description = "\n".join(f"{extra_white_space}# {desc}".rstrip() for desc in value["description"].strip().split("\n"))
-    combined = value.get("allOf", [])
-    if not combined and value.get("anyOf"):
+    if value.get("anyOf"):
         # we've got a union
-        combined = [c for c in value["anyOf"] if c["type"] == "object"]
-    if combined and combined[0].get("properties"):
+        combined = [c for c in value["anyOf"] if c["type"] != "null"]
+    elif "enum" in value or "properties" in value:
+        combined = [value]
+    else:
+        combined = []
+    if combined and any(item.get("properties") for item in combined):
         # we've got a nested map, add key once
         description = f"{description}\n{extra_white_space}{key}:\n"
     has_child = False
@@ -506,7 +511,5 @@ def settings_to_sample():
     # expand schema for easier processing
     data = jsonref.replace_refs(schema, merge_props=True)
     strings = [process_property("gravity", data)]
-    for key, value in data["properties"].items():
-        strings.append(process_property(key, value, 1))
     concat = "\n".join(strings)
     return concat
