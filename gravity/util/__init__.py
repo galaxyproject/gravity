@@ -18,6 +18,20 @@ else:
         pass
 
 
+def is_root():
+    """Check if the current process is running as root.
+
+    Returns ``False`` if the ``GRAVITY_IGNORE_ROOT`` environment variable is
+    set to a truthy value (``1``, ``true``, ``yes``), allowing Gravity to
+    behave as a non-root user even when euid is 0.  This is useful when
+    running inside containers or via Planemo where the process is root but
+    systemd is unavailable.
+    """
+    if os.environ.get("GRAVITY_IGNORE_ROOT", "0").lower() in ("1", "true", "yes"):
+        return False
+    return os.geteuid() == 0
+
+
 def recursive_update(to_update, update_from):
     """
     Update values in `to_update` with values in `update_from`.
