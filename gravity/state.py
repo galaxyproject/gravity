@@ -317,7 +317,7 @@ class GalaxyGunicornService(Service):
     def command_template(self):
         template = self._command_template
         try:
-            if Version(self.config.galaxy_version) > Version("26.0"):
+            if Version(self.config.galaxy_version) >= Version("26.1.0.dev0"):
                 template += " --no-control-socket"
         except Exception:
             pass
