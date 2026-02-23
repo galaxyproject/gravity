@@ -346,12 +346,19 @@ class SupervisorProcessManager(BaseProcessManager):
             for service in services:
                 program = self.__supervisor_programs(config, [service.service_name])[0]
                 graceful_method = service.graceful_method
+                gravity.io.debug(
+                    "Graceful: service=%s type=%s graceful_method=%s program_names=%s",
+                    service.service_name, type(service).__name__, graceful_method, program.program_names)
                 if graceful_method == GracefulMethod.SIGHUP:
+                    gravity.io.info(f"Sending SIGHUP to {', '.join(program.program_names)}")
                     self.supervisorctl("signal", "SIGHUP", *program.program_names)
                 elif graceful_method == GracefulMethod.ROLLING:
                     self.__rolling_restart(config, service, program)
                 elif graceful_method != GracefulMethod.NONE:
+                    gravity.io.info(f"Restarting {', '.join(program.program_names)}")
                     self.supervisorctl("restart", *program.program_names)
+                else:
+                    gravity.io.debug("Skipping %s (graceful method is NONE)", service.service_name)
 
     def __rolling_restart(self, config, service, program):
         restart_callbacks = list(partial(self.supervisorctl, "restart", p) for p in program.program_names)

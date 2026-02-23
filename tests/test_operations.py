@@ -188,7 +188,7 @@ def test_cmd_graceful(state_dir, galaxy_yml, tusd_startup_config, free_port, pro
     tusd_startup_config["gravity"]["gunicorn"]["preload"] = False
     # make a fake tusd
     tusd_path = state_dir / "tusd"
-    tusd_path.write_text("#!/bin/sh\nsleep 60\n")
+    tusd_path.write_text("#!/bin/sh\nsleep 180\n")
     tusd_path.chmod(0o755)
     tusd_startup_config["gravity"]["tusd"]["tusd_path"] = str(tusd_path)
     galaxy_yml.write(json.dumps(tusd_startup_config))
