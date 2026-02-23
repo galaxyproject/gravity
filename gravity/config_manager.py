@@ -26,7 +26,10 @@ from gravity.state import (
     service_for_service_type,
     galaxy_installed,
 )
-from gravity.util import recursive_update
+from gravity.util import (
+    is_root,
+    recursive_update,
+)
 
 log = logging.getLogger(__name__)
 
@@ -78,7 +81,7 @@ class ConfigManager:
 
     @property
     def is_root(self):
-        return os.geteuid() == 0
+        return is_root()
 
     def load_config_file(self, config_file):
         with open(config_file) as config_fh:
