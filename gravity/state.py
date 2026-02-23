@@ -34,6 +34,8 @@ from typing_extensions import (
     Self,
 )
 
+from packaging.version import Version
+
 import gravity.io
 from gravity.settings import AppServer, ProcessManager, ServiceCommandStyle
 from gravity.util import (
@@ -310,6 +312,16 @@ class GalaxyGunicornService(Service):
                         " --config python:galaxy.web_stack.gunicorn_config" \
                         " {command_arguments[preload]}" \
                         " {settings[extra_args]}"
+
+    @property
+    def command_template(self):
+        template = self._command_template
+        try:
+            if Version(self.config.galaxy_version) > Version("26.0"):
+                template += " --no-control-socket"
+        except Exception:
+            pass
+        return template
 
     @property
     def graceful_method(self):
