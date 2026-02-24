@@ -104,6 +104,20 @@ class ConfigFile(BaseModel):
                 exec(fh.read(), {}, locs)
                 return locs["VERSION"]
 
+    @property
+    def gunicorn_version(self):
+        if galaxy_installed:
+            from gunicorn import __version__
+            return __version__
+        else:
+            assert self.galaxy_root is not None
+            galaxy_requirements_file = os.path.join(self.galaxy_root, "requirements.txt")
+            with open(galaxy_requirements_file) as fh:
+                for line in fh:
+                    if line.startswith("gunicorn=="):
+                        return line.split("==")[1].strip()
+            raise RuntimeError("gunicorn version not found in Galaxy requirements.txt")
+
     @field_validator("galaxy_root", mode="after")
     def _galaxy_root_required(cls, value: Optional[str], info: ValidationInfo) -> Optional[str]:
         if value is None:
@@ -317,7 +331,7 @@ class GalaxyGunicornService(Service):
     def command_template(self):
         template = self._command_template
         try:
-            if Version(self.config.galaxy_version) >= Version("26.1.0.dev0"):
+            if Version(self.config.gunicorn_version) >= Version("25.1.0"):
                 template += " --no-control-socket"
         except Exception:
             pass
