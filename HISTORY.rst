@@ -2,6 +2,15 @@
  History
 =========
 
+1.2.1
+=====
+
+- Update ``settings_to_sample()`` to new Pydantic by @nsoranzo in https://github.com/galaxyproject/gravity/pull/140
+- Add GRAVITY_SKIP_SYSTEMD env var to bypass root user checks by @mvdbeek in https://github.com/galaxyproject/gravity/pull/141
+- Fix version check by @mvdbeek in https://github.com/galaxyproject/gravity/pull/142
+- Dispatch option on gunicorn version by @mvdbeek in https://github.com/galaxyproject/gravity/pull/143
+- Modernize remaining pydantic v1 syntax to v2 by @mvdbeek in https://github.com/galaxyproject/gravity/pull/145
+
 1.2.0
 =====
 
