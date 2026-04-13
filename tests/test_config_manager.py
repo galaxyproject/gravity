@@ -29,7 +29,7 @@ def test_load_defaults(galaxy_yml, galaxy_root_dir, state_dir, default_config_ma
     assert gunicorn_settings['extra_args'] == default_settings.gunicorn.extra_args
     assert gunicorn_settings['preload'] is True
     celery_settings = config.get_service('celery').settings
-    assert celery_settings == default_settings.celery.dict()
+    assert celery_settings == default_settings.celery.model_dump()
     with pytest.raises(IndexError):
         config.get_service('tusd')
 

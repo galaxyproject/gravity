@@ -9,6 +9,7 @@ import jsonref
 import yaml
 from pydantic import (
     BaseModel,
+    ConfigDict,
     Field,
     field_validator,
     ValidationInfo,
@@ -151,8 +152,7 @@ Extra environment variables and their values to set when running the service. A 
 names.
 """)] = {}
 
-    class Config:
-        use_enum_values = True
+    model_config = ConfigDict(use_enum_values=True)
 
 
 class GunicornSettings(BaseModel):
