@@ -505,7 +505,7 @@ class GalaxyStandaloneService(Service):
         "stop_timeout": 65,
     }
     _service_list_allowed = True
-    _source_command_template: ClassVar[str] = "{virtualenv_bin}python ./lib/galaxy/main.py -c {galaxy_conf}" \
+    _source_command_template: ClassVar[str] = "{virtualenv_bin}python ./scripts/galaxy-main -c {galaxy_conf}" \
         " --server-name={settings[server_name]}{command_arguments[attach_to_pool]}"
     _installed_command_template: ClassVar[str] = "{virtualenv_bin}galaxy-main -c {galaxy_conf}" \
         " --server-name={settings[server_name]}{command_arguments[attach_to_pool]}"
