@@ -164,6 +164,7 @@ class Service(BaseModel):
     _service_list_allowed: ClassVar[bool] = False
 
     _graceful_method: ClassVar[GracefulMethod] = GracefulMethod.DEFAULT
+    _supports_rolling_restart: ClassVar[bool] = False
     _add_virtualenv_to_path: ClassVar[bool] = True
     _command_arguments: ClassVar[Dict[str, str]] = {}
     _command_template: ClassVar[str] = "_command_"
@@ -273,7 +274,7 @@ class ServiceList(BaseModel):
 
     @property
     def graceful_method(self):
-        if self.count > 1 and hasattr(self.services[0], "is_ready"):
+        if self.count > 1 and self.services[0]._supports_rolling_restart:
             return GracefulMethod.ROLLING
         else:
             return self.services[0].graceful_method
@@ -313,6 +314,7 @@ class GalaxyGunicornService(Service):
     _service_type = "gunicorn"
     service_name: str = "gunicorn"
     _service_list_allowed = True
+    _supports_rolling_restart = True
     _default_environment = DEFAULT_GALAXY_ENVIRONMENT
     _command_arguments = {
         "preload": "--preload",
