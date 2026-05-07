@@ -3,12 +3,14 @@ state data.
 """
 from __future__ import annotations
 
+import abc
 import hashlib
 import os
 import sys
 import time
 from typing import (
     Any,
+    Callable,
     ClassVar,
     Dict,
     List,
@@ -228,7 +230,7 @@ class Service(BaseModel):
         return environment
 
     @property
-    def graceful_method(self):
+    def graceful_method(self) -> GracefulMethod:
         return self._graceful_method
 
     @property
@@ -259,8 +261,11 @@ class Service(BaseModel):
                 rval[setting] = value
         return rval
 
+
+class RollingRestartableService(Service):
+    @abc.abstractmethod
     def is_ready(self, quiet: bool = True) -> bool:
-        raise NotImplementedError("is_ready not implemented for base Service class")
+        """Check if the service is ready."""
 
 
 class ServiceList(BaseModel):
@@ -285,9 +290,10 @@ class ServiceList(BaseModel):
     def get_service_instance(self, instance_number: int) -> Service:
         return self.services[instance_number]
 
-    def rolling_restart(self, restart_callbacks):
+    def rolling_restart(self, restart_callbacks: list[Callable]) -> None:
         gravity.io.info(f"Performing rolling restart on service: {self.service_name}")
         for instance_number, service_instance in enumerate(self.services):
+            assert isinstance(service_instance, RollingRestartableService)
             if not service_instance.is_ready(quiet=False):
                 gravity.io.exception(f"Refusing to continue rolling restart, instance {instance_number} check failed before restart")
             gravity.io.debug(f"Calling restart callback {instance_number}: {restart_callbacks[instance_number]}")
@@ -309,7 +315,7 @@ class ServiceList(BaseModel):
         return getattr(self.services[0], name)
 
 
-class GalaxyGunicornService(Service):
+class GalaxyGunicornService(RollingRestartableService):
     _service_type = "gunicorn"
     service_name: str = "gunicorn"
     _service_list_allowed = True
