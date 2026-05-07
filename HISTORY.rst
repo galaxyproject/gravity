@@ -2,6 +2,12 @@
  History
 =========
 
+1.2.2
+=====
+
+- Use scripts/galaxy-main for source-mode standalone start by @mvdbeek in https://github.com/galaxyproject/gravity/pull/146
+- Make ``is_ready()`` abstract in new ``RollingRestartableService`` subclass by @nsoranzo in https://github.com/galaxyproject/gravity/pull/149
+
 1.2.1
 =====
 
