@@ -49,7 +49,7 @@ DEFAULT_GALAXY_ENVIRONMENT = {
     "PYTHONPATH": "lib",
     "GALAXY_CONFIG_FILE": "{galaxy_conf}",
 }
-CELERY_BEAT_DB_FILENAME = "celery-beat-schedule"
+CELERY_BEAT_DB_FILENAME = "celerybeat-schedule"
 
 
 def relative_to_galaxy_root(cls, value: str, info: ValidationInfo) -> str:
