@@ -24,6 +24,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
       - name: Precreate virtualenv
         run: python -m venv tests/galaxy_venv
       - name: Install tox
