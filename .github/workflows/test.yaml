@@ -19,7 +19,7 @@ jobs:
           - python-version: '3.14'
             galaxy-branch: 'release_24.0'
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v6.0.3
         with:
           persist-credentials: false
       - uses: actions/setup-python@v6
@@ -35,4 +35,4 @@ jobs:
         env:
           GRAVITY_TEST_GALAXY_BRANCH: ${{ matrix.galaxy-branch }}
       - name: "Upload coverage to Codecov"
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
