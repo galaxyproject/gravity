@@ -363,8 +363,36 @@ class SystemdProcessManager(BaseProcessManager):
         self.__systemctl("restart", *unit_names, not_found_rc=(5,))
         self.status(configs=configs, service_names=service_names)
 
-    def __graceful_service(self, config, service, service_names):
+    def __is_unit_active(self, unit_name):
+        """Confirm via systemd itself whether a unit is running, independent of any application-level health check."""
+        args_list = ["is-active", "--quiet", unit_name]
+        extra_args = os.environ.get("GRAVITY_SYSTEMCTL_EXTRA_ARGS")
+        if extra_args:
+            args_list = shlex.split(extra_args) + args_list
+        if self.user_mode:
+            args_list = ["--user"] + args_list
+        try:
+            return subprocess.call(["systemctl"] + args_list) == 0
+        except OSError:
+            # Indeterminate - don't report as confirmed-inactive
+            return True
+
+    def __is_service_stopped(self, systemd_service):
+        return all(not self.__is_unit_active(u) for u in systemd_service.unit_names)
+
+    def __graceful_service(self, config, service, service_names, start_if_stopped=False):
         systemd_service = SystemdService(config, service, self._use_instance_name)
+        if (
+            start_if_stopped
+            and service.graceful_method == GracefulMethod.ROLLING
+            and self.__is_service_stopped(systemd_service)
+        ):
+            gravity.io.info(
+                f"{service.service_name} does not appear to be running; starting it instead of performing a "
+                "graceful restart"
+            )
+            self.__systemctl("start", *systemd_service.unit_names, not_found_rc=(5,))
+            return
         if service.graceful_method == GracefulMethod.ROLLING:
             restart_callbacks = list(partial(self.__systemctl, "reload-or-restart", u) for u in systemd_service.unit_names)
             service.rolling_restart(restart_callbacks)
@@ -372,14 +400,14 @@ class SystemdProcessManager(BaseProcessManager):
             self.__systemctl("reload-or-restart", *systemd_service.unit_names, not_found_rc=(5,))
             gravity.io.info(f"Restarted: {', '.join(systemd_service.unit_names)}")
 
-    def graceful(self, configs=None, service_names=None):
+    def graceful(self, configs=None, service_names=None, start_if_stopped=False):
         """ """
         self.update(configs=configs)
         # reload-or-restart on a target does a restart on its services, so we use the services directly
         for config in configs:
             services = config.get_services(service_names)
             for service in services:
-                self.__graceful_service(config, service, service_names)
+                self.__graceful_service(config, service, service_names, start_if_stopped=start_if_stopped)
 
     def status(self, configs=None, service_names=None):
         """ """

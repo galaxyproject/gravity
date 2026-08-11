@@ -340,7 +340,21 @@ class SupervisorProcessManager(BaseProcessManager):
                 targets.append("all")
         self.supervisorctl(op, *targets)
 
-    def __reload_graceful(self, configs, service_names):
+    def __is_program_running(self, program_name):
+        """Confirm via supervisord itself whether a program is running, independent of any application-level
+        health check."""
+        supervisor = self.__get_supervisor()
+        try:
+            info = supervisor.getProcessInfo(program_name)
+        except Exception:
+            # Indeterminate - don't report as confirmed-inactive
+            return True
+        return info.get("statename") == "RUNNING"
+
+    def __is_service_stopped(self, program):
+        return all(not self.__is_program_running(p) for p in program.program_names)
+
+    def __reload_graceful(self, configs, service_names, start_if_stopped=False):
         for config in configs:
             services = config.get_services(service_names)
             for service in services:
@@ -349,7 +363,17 @@ class SupervisorProcessManager(BaseProcessManager):
                 gravity.io.debug(
                     "Graceful: service=%s type=%s graceful_method=%s program_names=%s",
                     service.service_name, type(service).__name__, graceful_method, program.program_names)
-                if graceful_method == GracefulMethod.SIGHUP:
+                if (
+                    start_if_stopped
+                    and graceful_method == GracefulMethod.ROLLING
+                    and self.__is_service_stopped(program)
+                ):
+                    gravity.io.info(
+                        f"{service.service_name} does not appear to be running; starting it instead of "
+                        "performing a graceful restart"
+                    )
+                    self.supervisorctl("start", *program.program_names)
+                elif graceful_method == GracefulMethod.SIGHUP:
                     gravity.io.info(f"Sending SIGHUP to {', '.join(program.program_names)}")
                     self.supervisorctl("signal", "SIGHUP", *program.program_names)
                 elif graceful_method == GracefulMethod.ROLLING:
@@ -410,13 +434,13 @@ class SupervisorProcessManager(BaseProcessManager):
         else:
             self.__op_on_programs("restart", configs, service_names)
 
-    def graceful(self, configs=None, service_names=None):
+    def graceful(self, configs=None, service_names=None, start_if_stopped=False):
         self.update(configs=configs)
         if not self.__supervisord_is_running():
             self.__supervisord()
             gravity.io.warn("supervisord was not previously running; it has been started, so the 'graceful' command has been ignored")
         else:
-            self.__reload_graceful(configs, service_names)
+            self.__reload_graceful(configs, service_names, start_if_stopped=start_if_stopped)
 
     def status(self, configs=None, service_names=None):
         # TODO: create our own formatted output
