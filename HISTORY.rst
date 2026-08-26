@@ -2,6 +2,11 @@
  History
 =========
 
+1.2.4
+=====
+
+- Add ``--start-if-stopped`` to ``graceful``, to start a stopped service instead of refusing by @jdavcs in https://github.com/galaxyproject/gravity/pull/162
+
 1.2.3
 =====
 
