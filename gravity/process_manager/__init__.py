@@ -268,7 +268,7 @@ class BaseProcessManager(BaseProcessExecutionEnvironment, metaclass=ABCMeta):
         """ """
 
     @abstractmethod
-    def graceful(self, configs=None, service_names=None):
+    def graceful(self, configs=None, service_names=None, start_if_stopped=False):
         """ """
 
     @abstractmethod
@@ -427,7 +427,7 @@ class ProcessManagerRouter:
         """ """
 
     @route
-    def graceful(self, instance_names=None):
+    def graceful(self, instance_names=None, start_if_stopped=False):
         """ """
 
     @route

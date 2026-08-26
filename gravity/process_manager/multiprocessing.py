@@ -56,7 +56,7 @@ class MultiprocessingProcessManager(BaseProcessManager):
     def restart(self, configs=None, service_names=None):
         """ """
 
-    def graceful(self, configs=None, service_names=None):
+    def graceful(self, configs=None, service_names=None, start_if_stopped=False):
         """ """
 
     def status(self, configs=None, service_names=None):
