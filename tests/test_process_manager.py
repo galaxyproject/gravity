@@ -417,8 +417,10 @@ def test_systemd_accounting(galaxy_yml, default_config_manager: "ConfigManager")
     gunicorn_conf_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'gunicorn')
     gunicorn_conf_contents = gunicorn_conf_path.read_text()
     assert 'MemoryAccounting=yes' in gunicorn_conf_contents
-    # removed in systemd 258, which logs a warning if present
+    assert 'IOAccounting=yes' in gunicorn_conf_contents
+    # removed in systemd 258, which logs a warning for each if present
     assert 'CPUAccounting' not in gunicorn_conf_contents
+    assert 'BlockIOAccounting' not in gunicorn_conf_contents
 
 
 def test_default_memory_limit(galaxy_yml, default_config_manager: "ConfigManager") -> None:
