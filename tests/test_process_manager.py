@@ -402,6 +402,28 @@ def test_systemd_optionals_not_present(galaxy_yml, default_config_manager: "Conf
     assert 'LogNamespace' not in gunicorn_conf_contents
 
 
+def test_systemd_syslog_identifier(galaxy_yml, default_config_manager: "ConfigManager") -> None:
+    state_dir = default_config_manager.state_dir
+    assert state_dir is not None
+    instance_name = os.path.basename(state_dir)
+    process_manager_name = 'systemd'
+    galaxy_yml.write(json.dumps(
+        {'galaxy': None, 'gravity': {
+            'process_manager': process_manager_name,
+            'instance_name': instance_name,
+            'handlers': {'handler': {'processes': 2}}}}))
+    default_config_manager.load_config_file(str(galaxy_yml))
+    with process_manager.process_manager(config_manager=default_config_manager) as pm:
+        pm.update()
+    conf_dir = service_conf_dir(state_dir, process_manager_name)
+    gunicorn_conf_path = conf_dir / service_conf_file(instance_name, process_manager_name, 'gunicorn')
+    # %N is the unit name without the type suffix, so lines are tagged galaxy-<instance>-gunicorn and, for template
+    # units, galaxy-<instance>-handler@0 etc. rather than with the name of the executable
+    assert 'SyslogIdentifier=%N\n' in gunicorn_conf_path.read_text()
+    handler_conf_path = conf_dir / f'galaxy-{instance_name}-handler@.service'
+    assert 'SyslogIdentifier=%N\n' in handler_conf_path.read_text()
+
+
 def test_default_memory_limit(galaxy_yml, default_config_manager: "ConfigManager") -> None:
     state_dir = default_config_manager.state_dir
     assert state_dir is not None
