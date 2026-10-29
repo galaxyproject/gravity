@@ -5,10 +5,11 @@ import os
 
 import click
 
-from gravity import io
-from gravity import options
+from gravity import (
+    io,
+    options,
+)
 from gravity.settings import ProcessManager
-
 
 CONTEXT_SETTINGS = {
     "auto_envvar_prefix": "GRAVITY",

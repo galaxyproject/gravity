@@ -1,8 +1,7 @@
+from enum import StrEnum
 from typing import (
+    Annotated,
     Any,
-    Dict,
-    List,
-    Union,
 )
 
 import jsonref
@@ -19,12 +18,8 @@ from pydantic_settings import (
     BaseSettings,
     SettingsConfigDict,
 )
-from typing_extensions import Annotated
 
-from gravity.util import (
-    StrEnum,
-    is_root,
-)
+from gravity.util import is_root
 
 DEFAULT_INSTANCE_NAME = "_default_"
 GX_IT_PROXY_MIN_VERSION = "0.0.6"
@@ -101,22 +96,22 @@ without the Galaxy web process being available.
 You can find a list of available hooks at https://github.com/tus/tusd/blob/master/docs/hooks.md#list-of-available-hooks.
 """)] = "pre-create"
     extra_args: Annotated[str, Field(description="Extra arguments to pass to tusd command line.")] = ""
-    umask: Annotated[Union[str, None], Field(description="umask under which service should be executed")] = None
+    umask: Annotated[str | None, Field(description="umask under which service should be executed")] = None
     start_timeout: Annotated[int, Field(description="Value of supervisor startsecs, systemd TimeoutStartSec")] = 10
     stop_timeout: Annotated[int, Field(description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")] = 10
-    memory_limit: Annotated[Union[float, None], Field(
+    memory_limit: Annotated[float | None, Field(
         description="""
 Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
 ``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
 ``supervisor``.
 """)] = None
-    memory_high: Annotated[Union[float, None], Field(
+    memory_high: Annotated[float | None, Field(
         description="""
 Memory usage throttle limit (in GB). If the service exceeds the limit, processes are throttled and put under heavy
 reclaim pressure. Default is no limit or the value of the ``memory_high`` setting at the top level of the Gravity
 configuration, if set. Ignored if ``process_manager`` is ``supervisor``.
 """)] = None
-    environment: Annotated[Dict[str, str], Field(
+    environment: Annotated[dict[str, str], Field(
         description="""
 Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
 names.
@@ -131,22 +126,22 @@ class CelerySettings(BaseModel):
     queues: Annotated[str, Field(description="Queues to join")] = "celery,galaxy.internal,galaxy.external"
     pool: Annotated[Pool, Field(description="Pool implementation")] = Pool.threads
     extra_args: Annotated[str, Field(description="Extra arguments to pass to Celery command line.")] = ""
-    umask: Annotated[Union[str, None], Field(description="umask under which service should be executed")] = None
+    umask: Annotated[str | None, Field(description="umask under which service should be executed")] = None
     start_timeout: Annotated[int, Field(description="Value of supervisor startsecs, systemd TimeoutStartSec")] = 10
     stop_timeout: Annotated[int, Field(description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")] = 10
-    memory_limit: Annotated[Union[float, None], Field(
+    memory_limit: Annotated[float | None, Field(
         description="""
 Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
 ``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
 ``supervisor``.
 """)] = None
-    memory_high: Annotated[Union[float, None], Field(
+    memory_high: Annotated[float | None, Field(
         description="""
 Memory usage throttle limit (in GB). If the service exceeds the limit, processes are throttled and put under heavy
 reclaim pressure. Default is no limit or the value of the ``memory_high`` setting at the top level of the Gravity
 configuration, if set. Ignored if ``process_manager`` is ``supervisor``.
 """)] = None
-    environment: Annotated[Dict[str, str], Field(
+    environment: Annotated[dict[str, str], Field(
         description="""
 Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
 names.
@@ -176,31 +171,31 @@ Value is a positive number or 0. Setting it to 0 has the effect of infinite time
 If you disable the ``preload`` option workers need to have finished booting within the timeout.
 """)] = 300
     extra_args: Annotated[str, Field(description="Extra arguments to pass to Gunicorn command line.")] = ""
-    preload: Annotated[Union[bool, None], Field(
+    preload: Annotated[bool | None, Field(
         description="""
 Use Gunicorn's --preload option to fork workers after loading the Galaxy Application.
 Consumes less memory when multiple processes are configured.
 """)] = True
-    umask: Annotated[Union[str, None], Field(description="umask under which service should be executed")] = None
+    umask: Annotated[str | None, Field(description="umask under which service should be executed")] = None
     start_timeout: Annotated[int, Field(description="Value of supervisor startsecs, systemd TimeoutStartSec")] = 15
     stop_timeout: Annotated[int, Field(description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")] = 65
     restart_timeout: Annotated[int, Field(
         description="""
 Amount of time to wait for a server to become alive when performing rolling restarts.
 """)] = 300
-    memory_limit: Annotated[Union[float, None], Field(
+    memory_limit: Annotated[float | None, Field(
         description="""
 Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
 ``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
 ``supervisor``.
 """)] = None
-    memory_high: Annotated[Union[float, None], Field(
+    memory_high: Annotated[float | None, Field(
         description="""
 Memory usage throttle limit (in GB). If the service exceeds the limit, processes are throttled and put under heavy
 reclaim pressure. Default is no limit or the value of the ``memory_high`` setting at the top level of the Gravity
 configuration, if set. Ignored if ``process_manager`` is ``supervisor``.
 """)] = None
-    environment: Annotated[Dict[str, str], Field(
+    environment: Annotated[dict[str, str], Field(
         description="""
 Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
 names.
@@ -225,7 +220,7 @@ It is not generally necessary to increase this for the low-traffic Reports serve
 Gunicorn workers silent for more than this many seconds are killed and restarted.
 Value is a positive number or 0. Setting it to 0 has the effect of infinite timeouts by disabling timeouts for all workers entirely.
 """)] = 300
-    url_prefix: Annotated[Union[str, None], Field(
+    url_prefix: Annotated[str | None, Field(
         description="""
 URL prefix to serve from.
 The corresponding nginx configuration is (replace <url_prefix> and <bind> with the values from these options):
@@ -238,22 +233,22 @@ If <bind> is a unix socket, you will need a ``:`` after the socket path but befo
     proxy_pass http://unix:/run/reports.sock:/;
 """)] = None
     extra_args: Annotated[str, Field(description="Extra arguments to pass to Gunicorn command line.")] = ""
-    umask: Annotated[Union[str, None], Field(description="umask under which service should be executed")] = None
+    umask: Annotated[str | None, Field(description="umask under which service should be executed")] = None
     start_timeout: Annotated[int, Field(description="Value of supervisor startsecs, systemd TimeoutStartSec")] = 10
     stop_timeout: Annotated[int, Field(description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")] = 10
-    memory_limit: Annotated[Union[float, None], Field(
+    memory_limit: Annotated[float | None, Field(
         description="""
 Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
 ``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
 ``supervisor``.
 """)] = None
-    memory_high: Annotated[Union[float, None], Field(
+    memory_high: Annotated[float | None, Field(
         description="""
 Memory usage throttle limit (in GB). If the service exceeds the limit, processes are throttled and put under heavy
 reclaim pressure. Default is no limit or the value of the ``memory_high`` setting at the top level of the Gravity
 configuration, if set. Ignored if ``process_manager`` is ``supervisor``.
 """)] = None
-    environment: Annotated[Dict[str, str], Field(
+    environment: Annotated[dict[str, str], Field(
         description="""
 Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
 names.
@@ -272,36 +267,36 @@ Should be set to the same value as ``interactivetools_map`` (or ``interactivetoo
 ignored if either ``interactivetools_map`` or ``interactivetoolsproxy_map`` are set.
 """)] = "database/interactivetools_map.sqlite"
     verbose: Annotated[bool, Field(description="Include verbose messages in gx-it-proxy")] = True
-    forward_ip: Annotated[Union[str, None], Field(
+    forward_ip: Annotated[str | None, Field(
         description="""
 Forward all requests to IP.
 This is an advanced option that is only needed when proxying to remote interactive tool container that cannot be reached through the local network.
 """)] = None
-    forward_port: Annotated[Union[int, None], Field(
+    forward_port: Annotated[int | None, Field(
         description="""
 Forward all requests to port.
 This is an advanced option that is only needed when proxying to remote interactive tool container that cannot be reached through the local network.""")] = None
-    reverse_proxy: Annotated[Union[bool, None], Field(
+    reverse_proxy: Annotated[bool | None, Field(
         description="""
 Rewrite location blocks with proxy port.
 This is an advanced option that is only needed when proxying to remote interactive tool container that cannot be reached through the local network.
 """)] = False
-    umask: Annotated[Union[str, None], Field(description="umask under which service should be executed")] = None
+    umask: Annotated[str | None, Field(description="umask under which service should be executed")] = None
     start_timeout: Annotated[int, Field(description="Value of supervisor startsecs, systemd TimeoutStartSec")] = 10
     stop_timeout: Annotated[int, Field(description="Value of supervisor stopwaitsecs, systemd TimeoutStopSec")] = 10
-    memory_limit: Annotated[Union[float, None], Field(
+    memory_limit: Annotated[float | None, Field(
         description="""
 Memory limit (in GB). If the service exceeds the limit, it will be killed. Default is no limit or the value of the
 ``memory_limit`` setting at the top level of the Gravity configuration, if set. Ignored if ``process_manager`` is
 ``supervisor``.
 """)] = None
-    memory_high: Annotated[Union[float, None], Field(
+    memory_high: Annotated[float | None, Field(
         description="""
 Memory usage throttle limit (in GB). If the service exceeds the limit, processes are throttled and put under heavy
 reclaim pressure. Default is no limit or the value of the ``memory_high`` setting at the top level of the Gravity
 configuration, if set. Ignored if ``process_manager`` is ``supervisor``.
 """)] = None
-    environment: Annotated[Dict[str, str], Field(
+    environment: Annotated[dict[str, str], Field(
         description="""
 Extra environment variables and their values to set when running the service. A dictionary where keys are the variable
 names.
@@ -323,7 +318,7 @@ class Settings(BaseSettings):
         use_enum_values=True,
     )
 
-    process_manager: Annotated[Union[ProcessManager, None], Field(
+    process_manager: Annotated[ProcessManager | None, Field(
         description="""
 Process manager to use.
 ``supervisor`` is the default process manager when Gravity is invoked as a non-root user.
@@ -350,51 +345,51 @@ Presently this includes services like gunicorn and Galaxy dynamic job handlers. 
 umask under which services should be executed. Setting ``umask`` on an individual service overrides this value.
 """)] = "022"
 
-    memory_limit: Annotated[Union[float, None], Field(
+    memory_limit: Annotated[float | None, Field(
         description="""
 Memory limit (in GB), processes exceeding the limit will be killed. Default is no limit. If set, this is default value
 for all services. Setting ``memory_limit`` on an individual service overrides this value. Ignored if ``process_manager``
 is ``supervisor``.
 """)] = None
-    memory_high: Annotated[Union[float, None], Field(
+    memory_high: Annotated[float | None, Field(
         description="""
 Memory usage throttle limit (in GB), processes exceeding the limit are throttled and put under heavy reclaim pressure.
 If set, this is the default value for all services. Setting ``memory_high`` on an individual service overrides this
 value. Ignored if ``process_manager`` is ``supervisor``.
 """)] = None
 
-    galaxy_config_file: Annotated[Union[str, None], Field(
+    galaxy_config_file: Annotated[str | None, Field(
         description="""
 Specify Galaxy config file (galaxy.yml), if the Gravity config is separate from the Galaxy config. Assumed to be the
 same file as the Gravity config if a ``galaxy`` key exists at the root level, otherwise, this option is required.
 """)] = None
-    galaxy_root: Annotated[Union[str, None], Field(
+    galaxy_root: Annotated[str | None, Field(
         description="""
 Specify Galaxy's root directory.
 Gravity will attempt to find the root directory, but you can set the directory explicitly with this option.
 """)] = None
-    galaxy_user: Annotated[Union[str, None], Field(
+    galaxy_user: Annotated[str | None, Field(
         description="""
 User to run Galaxy as, required when using the systemd process manager as root.
 Ignored if ``process_manager`` is ``supervisor`` or user-mode (non-root) ``systemd``.
 """)] = None
-    galaxy_group: Annotated[Union[str, None], Field(
+    galaxy_group: Annotated[str | None, Field(
         description="""
 Group to run Galaxy as, optional when using the systemd process manager as root.
 Ignored if ``process_manager`` is ``supervisor`` or user-mode (non-root) ``systemd``.
 """)] = None
-    log_dir: Annotated[Union[str, None], Field(
+    log_dir: Annotated[str | None, Field(
         description="""
 Set to a directory that should contain log files for the processes controlled by Gravity.
 If not specified defaults to ``<galaxy_data_dir>/gravity/log``.
 """)] = None
-    log_namespace: Annotated[Union[str, None], Field(
+    log_namespace: Annotated[str | None, Field(
         description="""
 Run Galaxy processes in the specified journal namespace (sets the value of ``LogNamespace=`` in the systemd service
 units). This allows you to keep Galaxy log messages separate in the system journal from other log messages. Ignored if
 ``process_manager`` is not ``systemd``. See ``systemd.exec(5)`` for details.
 """)] = None
-    virtualenv: Annotated[Union[str, None], Field(description="""
+    virtualenv: Annotated[str | None, Field(description="""
 Set to Galaxy's virtualenv directory.
 If not specified, Gravity assumes all processes are on PATH. This option is required in most circumstances when using
 the ``systemd`` process manager.
@@ -406,19 +401,19 @@ Select the application server.
 """)] = AppServer.gunicorn
     instance_name: Annotated[str, Field(description="""Override the default instance name.
 this is hidden from you when running a single instance.""")] = DEFAULT_INSTANCE_NAME
-    gunicorn: Annotated[Union[List[GunicornSettings], GunicornSettings], Field(description="""
+    gunicorn: Annotated[list[GunicornSettings] | GunicornSettings, Field(description="""
 Configuration for Gunicorn. Can be a list to run multiple gunicorns for rolling restarts.
 """)] = GunicornSettings()
     celery: Annotated[CelerySettings, Field(description="Configuration for Celery Processes.")] = CelerySettings()
     gx_it_proxy: Annotated[GxItProxySettings, Field(description="Configuration for gx-it-proxy.")] = GxItProxySettings()
     # The default value for tusd is a little awkward, but is a convenient way to ensure that if
     # a user enables tusd that they most also set upload_dir, and yet have the default be valid.
-    tusd: Annotated[Union[List[TusdSettings], TusdSettings], Field(description="""
+    tusd: Annotated[list[TusdSettings] | TusdSettings, Field(description="""
 Configuration for tusd server (https://github.com/tus/tusd).
 The ``tusd`` binary must be installed manually and made available on PATH (e.g in galaxy's .venv/bin directory).
 """)] = TusdSettings(upload_dir="")
     reports: Annotated[ReportsSettings, Field(description="Configuration for Galaxy Reports.")] = ReportsSettings()
-    handlers: Annotated[Dict[str, Dict[str, Any]], Field(
+    handlers: Annotated[dict[str, dict[str, Any]], Field(
         description="""
 Configure dynamic handlers in this section.
 See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defined-handlers for details.
@@ -434,7 +429,7 @@ See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defi
     # automatically set process_manager to systemd if unset and running as root
     @field_validator("process_manager", mode="before")
     @classmethod
-    def _process_manager_systemd_if_root(cls, value: Union[ProcessManager, None]) -> Union[ProcessManager, None]:
+    def _process_manager_systemd_if_root(cls, value: ProcessManager | None) -> ProcessManager | None:
         if value is None:
             if is_root():
                 value = ProcessManager.systemd
@@ -443,7 +438,7 @@ See https://docs.galaxyproject.org/en/latest/admin/scaling.html#dynamically-defi
     # Require galaxy_user if running as root
     @field_validator("galaxy_user", mode="after")
     @classmethod
-    def _user_required_if_root(cls, value: Union[str, None], info: ValidationInfo) -> Union[str, None]:
+    def _user_required_if_root(cls, value: str | None, info: ValidationInfo) -> str | None:
         if is_root():
             is_systemd = info.data["process_manager"] == ProcessManager.systemd
             if is_systemd and not value:
@@ -472,8 +467,7 @@ def process_property(key, value, depth=0):
     if default != "":
         # make values more yaml-like.
         default = yaml.dump(default)
-        if default.endswith("\n...\n"):
-            default = default[: -(len("\n...\n"))]
+        default = default.removesuffix("\n...\n")
         default = default.strip()
     description = "\n".join(f"{extra_white_space}# {desc}".rstrip() for desc in value["description"].strip().split("\n"))
     if value.get("anyOf"):

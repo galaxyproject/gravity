@@ -12,7 +12,7 @@ import sphinx_rtd_theme
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from gravity import __version__  # noqa: E402
+from gravity import __version__  # noqa: E402,RUF100
 
 project = 'Gravity'
 copyright = '2022, The Galaxy Project'

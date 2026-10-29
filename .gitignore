@@ -5,6 +5,7 @@
 .coverage
 coverage.xml
 .tox/
+.venv/
 /build/
 /dist/
 /*.egg-info/

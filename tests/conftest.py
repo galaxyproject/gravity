@@ -1,7 +1,7 @@
-import os
 import glob
-import signal
+import os
 import shutil
+import signal
 import socket
 import subprocess
 import tempfile
@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 import yaml
+
 from gravity import config_manager
 
 GALAXY_BRANCH = os.environ.get("GRAVITY_TEST_GALAXY_BRANCH", "dev")
