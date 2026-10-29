@@ -4,14 +4,12 @@ import os
 import re
 import shlex
 import subprocess
-from glob import glob
-from functools import partial
-from typing import (
+from collections.abc import (
     Callable,
     Iterable,
-    List,
-    Set,
 )
+from functools import partial
+from glob import glob
 
 import gravity.io
 from gravity.process_manager import BaseProcessManager
@@ -109,7 +107,7 @@ class SystemdService:
         """The representation when performing commands, after instance expansion"""
         instance_count = self.service.count
         if instance_count > 1:
-            unit_names = [f"{self.unit_prefix}@{i}.service" for i in range(0, instance_count)]
+            unit_names = [f"{self.unit_prefix}@{i}.service" for i in range(instance_count)]
         else:
             unit_names = [f"{self.unit_prefix}.service"]
         return unit_names
@@ -120,7 +118,7 @@ class SystemdProcessManager(BaseProcessManager):
     name = ProcessManager.systemd
 
     def __init__(self, foreground=False, **kwargs):
-        super(SystemdProcessManager, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.user_mode = self.config_manager.user_mode
         if self.user_mode is None:
             self.user_mode = not self.config_manager.is_root
@@ -166,7 +164,7 @@ class SystemdProcessManager(BaseProcessManager):
                 return line.split("=", 1)[1]
 
     def _service_environment_formatter(self, environment, format_vars):
-        return "\n".join("Environment={}={}".format(k, shlex.quote(v.format(**format_vars))) for k, v in environment.items())
+        return "\n".join(f"Environment={k}={shlex.quote(v.format(**format_vars))}" for k, v in environment.items())
 
     def terminate(self):
         # this is used to stop a foreground supervisord in the supervisor PM, so it is a no-op here
@@ -176,8 +174,8 @@ class SystemdProcessManager(BaseProcessManager):
         instance_name = f"-{config.instance_name}" if self._use_instance_name else ""
         return f"galaxy{instance_name}.target"
 
-    def __unit_files_to_active_unit_names(self, unit_files: Iterable[str]) -> List[str]:
-        unit_names: List[str] = []
+    def __unit_files_to_active_unit_names(self, unit_files: Iterable[str]) -> list[str]:
+        unit_names: list[str] = []
         for unit_file in unit_files:
             unit_file = os.path.basename(unit_file)
             if "@" in unit_file:
@@ -215,8 +213,8 @@ class SystemdProcessManager(BaseProcessManager):
                 if match:
                     return match.group(1)
 
-    def _present_pm_files_for_config(self, config: ConfigFile) -> Set[str]:
-        unit_files: Set[str] = set()
+    def _present_pm_files_for_config(self, config: ConfigFile) -> set[str]:
+        unit_files: set[str] = set()
         instance_name = f"-{config.instance_name}" if self._use_instance_name else ""
         target = os.path.join(self.__systemd_unit_dir, f"galaxy{instance_name}.target")
         if os.path.exists(target):
@@ -226,8 +224,8 @@ class SystemdProcessManager(BaseProcessManager):
                 unit_files.update(glob(f"{os.path.splitext(target)[0]}-*.service"))
         return unit_files
 
-    def _intended_pm_files_for_config(self, config: ConfigFile) -> Set[str]:
-        unit_files: Set[str] = set()
+    def _intended_pm_files_for_config(self, config: ConfigFile) -> set[str]:
+        unit_files: set[str] = set()
         for service in config.services:
             systemd_service = SystemdService(config, service, self._use_instance_name)
             unit_files.add(os.path.join(self.__systemd_unit_dir, systemd_service.unit_file_name))
@@ -417,7 +415,7 @@ class SystemdProcessManager(BaseProcessManager):
         else:
             self.__systemctl("list-units", "--all", *unit_names)
 
-    def update(self, configs: List[ConfigFile], force: bool = False, clean: bool = False) -> None:
+    def update(self, configs: list[ConfigFile], force: bool = False, clean: bool = False) -> None:
         """ """
         self._pre_update(configs, force, clean)
         if not clean:

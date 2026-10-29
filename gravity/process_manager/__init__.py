@@ -7,16 +7,16 @@ import inspect
 import os
 import shlex
 import sys
-from abc import ABCMeta, abstractmethod
-from functools import partial, wraps
-from typing import (
-    Any,
-    Dict,
-    Iterable,
-    List,
-    Set,
-    Union,
+from abc import (
+    ABCMeta,
+    abstractmethod,
 )
+from collections.abc import Iterable
+from functools import (
+    partial,
+    wraps,
+)
+from typing import Any
 
 import gravity.io
 from gravity.config_manager import ConfigManager
@@ -27,9 +27,9 @@ from gravity.settings import (
 )
 from gravity.state import (
     ConfigFile,
-    VALID_SERVICE_NAMES,
     Service,
     ServiceList,
+    VALID_SERVICE_NAMES,
 )
 from gravity.util import which
 
@@ -48,7 +48,7 @@ def _route(func, all_process_managers=False):
     """
     @wraps(func)
     def decorator(self, *args, instance_names=None, **kwargs):
-        configs_by_pm: Dict[ProcessManager, List[ConfigFile]] = {}
+        configs_by_pm: dict[ProcessManager, list[ConfigFile]] = {}
         pm_names = self.process_managers.keys()
         instance_names, service_names = self._instance_service_names(instance_names)
         configs = self.config_manager.get_configs(instances=instance_names or None)
@@ -99,9 +99,9 @@ class BaseProcessExecutionEnvironment(metaclass=ABCMeta):
     def _service_format_vars(
         self,
         config: ConfigFile,
-        service: Union[Service, ServiceList],
-        pm_format_vars: Union[Dict[str, Any], None] = None
-    ) -> Dict[str, Any]:
+        service: Service | ServiceList,
+        pm_format_vars: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         pm_format_vars = pm_format_vars or {}
         virtualenv_dir = config.virtualenv
         virtualenv_bin = shlex.quote(f'{os.path.join(virtualenv_dir, "bin")}{os.path.sep}') if virtualenv_dir else ""
@@ -171,19 +171,19 @@ class BaseProcessManager(BaseProcessExecutionEnvironment, metaclass=ABCMeta):
                 or self.config_manager.get_config().instance_name != DEFAULT_INSTANCE_NAME)
 
     @abstractmethod
-    def _intended_pm_files_for_config(self, config: ConfigFile) -> Set[str]:
+    def _intended_pm_files_for_config(self, config: ConfigFile) -> set[str]:
         """ """
 
     @abstractmethod
-    def _present_pm_files_for_config(self, config: ConfigFile) -> Set[str]:
+    def _present_pm_files_for_config(self, config: ConfigFile) -> set[str]:
         """ """
 
     @abstractmethod
     def _disable_and_remove_pm_files(self, pm_files: Iterable[str]) -> None:
         """ """
 
-    def _remove_unintended_pm_files_for_configs(self, configs: List[ConfigFile]) -> None:
-        unintended_pm_files: Set[str] = set()
+    def _remove_unintended_pm_files_for_configs(self, configs: list[ConfigFile]) -> None:
+        unintended_pm_files: set[str] = set()
         for config in configs:
             intended_pm_files = self._intended_pm_files_for_config(config)
             present_pm_files = self._present_pm_files_for_config(config)
@@ -196,7 +196,7 @@ class BaseProcessManager(BaseProcessExecutionEnvironment, metaclass=ABCMeta):
             self._disable_and_remove_pm_files(pm_files)
 
     @abstractmethod
-    def _all_present_pm_files(self) -> List[str]:
+    def _all_present_pm_files(self) -> list[str]:
         """ """
 
     def _remove_all_pm_files(self) -> None:
@@ -204,7 +204,7 @@ class BaseProcessManager(BaseProcessExecutionEnvironment, metaclass=ABCMeta):
         pm_files = self._all_present_pm_files()
         self._disable_and_remove_pm_files(pm_files)
 
-    def _pre_update(self, configs: List[ConfigFile], force: bool, clean: bool) -> None:
+    def _pre_update(self, configs: list[ConfigFile], force: bool, clean: bool) -> None:
         all_configs = set(self.config_manager.get_configs())
         if not clean:
             # no --clean and either possibility of --force
@@ -276,7 +276,7 @@ class BaseProcessManager(BaseProcessExecutionEnvironment, metaclass=ABCMeta):
         """ """
 
     @abstractmethod
-    def update(self, configs: List[ConfigFile], force: bool = False, clean: bool = False) -> None:
+    def update(self, configs: list[ConfigFile], force: bool = False, clean: bool = False) -> None:
         """ """
 
     @abstractmethod
@@ -299,8 +299,8 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
     def exec(
         self,
         config: ConfigFile,
-        service: Union[Service, ServiceList],
-        service_instance_number: Union[int, None] = None,
+        service: Service | ServiceList,
+        service_instance_number: int | None = None,
         no_exec: bool = False
     ) -> None:
         service_name = service.service_name
@@ -312,16 +312,16 @@ class ProcessExecutor(BaseProcessExecutionEnvironment):
             msg = f"Cannot exec '{service_name}': This service is configured to use multiple instances and "
             if service_instance_number is None:
                 gravity.io.exception(msg + "--service-instance was not set")
-            if service_instance_number not in range(0, instance_count):
+            if service_instance_number not in range(instance_count):
                 gravity.io.exception(msg + "--service-instance is out of range")
-            service_instance: Union[Service, ServiceList] = service.get_service_instance(service_instance_number)
+            service_instance: Service | ServiceList = service.get_service_instance(service_instance_number)
         else:
             service_instance = service
 
         # force generation of real commands
         config.service_command_style = ServiceCommandStyle.exec
         format_vars = self._service_format_vars(config, service_instance)
-        print_env = ' '.join('{}={}'.format(k, shlex.quote(v)) for k, v in format_vars["environment"].items())
+        print_env = ' '.join(f'{k}={shlex.quote(v)}' for k, v in format_vars["environment"].items())
 
         cmd = shlex.split(format_vars["command"])
         env = {**dict(os.environ), **format_vars["environment"]}
@@ -347,9 +347,9 @@ class ProcessManagerRouter:
         self,
         state_dir=None,
         config_file=None,
-        config_manager: Union[ConfigManager, None] = None,
+        config_manager: ConfigManager | None = None,
         user_mode=None,
-        process_manager: Union[ProcessManager, None] = None,
+        process_manager: ProcessManager | None = None,
         **kwargs
     ):
         self.config_manager = config_manager or ConfigManager(state_dir=state_dir,
@@ -387,7 +387,7 @@ class ProcessManagerRouter:
                 gravity.io.exception("No provided names are known instance or service names")
         return (instance_names, service_names)
 
-    def exec(self, instance_names=None, service_instance_number: Union[int, None] = None, no_exec: bool = False) -> None:
+    def exec(self, instance_names=None, service_instance_number: int | None = None, no_exec: bool = False) -> None:
         """ """
         instance_names, service_names = self._instance_service_names(instance_names)
 
@@ -435,7 +435,7 @@ class ProcessManagerRouter:
         """ """
 
     @route_to_all
-    def update(self, configs: List[ConfigFile], force: bool = False, clean: bool = False) -> None:
+    def update(self, configs: list[ConfigFile], force: bool = False, clean: bool = False) -> None:
         """ """
 
     @route

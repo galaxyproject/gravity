@@ -7,7 +7,6 @@ from typing import (
 
 import click
 
-
 DEBUG = False
 
 

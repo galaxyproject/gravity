@@ -1,18 +1,16 @@
 import json
 import os
-import time
 import string
+import time
 from pathlib import Path
-from typing import (
-    TYPE_CHECKING,
-    Union,
-)
+from typing import TYPE_CHECKING
 
 import pytest
+from yaml import safe_load
+
 from gravity import process_manager
 from gravity.process_manager.supervisor import supervisor_program_names
 from gravity.settings import GX_IT_PROXY_MIN_VERSION
-from yaml import safe_load
 
 if TYPE_CHECKING:
     from gravity.config_manager import ConfigManager
@@ -114,7 +112,7 @@ def service_conf_dir(state_dir: str, process_manager_name: str) -> Path:
     raise Exception(f"Invalid process manager name: {process_manager_name}")
 
 
-def service_conf_file(instance_name: str, process_manager_name: str, service_name: str, service_type: Union[str, None] = None) -> str:
+def service_conf_file(instance_name: str, process_manager_name: str, service_name: str, service_type: str | None = None) -> str:
     service_type = service_type or service_name
     if process_manager_name == 'supervisor':
         return f'{service_type}_{service_name}.conf'
@@ -123,7 +121,7 @@ def service_conf_file(instance_name: str, process_manager_name: str, service_nam
     raise Exception(f"Invalid process manager name: {process_manager_name}")
 
 
-def service_conf_path(state_dir: str, process_manager_name: str, service_name: str, service_type: Union[str, None] = None) -> Path:
+def service_conf_path(state_dir: str, process_manager_name: str, service_name: str, service_type: str | None = None) -> Path:
     instance_name = os.path.basename(state_dir)
     conf_dir = service_conf_dir(state_dir, process_manager_name)
     conf_file = service_conf_file(instance_name, process_manager_name, service_name, service_type)
