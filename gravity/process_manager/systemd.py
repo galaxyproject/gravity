@@ -49,8 +49,7 @@ ExecStart={command}
 Restart=always
 
 MemoryAccounting=yes
-CPUAccounting=yes
-BlockIOAccounting=yes
+IOAccounting=yes
 
 [Install]
 WantedBy=multi-user.target
