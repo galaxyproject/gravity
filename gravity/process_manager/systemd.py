@@ -46,6 +46,7 @@ ExecStart={command}
 {systemd_memory_limit}
 {systemd_memory_high}
 {systemd_log_namespace}
+SyslogIdentifier=%N
 Restart=always
 
 MemoryAccounting=yes
