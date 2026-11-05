@@ -1,6 +1,7 @@
 """
 """
 import multiprocessing
+import signal
 from typing import (
     Iterable,
     List,
@@ -32,8 +33,17 @@ class MultiprocessingProcessManager(BaseProcessManager):
                 process = multiprocessing.Process(target=self.process_executor.exec, args=(config, service))
                 process.start()
                 self.processes.append(process)
+        # The services would outlive this process on SIGTERM, so pass it on to them.
+        previous_handler = signal.signal(signal.SIGTERM, self._terminate_processes)
+        try:
+            for process in self.processes:
+                process.join()
+        finally:
+            signal.signal(signal.SIGTERM, previous_handler)
+
+    def _terminate_processes(self, signum, frame):
         for process in self.processes:
-            process.join()
+            process.terminate()
 
     def pm(self, *args, **kwargs):
         """ """
