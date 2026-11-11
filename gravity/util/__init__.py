@@ -9,14 +9,6 @@ from urllib.parse import quote
 import requests
 import requests_unixsocket
 
-if sys.version_info >= (3, 11):
-    from enum import StrEnum
-else:
-    from enum import Enum
-
-    class StrEnum(str, Enum):
-        pass
-
 
 def is_root():
     """Check if the current process is running as root.

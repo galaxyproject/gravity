@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.10', '3.14']
+        python-version: ['3.11', '3.14']  # Galaxy doesn't yet support Python 3.15
         galaxy-branch: ['release_24.0', 'dev']
         exclude:
           # either the release existed before the python release or some expensive-to-build wheels (e.g. numpy) don't
@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v7.0.0
+      - uses: actions/setup-python@v7.1.0
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip

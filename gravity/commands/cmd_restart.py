@@ -1,7 +1,9 @@
 import click
 
-from gravity import options
-from gravity import process_manager
+from gravity import (
+    options,
+    process_manager,
+)
 
 
 @click.command("restart")
