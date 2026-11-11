@@ -4,14 +4,11 @@ import os
 import shlex
 import subprocess
 import time
+from collections.abc import Iterable
 from functools import partial
 from glob import glob
-from typing import (
-    Iterable,
-    List,
-    Set,
-    Union,
-)
+
+from supervisor import supervisorctl  # type: ignore
 
 import gravity.io
 from gravity.process_manager import BaseProcessManager
@@ -23,8 +20,6 @@ from gravity.state import (
     ServiceList,
 )
 from gravity.util import which
-
-from supervisor import supervisorctl  # type: ignore
 
 SUPERVISORD_START_TIMEOUT = 60
 DEFAULT_SUPERVISOR_SOCKET_PATH = os.environ.get("SUPERVISORD_SOCKET", '%(here)s/supervisor.sock')
@@ -89,7 +84,7 @@ if "XDG_CONFIG_HOME" in os.environ:
 
 class SupervisorProgram:
     # converts between different formats
-    def __init__(self, config: ConfigFile, service: Union[Service, ServiceList], use_instance_name: bool):
+    def __init__(self, config: ConfigFile, service: Service | ServiceList, use_instance_name: bool):
         self.config = config
         self.service = service
         self._use_instance_name = use_instance_name
@@ -145,7 +140,7 @@ class SupervisorProgram:
 
     @property
     def log_file_names(self):
-        return list(self.log_file_name_template.format(instance_number=i) for i in range(0, self.config_numprocs))
+        return list(self.log_file_name_template.format(instance_number=i) for i in range(self.config_numprocs))
 
 
 class SupervisorProcessManager(BaseProcessManager):
@@ -219,7 +214,7 @@ class SupervisorProcessManager(BaseProcessManager):
         return "%(ENV_PATH)s"
 
     def _service_environment_formatter(self, environment, format_vars):
-        return ",".join("{}={}".format(k, shlex.quote(v.format(**format_vars))) for k, v in environment.items())
+        return ",".join(f"{k}={shlex.quote(v.format(**format_vars))}" for k, v in environment.items())
 
     def terminate(self):
         if self.foreground:
@@ -231,14 +226,14 @@ class SupervisorProcessManager(BaseProcessManager):
         if pm_files:
             gravity.io.info(f"Removing supervisor configs: {', '.join(pm_files)}")
             list(map(os.unlink, pm_files))
-        for instance_dir in set(os.path.dirname(f) for f in pm_files):
+        for instance_dir in {os.path.dirname(f) for f in pm_files}:
             # should maybe warn if the intent was to remove the entire instance
             if not os.listdir(instance_dir):
                 gravity.io.info(f"Removing empty instance dir: {instance_dir}")
                 os.rmdir(instance_dir)
 
-    def _present_pm_files_for_config(self, config: ConfigFile) -> Set[str]:
-        pm_files: Set[str] = set()
+    def _present_pm_files_for_config(self, config: ConfigFile) -> set[str]:
+        pm_files: set[str] = set()
         instance_name = config.instance_name
         instance_conf_dir = os.path.join(self.supervisord_conf_dir, f"{instance_name}.d")
         group_file = os.path.join(self.supervisord_conf_dir, f"group_{instance_name}.conf")
@@ -247,8 +242,8 @@ class SupervisorProcessManager(BaseProcessManager):
         pm_files.update(glob(os.path.join(instance_conf_dir, "*")))
         return pm_files
 
-    def _intended_pm_files_for_config(self, config: ConfigFile) -> Set[str]:
-        pm_files: Set[str] = set()
+    def _intended_pm_files_for_config(self, config: ConfigFile) -> set[str]:
+        pm_files: set[str] = set()
         instance_name = config.instance_name
         instance_conf_dir = os.path.join(self.supervisord_conf_dir, f"{instance_name}.d")
         for service in config.services:
@@ -265,7 +260,7 @@ class SupervisorProcessManager(BaseProcessManager):
     def __update_service(
         self,
         config: ConfigFile,
-        service: Union[Service, ServiceList],
+        service: Service | ServiceList,
         instance_conf_dir: str,
         instance_name: str,
         force: bool
@@ -313,7 +308,7 @@ class SupervisorProcessManager(BaseProcessManager):
         elif os.path.exists(group_conf):
             os.unlink(group_conf)
 
-    def __process_configs(self, configs: List[ConfigFile], force: bool) -> None:
+    def __process_configs(self, configs: list[ConfigFile], force: bool) -> None:
         for config in configs:
             self.__process_config(config, force)
             if not os.path.exists(config.log_dir):
@@ -393,7 +388,7 @@ class SupervisorProcessManager(BaseProcessManager):
         # used if desired, though
         if not self.tail:
             gravity.io.exception("`tail` not found on $PATH, please install it")
-        log_files: List[str] = []
+        log_files: list[str] = []
         if quiet:
             cmd = [self.tail, "-f", self.log_file]
             tail_popen = subprocess.Popen(cmd)
@@ -455,7 +450,7 @@ class SupervisorProcessManager(BaseProcessManager):
             time.sleep(0.5)
         gravity.io.info("supervisord has terminated")
 
-    def update(self, configs: List[ConfigFile], force: bool = False, clean: bool = False) -> None:
+    def update(self, configs: list[ConfigFile], force: bool = False, clean: bool = False) -> None:
         """Add newly defined servers, remove any that are no longer present"""
         self._pre_update(configs, force, clean)
         if not clean:
@@ -484,10 +479,10 @@ class SupervisorProcessManager(BaseProcessManager):
 def supervisor_program_names(service_name, instance_count, instance_number_start, instance_name=None):
     # this is what supervisor turns the service name into depending on groups and numprocs
     if instance_count > 1 and instance_name is not None:
-        return [f"{instance_name}:{service_name}{i + instance_number_start}" for i in range(0, instance_count)]
+        return [f"{instance_name}:{service_name}{i + instance_number_start}" for i in range(instance_count)]
 
     if instance_count > 1:
-        program_names = [f"{service_name}:{service_name}_{i + instance_number_start}" for i in range(0, instance_count)]
+        program_names = [f"{service_name}:{service_name}_{i + instance_number_start}" for i in range(instance_count)]
     else:
         program_names = [service_name]
 

@@ -8,16 +8,14 @@ import hashlib
 import os
 import sys
 import time
+from collections.abc import Callable
+from enum import StrEnum
 from typing import (
+    Annotated,
     Any,
-    Callable,
     ClassVar,
-    Dict,
-    List,
-    Optional,
     overload,
-    Type,
-    Union,
+    Self,
 )
 
 try:
@@ -25,25 +23,21 @@ try:
     galaxy_installed = True
 except ImportError:
     galaxy_installed = False
+from packaging.version import Version
 from pydantic import (
     BaseModel,
     Field,
     field_validator,
     ValidationInfo,
 )
-from typing_extensions import (
-    Annotated,
-    Self,
-)
-
-from packaging.version import Version
 
 import gravity.io
-from gravity.settings import AppServer, ProcessManager, ServiceCommandStyle
-from gravity.util import (
-    http_check,
-    StrEnum,
+from gravity.settings import (
+    AppServer,
+    ProcessManager,
+    ServiceCommandStyle,
 )
+from gravity.util import http_check
 
 DEFAULT_GALAXY_ENVIRONMENT = {
     "PYTHONPATH": "lib",
@@ -67,24 +61,24 @@ class GracefulMethod(StrEnum):
 
 
 class ConfigFile(BaseModel):
-    app_config: Dict[str, Any]
-    gravity_config_file: Optional[str]
-    galaxy_config_file: Optional[str]
+    app_config: dict[str, Any]
+    gravity_config_file: str | None
+    galaxy_config_file: str | None
     instance_name: str
     process_manager: ProcessManager
     service_command_style: ServiceCommandStyle
     app_server: AppServer
-    virtualenv: Optional[str]
-    galaxy_root: Optional[str]
-    galaxy_user: Optional[str]
-    galaxy_group: Optional[str]
-    umask: Optional[str]
-    memory_limit: Optional[float]
-    memory_high: Optional[float]
+    virtualenv: str | None
+    galaxy_root: str | None
+    galaxy_user: str | None
+    galaxy_group: str | None
+    umask: str | None
+    memory_limit: float | None
+    memory_high: float | None
     gravity_data_dir: str
     log_dir: str
-    log_namespace: Union[str, None]
-    services: Annotated[List[Union[Service, ServiceList]], Field(exclude=True)] = []
+    log_namespace: str | None
+    services: Annotated[list[Service | ServiceList], Field(exclude=True)] = []
 
     def __hash__(self):
         return id(self)
@@ -104,7 +98,7 @@ class ConfigFile(BaseModel):
             if not os.path.exists(galaxy_version_file):
                 galaxy_version_file = os.path.join(self.galaxy_root, "lib", "galaxy", "version", "__init__.py")
             with open(galaxy_version_file) as fh:
-                locs: Dict[str, Any] = {}
+                locs: dict[str, Any] = {}
                 exec(fh.read(), {}, locs)
                 return locs["VERSION"]
 
@@ -123,7 +117,7 @@ class ConfigFile(BaseModel):
             raise RuntimeError("gunicorn version not found in Galaxy requirements.txt")
 
     @field_validator("galaxy_root", mode="after")
-    def _galaxy_root_required(cls, value: Optional[str], info: ValidationInfo) -> Optional[str]:
+    def _galaxy_root_required(cls, value: str | None, info: ValidationInfo) -> str | None:
         if value is None:
             galaxy_config_file = info.data["galaxy_config_file"]
             if os.environ.get("GALAXY_ROOT_DIR"):
@@ -143,10 +137,10 @@ class ConfigFile(BaseModel):
     _validate_gravity_data_dir = field_validator("gravity_data_dir", mode="after")(relative_to_galaxy_root)
     _validate_log_dir = field_validator("log_dir", mode="after")(relative_to_galaxy_root)
 
-    def get_service(self, service_name: str) -> Union[Service, ServiceList]:
+    def get_service(self, service_name: str) -> Service | ServiceList:
         return self.get_services([service_name])[0]
 
-    def get_services(self, service_names: Union[List[str], None]) -> List[Union[Service, ServiceList]]:
+    def get_services(self, service_names: list[str] | None) -> list[Service | ServiceList]:
         if service_names:
             return [s for s in self.services if s.service_name in service_names]
         else:
@@ -159,35 +153,35 @@ class Service(BaseModel):
     _service_type: ClassVar[str] = "service"
     service_name: str = "_default_"
 
-    settings: Dict[str, Any]
+    settings: dict[str, Any]
 
-    _default_environment: ClassVar[Dict[str, str]] = {}
+    _default_environment: ClassVar[dict[str, str]] = {}
 
-    _settings_from: ClassVar[Optional[str]] = None
+    _settings_from: ClassVar[str | None] = None
     _enable_attribute: ClassVar[str] = "enable"
     _service_list_allowed: ClassVar[bool] = False
 
     _graceful_method: ClassVar[GracefulMethod] = GracefulMethod.DEFAULT
     _add_virtualenv_to_path: ClassVar[bool] = True
-    _command_arguments: ClassVar[Dict[str, str]] = {}
+    _command_arguments: ClassVar[dict[str, str]] = {}
     _command_template: ClassVar[str] = "_command_"
 
     @overload
     @classmethod
-    def services_if_enabled(cls, config: ConfigFile, gravity_settings: None = None, settings=None, service_name=None) -> List[Self]:
+    def services_if_enabled(cls, config: ConfigFile, gravity_settings: None = None, settings=None, service_name=None) -> list[Self]:
         ...
 
     @overload
     @classmethod
-    def services_if_enabled(cls, config: ConfigFile, gravity_settings=None, settings=None, service_name=None) -> Union[List[Self], List[ServiceList]]:
+    def services_if_enabled(cls, config: ConfigFile, gravity_settings=None, settings=None, service_name=None) -> list[Self] | list[ServiceList]:
         ...
 
     @classmethod
-    def services_if_enabled(cls, config: ConfigFile, gravity_settings=None, settings=None, service_name=None) -> Union[List[Self], List[ServiceList]]:
+    def services_if_enabled(cls, config: ConfigFile, gravity_settings=None, settings=None, service_name=None) -> list[Self] | list[ServiceList]:
         settings_from = cls._settings_from or cls._service_type
         settings = settings or getattr(gravity_settings, settings_from)
         service_name = service_name or cls._service_type
-        services: Union[List[Self], List[ServiceList]] = []
+        services: list[Self] | list[ServiceList] = []
         if isinstance(settings, list):
             if not cls._service_list_allowed:
                 gravity.io.exception(
@@ -273,7 +267,7 @@ class RollingRestartableService(Service):
 class ServiceList(BaseModel):
     _service_type: ClassVar[str] = "_list_"
     service_name: str = "_list_"
-    services: List[Service] = []
+    services: list[Service] = []
 
     # ServiceList is *only* used when service_command_style = gravity, meaning that the only case we need to do anything
     # special with is galaxyctl exec
@@ -442,7 +436,7 @@ class GalaxyGxItProxyService(Service):
         self.settings["proxy_path_prefix"] = f"{it_base_path}{it_prefix}/ep"
 
     @field_validator("settings", mode="after")
-    def _validate_settings(cls, value: Dict[str, Any], info: ValidationInfo) -> Dict[str, Any]:
+    def _validate_settings(cls, value: dict[str, Any], info: ValidationInfo) -> dict[str, Any]:
         if not info.data["config"].app_config["interactivetools_enable"]:
             gravity.io.exception("To run gx-it-proxy you need to set interactivetools_enable in the galaxy section of galaxy.yml")
         return value
@@ -460,7 +454,7 @@ class GalaxyTUSDService(Service):
                         " -hooks-enabled-events {settings[hooks_enabled_events]}"
 
     @field_validator("settings", mode="after")
-    def _validate_settings(cls, value: Dict[str, Any], info: ValidationInfo) -> Dict[str, Any]:
+    def _validate_settings(cls, value: dict[str, Any], info: ValidationInfo) -> dict[str, Any]:
         if value["hooks_http"].startswith("/"):
             if not info.data["config"].app_config["galaxy_infrastructure_url"]:
                 gravity.io.exception("To run tusd you need to set galaxy_infrastructure_url in the galaxy section of galaxy.yml")
@@ -489,15 +483,14 @@ class GalaxyReportsService(Service):
                         " {command_arguments[url_prefix]}" \
                         " {settings[extra_args]}"
 
-    def _ensure_config_absolute_path(cls, value, values):
+    def _ensure_config_absolute_path(cls, value, values) -> None:
         if "config_file" not in value:
             gravity.io.exception("No reports config files specified.")
         if not os.path.isabs(value["config_file"]):
             value["config_file"] = os.path.join(os.path.dirname(values["config"].galaxy_config_file), value["config_file"])
-        return None
 
     @field_validator("settings", mode="after")
-    def _validate_settings(cls, value: Dict[str, Any], info: ValidationInfo) -> Dict[str, Any]:
+    def _validate_settings(cls, value: dict[str, Any], info: ValidationInfo) -> dict[str, Any]:
         GalaxyReportsService._ensure_config_absolute_path(cls, value, info.data)
         if not os.path.exists(value["config_file"]):
             gravity.io.exception(f"Reports enabled but reports config file does not exist: {value['config_file']}")
@@ -508,7 +501,7 @@ class GalaxyStandaloneService(Service):
     _service_type = "standalone"
     service_name: str = "standalone"
     # TODO: add these to Galaxy docs
-    _default_settings: ClassVar[Dict[str, Any]] = {
+    _default_settings: ClassVar[dict[str, Any]] = {
         "start_timeout": 20,
         "stop_timeout": 65,
     }
@@ -547,7 +540,7 @@ class GalaxyStandaloneService(Service):
         return command_arguments
 
 
-def service_for_service_type(service_type: str) -> Type[Service]:
+def service_for_service_type(service_type: str) -> type[Service]:
     try:
         return SERVICE_CLASS_MAP[service_type]
     except KeyError:
@@ -555,7 +548,7 @@ def service_for_service_type(service_type: str) -> Type[Service]:
 
 
 # TODO: better to pull this from __class__.service_type
-SERVICE_CLASS_MAP: Dict[str, Type[Service]] = {
+SERVICE_CLASS_MAP: dict[str, type[Service]] = {
     "gunicorn": GalaxyGunicornService,
     "celery": GalaxyCeleryService,
     "celery-beat": GalaxyCeleryBeatService,
